@@ -1,30 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-import 'package:ky_apps/main.dart';
+﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:ky_apps/features/auth/data/models/user_model.dart';
+import 'package:ky_apps/features/auth/data/models/auth_response.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  group('Auth Models Unit Tests', () {
+    test('UserModel fromJson maps correctly', () {
+      final json = {
+        'id': 15,
+        'user_no': 101,
+        'username': 'waleed',
+        'name_ar': 'وليد النقيب',
+        'name_en': 'waleed',
+        'user_type': 2,
+        'branch_no': 1,
+      };
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+      final user = UserModel.fromJson(json);
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+      expect(user.id, 15);
+      expect(user.username, 'waleed');
+      expect(user.nameAr, 'وليد النقيب');
+      expect(user.displayName, 'وليد النقيب');
+    });
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    test('AuthResponse fromJson maps successfully', () {
+      final json = {
+        'success': true,
+        'message': 'تم تسجيل الدخول بنجاح',
+        'token': 'mock_token_123',
+        'user': {
+          'id': 1,
+          'username': 'admin',
+        },
+      };
+
+      final response = AuthResponse.fromJson(json);
+
+      expect(response.success, true);
+      expect(response.token, 'mock_token_123');
+      expect(response.user?.username, 'admin');
+    });
   });
 }
