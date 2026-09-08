@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/customer_model.dart';
@@ -90,19 +91,33 @@ class CustomersListNotifier extends Notifier<CustomersListState> {
 
   /// البحث في قائمة العملاء
   Future<void> search(String query) async {
+    final currentQuery = query.trim();
     state = state.copyWith(
-      searchQuery: query,
+      searchQuery: currentQuery,
       isLoading: true,
       clearError: true,
     );
     try {
-      final list = await _repo.fetchCustomers(search: query, page: 1);
-      state = state.copyWith(customers: list, isLoading: false, page: 1);
+      final list = await _repo.fetchCustomers(search: currentQuery, page: 1);
+      // تجنب تعارض النتائج القديمة مع الاستعلام الحالي
+      if (state.searchQuery == currentQuery) {
+        state = state.copyWith(
+          customers: list,
+          isLoading: false,
+          page: 1,
+          hasMore: list.length >= 100,
+        );
+      }
     } catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: 'خطأ في البحث: ${e.toString()}',
-      );
+      if (e is DioException && CancelToken.isCancel(e)) {
+        return;
+      }
+      if (state.searchQuery == currentQuery) {
+        state = state.copyWith(
+          isLoading: false,
+          error: 'خطأ في البحث: ${e.toString()}',
+        );
+      }
     }
   }
 }

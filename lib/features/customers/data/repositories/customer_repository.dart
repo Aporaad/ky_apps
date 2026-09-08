@@ -50,7 +50,6 @@ class CustomerRepository {
           'page': page,
           'limit': limit,
         },
-        cancelToken: _newToken(),
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -58,8 +57,8 @@ class CustomerRepository {
         return list.map((e) => CustomerModel.fromJson(e as Map<String, dynamic>)).toList();
       }
       return [];
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) return [];
+    } catch (e) {
+      if (e is DioException && CancelToken.isCancel(e)) return [];
       rethrow;
     }
   }

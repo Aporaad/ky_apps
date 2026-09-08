@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -23,11 +24,22 @@ class CustomerPickerScreen extends ConsumerStatefulWidget {
 
 class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(milliseconds: 300), () {
+      if (mounted) {
+        ref.read(customersListProvider.notifier).search(query.trim());
+      }
+    });
   }
 
   @override
@@ -71,7 +83,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
             padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
             child: TextField(
               controller: _searchCtrl,
-              onChanged: (q) => ref.read(customersListProvider.notifier).search(q),
+              onChanged: _onSearchChanged,
               style: const TextStyle(fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'بحث باسم العميل، رقمه، أو رقم الهاتف...',
@@ -81,6 +93,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 18),
                         onPressed: () {
+                          _debounce?.cancel();
                           _searchCtrl.clear();
                           ref.read(customersListProvider.notifier).search('');
                         },

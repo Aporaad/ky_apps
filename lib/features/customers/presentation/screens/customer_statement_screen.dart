@@ -23,21 +23,23 @@ class _CustomerStatementPickerScreenState
   Future<void> _pickCustomer() async {
     final picked = await Navigator.of(context).push<CustomerModel>(
       MaterialPageRoute(
-        builder: (_) => const CustomerPickerScreen(
-          title: 'اختر العميل لكشف الحساب',
-          subtitle: 'ابحث بالاسم أو الرقم أو رقم الهاتف لعرض كشف الحساب',
-          icon: Icons.account_balance_wallet_rounded,
-        ),
+        builder:
+            (_) => const CustomerPickerScreen(
+              title: 'اختر العميل لكشف الحساب',
+              subtitle: 'ابحث بالاسم أو الرقم أو رقم الهاتف لعرض كشف الحساب',
+              icon: Icons.account_balance_wallet_rounded,
+            ),
       ),
     );
     if (picked != null && mounted) {
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (_) => CustomerStatementScreen(
-            custNo: picked.custNo,
-            custName: picked.custName,
-            accNo: picked.accNo,
-          ),
+          builder:
+              (_) => CustomerStatementScreen(
+                custNo: picked.custNo,
+                custName: picked.custName,
+                accNo: picked.accNo,
+              ),
         ),
       );
     }
@@ -58,7 +60,11 @@ class _CustomerStatementPickerScreenState
         ),
         title: const Row(
           children: [
-            Icon(Icons.receipt_long_rounded, color: Color(0xFF6B2D1B), size: 22),
+            Icon(
+              Icons.receipt_long_rounded,
+              color: Color(0xFF6B2D1B),
+              size: 22,
+            ),
             SizedBox(width: 10),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,7 +119,11 @@ class _CustomerStatementPickerScreenState
                 const Text(
                   'حدد العميل لعرض تقرير كشف حسابه بالتنسيق الرسمي لشركة الكبودي للخياطة الرجالية مع إمكانية التصفية بالتواريخ',
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 const SizedBox(height: 28),
                 SizedBox(
@@ -124,7 +134,10 @@ class _CustomerStatementPickerScreenState
                     icon: const Icon(Icons.search_rounded),
                     label: const Text(
                       'اختيار العميل',
-                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: const Color(0xFF6B2D1B),
@@ -180,24 +193,25 @@ class _CustomerStatementScreenState
   }
 
   void _loadData() {
-    final fromStr = _fromDate != null
-        ? '${_fromDate!.year}-${_fromDate!.month.toString().padLeft(2, '0')}-${_fromDate!.day.toString().padLeft(2, '0')}'
-        : null;
-    final toStr = _toDate != null
-        ? '${_toDate!.year}-${_toDate!.month.toString().padLeft(2, '0')}-${_toDate!.day.toString().padLeft(2, '0')}'
-        : null;
+    final fromStr =
+        _fromDate != null
+            ? '${_fromDate!.year}-${_fromDate!.month.toString().padLeft(2, '0')}-${_fromDate!.day.toString().padLeft(2, '0')}'
+            : null;
+    final toStr =
+        _toDate != null
+            ? '${_toDate!.year}-${_toDate!.month.toString().padLeft(2, '0')}-${_toDate!.day.toString().padLeft(2, '0')}'
+            : null;
 
-    ref.read(customerStatementProvider.notifier).loadStatement(
-          widget.custNo,
-          fromDate: fromStr,
-          toDate: toStr,
-        );
+    ref
+        .read(customerStatementProvider.notifier)
+        .loadStatement(widget.custNo, fromDate: fromStr, toDate: toStr);
   }
 
   Future<void> _selectDate(bool isFrom) async {
-    final initial = isFrom
-        ? (_fromDate ?? DateTime(2026, 1, 1))
-        : (_toDate ?? DateTime(2026, 12, 31));
+    final initial =
+        isFrom
+            ? (_fromDate ?? DateTime(2026, 1, 1))
+            : (_toDate ?? DateTime(2026, 12, 31));
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -240,7 +254,8 @@ class _CustomerStatementScreenState
   Widget build(BuildContext context) {
     final state = ref.watch(customerStatementProvider);
 
-    final rawName = widget.custName ??
+    final rawName =
+        widget.custName ??
         (state.customer != null
             ? (state.customer!['CUST_NAME'] ??
                     state.customer!['cust_name'] ??
@@ -281,10 +296,16 @@ class _CustomerStatementScreenState
         ),
         actions: [
           IconButton(
-            onPressed: () => setState(() => _showFilterPanel = !_showFilterPanel),
+            onPressed:
+                () => setState(() => _showFilterPanel = !_showFilterPanel),
             icon: Icon(
-              _showFilterPanel ? Icons.filter_alt_rounded : Icons.filter_alt_outlined,
-              color: _showFilterPanel ? const Color(0xFF6B2D1B) : AppColors.textMuted,
+              _showFilterPanel
+                  ? Icons.filter_alt_rounded
+                  : Icons.filter_alt_outlined,
+              color:
+                  _showFilterPanel
+                      ? const Color(0xFF6B2D1B)
+                      : AppColors.textMuted,
             ),
             tooltip: 'تصفية التواريخ',
           ),
@@ -352,13 +373,29 @@ class _CustomerStatementScreenState
               children: [
                 const Text(
                   'فترة سريعة: ',
-                  style: TextStyle(fontSize: 11.5, color: AppColors.textMuted, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-                _quickFilterChip('الكل', _fromDate == null && _toDate == null, () => _setQuickRange('all')),
+                _quickFilterChip(
+                  'الكل',
+                  _fromDate == null && _toDate == null,
+                  () => _setQuickRange('all'),
+                ),
                 const SizedBox(width: 6),
-                _quickFilterChip('الشهر الحالي', false, () => _setQuickRange('month')),
+                _quickFilterChip(
+                  'الشهر الحالي',
+                  false,
+                  () => _setQuickRange('month'),
+                ),
                 const SizedBox(width: 6),
-                _quickFilterChip('العام الحالي', false, () => _setQuickRange('year')),
+                _quickFilterChip(
+                  'العام الحالي',
+                  false,
+                  () => _setQuickRange('year'),
+                ),
               ],
             ),
           ),
@@ -373,9 +410,10 @@ class _CustomerStatementScreenState
     required VoidCallback onTap,
     required VoidCallback onClear,
   }) {
-    final text = date != null
-        ? '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'
-        : 'غير محدد';
+    final text =
+        date != null
+            ? '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}'
+            : 'غير محدد';
 
     return InkWell(
       onTap: onTap,
@@ -385,14 +423,17 @@ class _CustomerStatementScreenState
         decoration: BoxDecoration(
           color: const Color(0xFFF9FAFB),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: date != null ? const Color(0xFF6B2D1B) : AppColors.border),
+          border: Border.all(
+            color: date != null ? const Color(0xFF6B2D1B) : AppColors.border,
+          ),
         ),
         child: Row(
           children: [
             Icon(
               Icons.calendar_today_rounded,
               size: 15,
-              color: date != null ? const Color(0xFF6B2D1B) : AppColors.textMuted,
+              color:
+                  date != null ? const Color(0xFF6B2D1B) : AppColors.textMuted,
             ),
             const SizedBox(width: 6),
             Expanded(
@@ -402,14 +443,20 @@ class _CustomerStatementScreenState
                 children: [
                   Text(
                     label,
-                    style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                   Text(
                     text,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
-                      color: date != null ? const Color(0xFF6B2D1B) : AppColors.textSecondary,
+                      color:
+                          date != null
+                              ? const Color(0xFF6B2D1B)
+                              : AppColors.textSecondary,
                     ),
                   ),
                 ],
@@ -418,7 +465,11 @@ class _CustomerStatementScreenState
             if (date != null)
               GestureDetector(
                 onTap: onClear,
-                child: const Icon(Icons.close_rounded, size: 14, color: AppColors.textMuted),
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 14,
+                  color: AppColors.textMuted,
+                ),
               ),
           ],
         ),
@@ -472,12 +523,19 @@ class _CustomerStatementScreenState
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline_rounded, size: 52, color: AppColors.error),
+              const Icon(
+                Icons.error_outline_rounded,
+                size: 52,
+                color: AppColors.error,
+              ),
               const SizedBox(height: 14),
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -497,18 +555,36 @@ class _CustomerStatementScreenState
 
     // استخراج بيانات الترويسة وتصحيح ترميزها
     final custData = state.customer ?? {};
-    final rawName = widget.custName ??
-        (custData['CUST_NAME'] ?? custData['cust_name'] ?? 'عميل غير محدد').toString();
+    final rawName =
+        widget.custName ??
+        (custData['CUST_NAME'] ?? custData['cust_name'] ?? 'عميل غير محدد')
+            .toString();
     final displayName = ArabicEncodingUtils.fix(rawName);
 
-    final displayCode = (custData['CUST_NO'] ?? custData['cust_no'] ?? widget.custNo).toString();
-    final displayAccNo = (custData['ACC_NO'] ?? custData['acc_no'] ?? widget.accNo ?? '12310000').toString();
+    final displayCode =
+        (custData['CUST_NO'] ?? custData['cust_no'] ?? widget.custNo)
+            .toString();
+    final displayAccNo =
+        (custData['ACC_NO'] ?? custData['acc_no'] ?? widget.accNo ?? '12310000')
+            .toString();
 
     final summary = state.summary ?? {};
-    final fromDate = (summary['from_date'] ?? (_fromDate != null ? '${_fromDate!.day}/${_fromDate!.month}/${_fromDate!.year}' : '16/03/2026')).toString();
-    final toDate = (summary['to_date'] ?? (_toDate != null ? '${_toDate!.day}/${_toDate!.month}/${_toDate!.year}' : '07/06/2026')).toString();
+    final fromDate =
+        (summary['from_date'] ??
+                (_fromDate != null
+                    ? '${_fromDate!.day}/${_fromDate!.month}/${_fromDate!.year}'
+                    : '16/03/2026'))
+            .toString();
+    final toDate =
+        (summary['to_date'] ??
+                (_toDate != null
+                    ? '${_toDate!.day}/${_toDate!.month}/${_toDate!.year}'
+                    : '07/06/2026'))
+            .toString();
     final currency = (summary['currency'] ?? 'يمني YR').toString();
-    final accountTitle = (summary['account_title'] ?? '$displayAccNo عملاء الكبودي للخياطة').toString();
+    final accountTitle =
+        (summary['account_title'] ?? '$displayAccNo عملاء الكبودي للخياطة')
+            .toString();
 
     final totalDebit = (summary['total_debit'] ?? 0.0) as num;
     final totalCredit = (summary['total_credit'] ?? 0.0) as num;
@@ -621,17 +697,33 @@ class _CustomerStatementScreenState
                   ),
                   // الشعار الهندسي K.Y
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
-                      border: Border.all(color: const Color(0xFFB8860B).withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: const Color(0xFFB8860B).withValues(alpha: 0.4),
+                      ),
                       borderRadius: BorderRadius.circular(6),
                       color: const Color(0xFFFFF9EE),
                     ),
                     child: const Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.diamond_outlined, size: 22, color: Color(0xFF8B4513)),
-                        Text('K.Y', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF5A1E14))),
+                        Icon(
+                          Icons.diamond_outlined,
+                          size: 22,
+                          color: Color(0xFF8B4513),
+                        ),
+                        Text(
+                          'K.Y',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w900,
+                            color: Color(0xFF5A1E14),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -641,7 +733,10 @@ class _CustomerStatementScreenState
               // البانر البني المتجاوب
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4A1208),
                   borderRadius: BorderRadius.circular(4),
@@ -651,14 +746,22 @@ class _CustomerStatementScreenState
                     Text(
                       'صنعاء - خط المطار - الجراف - جوار بيت الشيخ الشايف',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     SizedBox(height: 3),
                     Text(
                       '780 154 000 - 780 164 000 ✆',
                       textAlign: TextAlign.center,
                       textDirection: TextDirection.ltr,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: Color(0xFFFFE082)),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        color: Color(0xFFFFE082),
+                      ),
                     ),
                   ],
                 ),
@@ -713,16 +816,25 @@ class _CustomerStatementScreenState
               flex: 3,
               child: Center(
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
-                    border: Border.all(color: const Color(0xFFB8860B).withValues(alpha: 0.4)),
+                    border: Border.all(
+                      color: const Color(0xFFB8860B).withValues(alpha: 0.4),
+                    ),
                     borderRadius: BorderRadius.circular(8),
                     color: const Color(0xFFFFF9EE),
                   ),
                   child: const Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.diamond_outlined, size: 26, color: Color(0xFF8B4513)),
+                      Icon(
+                        Icons.diamond_outlined,
+                        size: 26,
+                        color: Color(0xFF8B4513),
+                      ),
                       Text(
                         'K.Y',
                         style: TextStyle(
@@ -742,7 +854,10 @@ class _CustomerStatementScreenState
             Expanded(
               flex: 5,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4A1208),
                   borderRadius: BorderRadius.circular(4),
@@ -754,7 +869,11 @@ class _CustomerStatementScreenState
                     Text(
                       'صنعاء - خط المطار - الجراف - جوار بيت الشيخ الشايف',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                      ),
                     ),
                     SizedBox(height: 4),
                     Text(
@@ -808,12 +927,20 @@ class _CustomerStatementScreenState
             children: [
               const Text(
                 'كشف حساب عميل  ',
-                style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black87),
+                style: TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
               ),
               Flexible(
                 child: Text(
                   customerName,
-                  style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black),
+                  style: const TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -832,24 +959,60 @@ class _CustomerStatementScreenState
           // العملة
           Text(
             currency,
-            style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w900, color: Colors.black87),
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w900,
+              color: Colors.black87,
+            ),
           ),
 
           // رقم واسم الحساب
           Text(
             ArabicEncodingUtils.fix(accountTitle),
-            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF1E293B),
+            ),
           ),
 
           // نطاق التاريخ
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('من تاريخ  ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.black87)),
-              Text(fromDate, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black)),
+              const Text(
+                'من تاريخ  ',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                fromDate,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
               const SizedBox(width: 8),
-              const Text('إلى تاريخ  ', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Colors.black87)),
-              Text(toDate, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black)),
+              const Text(
+                'إلى تاريخ  ',
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              Text(
+                toDate,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
+                ),
+              ),
             ],
           ),
         ],
@@ -858,7 +1021,10 @@ class _CustomerStatementScreenState
   }
 
   // -------------------------------------------------------------
-  // جدول كشف الحساب المتطابق مع الصورة
+  // جدول كشف الحساب
+  // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // جدول كشف الحساب المتجاوب بالكامل مع أبعاد الشاشة
   // -------------------------------------------------------------
   Widget _buildStatementTableLayout({
     required List<CustomerStatementModel> rows,
@@ -870,24 +1036,31 @@ class _CustomerStatementScreenState
     const borderColor = Color(0xFF4B5563);
     const headerBgColor = Color(0xFFD4A853);
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minWidth: 880),
-        child: Table(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final screenWidth = constraints.maxWidth;
+        final isCompact = screenWidth < 650;
+        final isVeryCompact = screenWidth < 450;
+
+        final headerFontSize = isVeryCompact ? 10.0 : (isCompact ? 11.5 : 13.0);
+        final dataFontSize = isVeryCompact ? 9.5 : (isCompact ? 11.0 : 12.0);
+        final cellVPad = isVeryCompact ? 4.0 : (isCompact ? 5.0 : 6.5);
+        final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 3.0 : 5.0);
+
+        return Table(
           border: TableBorder.all(
             color: borderColor,
             width: 1,
             style: BorderStyle.solid,
           ),
           columnWidths: const {
-            0: FixedColumnWidth(75),  // السند
-            1: FixedColumnWidth(85),  // النوع
-            2: FixedColumnWidth(105), // تأريخه
-            3: FlexColumnWidth(4),    // البيان
-            4: FixedColumnWidth(110), // مدين
-            5: FixedColumnWidth(110), // دائن
-            6: FixedColumnWidth(110), // الرصيد
+            0: FlexColumnWidth(0.9),  // السند
+            1: FlexColumnWidth(1.1),  // النوع
+            2: FlexColumnWidth(1.2),  // تأريخه
+            3: FlexColumnWidth(2.8),  // البيان
+            4: FlexColumnWidth(1.35), // مدين
+            5: FlexColumnWidth(1.35), // دائن
+            6: FlexColumnWidth(1.4),  // الرصيد
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -895,13 +1068,13 @@ class _CustomerStatementScreenState
             TableRow(
               decoration: const BoxDecoration(color: headerBgColor),
               children: [
-                _tableHeaderCell('السند'),
-                _tableHeaderCell('النوع'),
-                _tableHeaderCell('تأريخه'),
-                _tableHeaderCell('البيان'),
-                _tableHeaderCell('مدين'),
-                _tableHeaderCell('دائن'),
-                _tableHeaderCell('الرصيد'),
+                _tableHeaderCell('السند', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('النوع', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('تأريخه', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('البيان', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('مدين', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('دائن', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableHeaderCell('الرصيد', fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
               ],
             ),
 
@@ -909,42 +1082,108 @@ class _CustomerStatementScreenState
             TableRow(
               decoration: const BoxDecoration(color: Colors.white),
               children: [
-                _tableDataCell('', isCenter: true),
-                _tableDataCell('', isCenter: true),
-                _tableDataCell('', isCenter: true),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
                 _tableDataCell(
                   'رصيد افتتاحي',
                   isCenter: true,
                   textColor: const Color(0xFF0369A1),
                   isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
                 ),
                 _tableDataCell(
                   _formatAmount(openingBalance),
                   isCenter: true,
                   textColor: const Color(0xFFDC2626),
                   isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
                 ),
-                _tableDataCell('0', isCenter: true, textColor: const Color(0xFFDC2626), isBold: true),
-                _tableDataCell('', isCenter: true),
+                _tableDataCell(
+                  '0',
+                  isCenter: true,
+                  textColor: const Color(0xFFDC2626),
+                  isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                ),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
               ],
             ),
 
             // 3. أسطر الحركات
             ...rows.map((row) {
-              final debitVal = row.debit ?? ((row.entryMnt ?? 0) > 0 ? row.entryMnt! : 0.0);
-              final creditVal = row.credit ?? ((row.entryMnt ?? 0) < 0 ? (row.entryMnt!).abs() : 0.0);
+              final debitVal =
+                  row.debit ?? ((row.entryMnt ?? 0) > 0 ? row.entryMnt! : 0.0);
+              final creditVal =
+                  row.credit ??
+                  ((row.entryMnt ?? 0) < 0 ? (row.entryMnt!).abs() : 0.0);
               final balVal = row.balanceS ?? 0.0;
 
               return TableRow(
                 decoration: const BoxDecoration(color: Colors.white),
                 children: [
-                  _tableDataCell(row.subEntryNo ?? row.entryNo ?? '', isCenter: true),
-                  _tableDataCell(ArabicEncodingUtils.fix(row.entryTypeName ?? ''), isCenter: true),
-                  _tableDataCell(row.entryDate ?? '', isCenter: true),
-                  _tableDataCell(ArabicEncodingUtils.fix(row.details ?? ''), isCenter: false),
-                  _tableDataCell(_formatAmount(debitVal), isCenter: true),
-                  _tableDataCell(_formatAmount(creditVal), isCenter: true),
-                  _tableDataCell(_formatAmount(balVal), isCenter: true, isBold: true),
+                  _tableDataCell(
+                    row.subEntryNo ?? row.entryNo ?? '',
+                    isCenter: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                    fitBox: true,
+                  ),
+                  _tableDataCell(
+                    ArabicEncodingUtils.fix(row.entryTypeName ?? ''),
+                    isCenter: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                  ),
+                  _tableDataCell(
+                    row.entryDate ?? '',
+                    isCenter: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                    fitBox: true,
+                  ),
+                  _tableDataCell(
+                    ArabicEncodingUtils.fix(row.details ?? ''),
+                    isCenter: false,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                  ),
+                  _tableDataCell(
+                    _formatAmount(debitVal),
+                    isCenter: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                    fitBox: true,
+                  ),
+                  _tableDataCell(
+                    _formatAmount(creditVal),
+                    isCenter: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                    fitBox: true,
+                  ),
+                  _tableDataCell(
+                    _formatAmount(balVal),
+                    isCenter: true,
+                    isBold: true,
+                    fontSize: dataFontSize,
+                    vPad: cellVPad,
+                    hPad: cellHPad,
+                    fitBox: true,
+                  ),
                 ],
               );
             }),
@@ -953,22 +1192,42 @@ class _CustomerStatementScreenState
             TableRow(
               decoration: const BoxDecoration(color: Color(0xFFF9FAFB)),
               children: [
-                _tableDataCell('', isCenter: true),
-                _tableDataCell('', isCenter: true),
-                _tableDataCell('', isCenter: true),
-                _tableDataCell('اجمالي العمليات', isCenter: true, isBold: true),
-                _tableDataCell(_formatAmount(totalDebit), isCenter: true, isBold: true),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell('اجمالي العمليات', isCenter: true, isBold: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell(
+                  _formatAmount(totalDebit),
+                  isCenter: true,
+                  isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
                 _tableDataCell(
                   totalCredit > 0 ? '${_formatAmount(totalCredit)}-' : '0',
                   isCenter: true,
                   isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
                 ),
-                _tableDataCell(_formatAmount(finalBalance), isCenter: true, isBold: true),
+                _tableDataCell(
+                  _formatAmount(finalBalance),
+                  isCenter: true,
+                  isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
               ],
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
@@ -994,14 +1253,19 @@ class _CustomerStatementScreenState
             // سطر الرصيد الافتتاحي
             Container(
               decoration: const BoxDecoration(
-                border: Border(bottom: BorderSide(color: borderColor, width: 1)),
+                border: Border(
+                  bottom: BorderSide(color: borderColor, width: 1),
+                ),
               ),
               child: Row(
                 children: [
                   Expanded(
                     flex: 3,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                       alignment: Alignment.center,
                       child: const Text(
                         'الرصيد الافتتاحي',
@@ -1017,7 +1281,10 @@ class _CustomerStatementScreenState
                   Expanded(
                     flex: 2,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 6,
+                        horizontal: 8,
+                      ),
                       alignment: Alignment.center,
                       child: Text(
                         _formatAmount(openingBalance),
@@ -1040,7 +1307,10 @@ class _CustomerStatementScreenState
                   flex: 3,
                   child: Container(
                     color: goldBgColor,
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 8,
+                    ),
                     alignment: Alignment.center,
                     child: const Text(
                       'الرصيد النهائي',
@@ -1056,7 +1326,10 @@ class _CustomerStatementScreenState
                 Expanded(
                   flex: 2,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 6,
+                      horizontal: 8,
+                    ),
                     alignment: Alignment.center,
                     child: Text(
                       _formatAmount(finalBalance),
@@ -1076,14 +1349,19 @@ class _CustomerStatementScreenState
     );
   }
 
-  Widget _tableHeaderCell(String text) {
+  Widget _tableHeaderCell(
+    String text, {
+    double fontSize = 13,
+    double vPad = 7,
+    double hPad = 4,
+  }) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
+      padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 13,
+        style: TextStyle(
+          fontSize: fontSize,
           fontWeight: FontWeight.w900,
           color: Colors.black,
         ),
@@ -1096,18 +1374,32 @@ class _CustomerStatementScreenState
     bool isCenter = true,
     Color? textColor,
     bool isBold = false,
+    double fontSize = 12,
+    double vPad = 6,
+    double hPad = 6,
+    bool fitBox = false,
   }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 6),
-      child: Text(
-        text,
-        textAlign: isCenter ? TextAlign.center : TextAlign.start,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
-          color: textColor ?? Colors.black87,
-        ),
+    Widget content = Text(
+      text,
+      textAlign: isCenter ? TextAlign.center : TextAlign.start,
+      style: TextStyle(
+        fontSize: fontSize,
+        fontWeight: isBold ? FontWeight.bold : FontWeight.normal,
+        color: textColor ?? Colors.black87,
       ),
+    );
+
+    if (fitBox) {
+      content = FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: isCenter ? Alignment.center : Alignment.centerRight,
+        child: content,
+      );
+    }
+
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: vPad, horizontal: hPad),
+      child: content,
     );
   }
 
@@ -1131,7 +1423,8 @@ class _CustomerStatementScreenState
       }
     }
     final formattedInt = buffer.toString().split('').reversed.join('');
-    final res = decimalPart == '00' ? formattedInt : '$formattedInt.$decimalPart';
+    final res =
+        decimalPart == '00' ? formattedInt : '$formattedInt.$decimalPart';
     return isNegative ? '-$res' : res;
   }
 }

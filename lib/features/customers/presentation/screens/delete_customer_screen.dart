@@ -7,7 +7,9 @@ import '../widgets/customer_picker_screen.dart';
 
 /// شاشة حذف عميل - اختيار العميل ثم تأكيد الحذف
 class DeleteCustomerScreen extends ConsumerStatefulWidget {
-  const DeleteCustomerScreen({super.key});
+  final CustomerModel? customer;
+
+  const DeleteCustomerScreen({super.key, this.customer});
 
   @override
   ConsumerState<DeleteCustomerScreen> createState() => _DeleteCustomerScreenState();
@@ -16,6 +18,12 @@ class DeleteCustomerScreen extends ConsumerStatefulWidget {
 class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
   CustomerModel? _selectedCustomer;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCustomer = widget.customer;
+  }
 
   Future<void> _pickCustomer() async {
     final picked = await Navigator.of(context).push<CustomerModel>(

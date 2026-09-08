@@ -30,9 +30,11 @@ class CollapsibleSideDrawer extends StatelessWidget {
     (title: 'التفصيل', icon: Icons.content_cut_outlined),
     (title: 'الحسابات', icon: Icons.account_balance_outlined),
     (title: 'العملاء', icon: Icons.people_outline_rounded),
+    (title: 'جاري العاملين', icon: Icons.groups_2_rounded),
     (title: 'المخازن', icon: Icons.inventory_2_outlined),
     (title: 'الإدارة', icon: Icons.admin_panel_settings_outlined),
     (title: 'الإعدادات', icon: Icons.settings_outlined),
+    (title: 'الماليه', icon: Icons.groups_2_rounded),
   ];
 
   @override
@@ -44,18 +46,14 @@ class CollapsibleSideDrawer extends StatelessWidget {
       width: width,
       decoration: const BoxDecoration(
         color: AppColors.primaryDark,
-        border: Border(
-          left: BorderSide(color: Color(0xFF1E293B)),
-        ),
+        border: Border(left: BorderSide(color: Color(0xFF1E293B))),
       ),
       child: Column(
         children: [
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 18),
             decoration: const BoxDecoration(
-              border: Border(
-                bottom: BorderSide(color: Color(0xFF1E293B)),
-              ),
+              border: Border(bottom: BorderSide(color: Color(0xFF1E293B))),
             ),
             child: Row(
               children: [
@@ -75,7 +73,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
                   const SizedBox(width: 12),
                   const Expanded(
                     child: Text(
-                      'نظام الحسابات',
+                      'الكبودي للخياطة الرجالية',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
@@ -86,9 +84,10 @@ class CollapsibleSideDrawer extends StatelessWidget {
                   ),
                 ],
                 IconButton(
-                  onPressed: isDrawerMode
-                      ? () => Navigator.of(context).maybePop()
-                      : onToggleCollapse,
+                  onPressed:
+                      isDrawerMode
+                          ? () => Navigator.of(context).maybePop()
+                          : onToggleCollapse,
                   icon: Icon(
                     isDrawerMode
                         ? Icons.close_rounded
@@ -98,9 +97,10 @@ class CollapsibleSideDrawer extends StatelessWidget {
                     color: AppColors.textMuted,
                     size: 20,
                   ),
-                  tooltip: isDrawerMode
-                      ? 'إغلاق القائمة'
-                      : (isCollapsed ? 'توسيع القائمة' : 'طي القائمة'),
+                  tooltip:
+                      isDrawerMode
+                          ? 'إغلاق القائمة'
+                          : (isCollapsed ? 'توسيع القائمة' : 'طي القائمة'),
                 ),
               ],
             ),
@@ -131,22 +131,23 @@ class CollapsibleSideDrawer extends StatelessWidget {
                         vertical: 11,
                       ),
                       decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.primary
-                            : Colors.transparent,
+                        color:
+                            isSelected ? AppColors.primary : Colors.transparent,
                         borderRadius: BorderRadius.circular(10),
                       ),
                       child: Row(
-                        mainAxisAlignment: isCollapsed
-                            ? MainAxisAlignment.center
-                            : MainAxisAlignment.start,
+                        mainAxisAlignment:
+                            isCollapsed
+                                ? MainAxisAlignment.center
+                                : MainAxisAlignment.start,
                         children: [
                           Icon(
                             item.icon,
                             size: 20,
-                            color: isSelected
-                                ? Colors.white
-                                : const Color(0xFF94A3B8),
+                            color:
+                                isSelected
+                                    ? Colors.white
+                                    : const Color(0xFF94A3B8),
                           ),
                           if (!isCollapsed) ...[
                             const SizedBox(width: 14),
@@ -155,12 +156,14 @@ class CollapsibleSideDrawer extends StatelessWidget {
                                 item.title,
                                 style: TextStyle(
                                   fontSize: 14,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.w500,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : const Color(0xFFCBD5E1),
+                                  fontWeight:
+                                      isSelected
+                                          ? FontWeight.bold
+                                          : FontWeight.w500,
+                                  color:
+                                      isSelected
+                                          ? Colors.white
+                                          : const Color(0xFFCBD5E1),
                                 ),
                               ),
                             ),
@@ -177,9 +180,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: const BoxDecoration(
-              border: Border(
-                top: BorderSide(color: Color(0xFF1E293B)),
-              ),
+              border: Border(top: BorderSide(color: Color(0xFF1E293B))),
             ),
             child: Row(
               children: [
@@ -211,7 +212,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
                           overflow: TextOverflow.ellipsis,
                         ),
                         const Text(
-                          'موظف مصرح',
+                          'موظف ',
                           style: TextStyle(
                             fontSize: 11,
                             color: AppColors.accentLight,

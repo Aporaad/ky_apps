@@ -1,3 +1,5 @@
+import 'package:ky_apps/core/utils/arabic_encoding_utils.dart';
+
 /// نموذج بيانات المستخدم المطابق لقاعدة بيانات النظام
 /// User data model matching Oracle schema and API response
 class UserModel {
@@ -20,31 +22,41 @@ class UserModel {
   });
 
   /// الاسم المعروض للمستخدم
-  String get displayName => nameAr ?? nameEn ?? username;
+  String get displayName {
+    if (nameAr != null && nameAr!.trim().isNotEmpty) {
+      final fixed = ArabicEncodingUtils.fix(nameAr);
+      if (fixed.isNotEmpty) return fixed;
+    }
+    return (nameEn != null && nameEn!.trim().isNotEmpty) ? nameEn! : username;
+  }
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
     return UserModel(
-      id: (json['id'] is int)
-          ? json['id'] as int
-          : int.tryParse(json['id'].toString()) ?? 0,
-      userNo: json['user_no'] != null
-          ? (json['user_no'] is int
-              ? json['user_no'] as int
-              : int.tryParse(json['user_no'].toString()))
-          : null,
+      id:
+          (json['id'] is int)
+              ? json['id'] as int
+              : int.tryParse(json['id'].toString()) ?? 0,
+      userNo:
+          json['user_no'] != null
+              ? (json['user_no'] is int
+                  ? json['user_no'] as int
+                  : int.tryParse(json['user_no'].toString()))
+              : null,
       username: json['username']?.toString() ?? '',
       nameAr: json['name_ar']?.toString(),
       nameEn: json['name_en']?.toString(),
-      userType: json['user_type'] != null
-          ? (json['user_type'] is int
-              ? json['user_type'] as int
-              : int.tryParse(json['user_type'].toString()))
-          : null,
-      branchNo: json['branch_no'] != null
-          ? (json['branch_no'] is int
-              ? json['branch_no'] as int
-              : int.tryParse(json['branch_no'].toString()))
-          : null,
+      userType:
+          json['user_type'] != null
+              ? (json['user_type'] is int
+                  ? json['user_type'] as int
+                  : int.tryParse(json['user_type'].toString()))
+              : null,
+      branchNo:
+          json['branch_no'] != null
+              ? (json['branch_no'] is int
+                  ? json['branch_no'] as int
+                  : int.tryParse(json['branch_no'].toString()))
+              : null,
     );
   }
 

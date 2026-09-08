@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/utils/responsive.dart';
+import '../../data/models/customer_model.dart';
+import '../widgets/customer_picker_screen.dart';
 import 'add_customer_screen.dart';
 import 'edit_customer_screen.dart';
 import 'delete_customer_screen.dart';
@@ -126,9 +128,24 @@ class CustomersDashboardScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const EditCustomerScreen()),
-        ),
+        onTap: () async {
+          final picked = await Navigator.of(context).push<CustomerModel>(
+            MaterialPageRoute(
+              builder: (_) => const CustomerPickerScreen(
+                title: 'اختر العميل للتعديل',
+                subtitle: 'ابحث عن العميل الذي تريد تعديل بياناته',
+                icon: Icons.edit_rounded,
+              ),
+            ),
+          );
+          if (picked != null && context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => EditCustomerScreen(customer: picked),
+              ),
+            );
+          }
+        },
       ),
       _CustomerActionCard(
         title: 'حذف عميل',
@@ -139,9 +156,24 @@ class CustomersDashboardScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const DeleteCustomerScreen()),
-        ),
+        onTap: () async {
+          final picked = await Navigator.of(context).push<CustomerModel>(
+            MaterialPageRoute(
+              builder: (_) => const CustomerPickerScreen(
+                title: 'اختر العميل للحذف',
+                subtitle: 'ابحث وحدد العميل المراد حذفه',
+                icon: Icons.person_remove_rounded,
+              ),
+            ),
+          );
+          if (picked != null && context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => DeleteCustomerScreen(customer: picked),
+              ),
+            );
+          }
+        },
       ),
       _CustomerActionCard(
         title: 'كشف حساب',
@@ -152,9 +184,28 @@ class CustomersDashboardScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const CustomerStatementPickerScreen()),
-        ),
+        onTap: () async {
+          final picked = await Navigator.of(context).push<CustomerModel>(
+            MaterialPageRoute(
+              builder: (_) => const CustomerPickerScreen(
+                title: 'اختر العميل لكشف الحساب',
+                subtitle: 'ابحث بالاسم أو الرقم لعرض كشف حسابه',
+                icon: Icons.account_balance_wallet_rounded,
+              ),
+            ),
+          );
+          if (picked != null && context.mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => CustomerStatementScreen(
+                  custNo: picked.custNo,
+                  custName: picked.custName,
+                  accNo: picked.accNo,
+                ),
+              ),
+            );
+          }
+        },
       ),
       _CustomerActionCard(
         title: 'كل العملاء',

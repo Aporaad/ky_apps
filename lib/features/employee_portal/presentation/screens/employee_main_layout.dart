@@ -13,6 +13,7 @@ import 'sections/customers_section.dart';
 import 'sections/stores_section.dart';
 import 'sections/management_section.dart';
 import 'sections/settings_section.dart';
+import 'sections/workers_section.dart';
 
 /// الهيكل الرئيسي لبوابة الموظف المتجاوب بالكامل مع مختلف أحجام الشاشات
 /// Main Employee Portal Layout with Responsive Sidebar / Drawer and Top Bar
@@ -37,6 +38,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     StoresSection(),
     ManagementSection(),
     SettingsSection(),
+    WorkersSection(),
   ];
 
   Future<void> _handleLogout() async {
@@ -110,27 +112,31 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
             tooltip: 'القائمة الرئيسية',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
-          title: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'بوابة الموظف',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.primary,
+          title: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'بوابة الموظف',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primary,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.success,
-                  shape: BoxShape.circle,
+                const SizedBox(width: 8),
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.success,
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           centerTitle: false,
           actions: [

@@ -8,7 +8,9 @@ import '../widgets/customer_picker_screen.dart';
 
 /// شاشة تعديل بيانات عميل - تبدأ باختيار العميل ثم تعديله
 class EditCustomerScreen extends ConsumerStatefulWidget {
-  const EditCustomerScreen({super.key});
+  final CustomerModel? customer;
+
+  const EditCustomerScreen({super.key, this.customer});
 
   @override
   ConsumerState<EditCustomerScreen> createState() => _EditCustomerScreenState();
@@ -17,6 +19,12 @@ class EditCustomerScreen extends ConsumerStatefulWidget {
 class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
   CustomerModel? _selectedCustomer;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedCustomer = widget.customer;
+  }
 
   Future<void> _pickCustomer() async {
     final picked = await Navigator.of(context).push<CustomerModel>(
