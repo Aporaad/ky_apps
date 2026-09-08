@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../widgets/collapsible_side_drawer.dart';
 import 'sections/home_dashboard_section.dart';
@@ -13,8 +14,8 @@ import 'sections/stores_section.dart';
 import 'sections/management_section.dart';
 import 'sections/settings_section.dart';
 
-/// الهيكل الرئيسي لبوابة الموظف مع القائمة الجانبية والشريط العلوي
-/// Main Employee Portal Layout with Collapsible Drawer and Top Bar
+/// الهيكل الرئيسي لبوابة الموظف المتجاوب بالكامل مع مختلف أحجام الشاشات
+/// Main Employee Portal Layout with Responsive Sidebar / Drawer and Top Bar
 class EmployeeMainLayout extends ConsumerStatefulWidget {
   const EmployeeMainLayout({super.key});
 
@@ -25,6 +26,7 @@ class EmployeeMainLayout extends ConsumerStatefulWidget {
 class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
   int _currentIndex = 0;
   bool _isCollapsed = false;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   final List<Widget> _sections = const [
     HomeDashboardSection(),
@@ -68,34 +70,162 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     final authState = ref.watch(authNotifierProvider);
     final user = authState.user;
     final displayName = user?.displayName ?? 'الموظف';
+    final isMobile = Responsive.isMobile(context);
 
+    // واجهة القائمة الجانبية المشتركة
+    final sideDrawer = CollapsibleSideDrawer(
+      selectedIndex: _currentIndex,
+      onIndexChanged: (index) {
+        setState(() {
+          _currentIndex = index;
+        });
+      },
+      isCollapsed: isMobile ? false : _isCollapsed,
+      isDrawerMode: isMobile,
+      onToggleCollapse: () {
+        setState(() {
+          _isCollapsed = !_isCollapsed;
+        });
+      },
+      onLogout: _handleLogout,
+      employeeName: displayName,
+    );
+
+    if (isMobile) {
+      // 📱 تخطيط الهواتف المحمولة (Mobile Layout)
+      return Scaffold(
+        key: _scaffoldKey,
+        backgroundColor: AppColors.background,
+        drawer: Drawer(
+          width: 280,
+          child: SafeArea(child: sideDrawer),
+        ),
+        appBar: AppBar(
+          backgroundColor: Colors.white,
+          elevation: 0,
+          scrolledUnderElevation: 1,
+          surfaceTintColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+            tooltip: 'القائمة الرئيسية',
+            onPressed: () => _scaffoldKey.currentState?.openDrawer(),
+          ),
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'بوابة الموظف',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.success,
+                  shape: BoxShape.circle,
+                ),
+              ),
+            ],
+          ),
+          centerTitle: false,
+          actions: [
+            if (user?.branchNo != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.storefront_outlined, size: 14, color: AppColors.primary),
+                      const SizedBox(width: 4),
+                      Text(
+                        'فرع ${user!.branchNo}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            IconButton(
+              onPressed: _handleLogout,
+              icon: const Icon(
+                Icons.power_settings_new_rounded,
+                color: AppColors.error,
+                size: 22,
+              ),
+              tooltip: 'خروج',
+            ),
+          ],
+        ),
+        body: IndexedStack(
+          index: _currentIndex,
+          children: _sections,
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _currentIndex < 4 ? _currentIndex : 4,
+          onDestinationSelected: (idx) {
+            if (idx == 4) {
+              _scaffoldKey.currentState?.openDrawer();
+            } else {
+              setState(() {
+                _currentIndex = idx;
+              });
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.dashboard_outlined),
+              selectedIcon: Icon(Icons.dashboard_rounded),
+              label: 'الرئيسية',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.point_of_sale_outlined),
+              selectedIcon: Icon(Icons.point_of_sale_rounded),
+              label: 'المبيعات',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.content_cut_outlined),
+              selectedIcon: Icon(Icons.content_cut_rounded),
+              label: 'التفصيل',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.account_balance_outlined),
+              selectedIcon: Icon(Icons.account_balance_rounded),
+              label: 'الحسابات',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.menu_rounded),
+              label: 'المزيد',
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 💻 تخطيط الأجهزة اللوحية والمكتبية (Tablet & Desktop Layout)
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Row(
         children: [
-          CollapsibleSideDrawer(
-            selectedIndex: _currentIndex,
-            onIndexChanged: (index) {
-              setState(() {
-                _currentIndex = index;
-              });
-            },
-            isCollapsed: _isCollapsed,
-            onToggleCollapse: () {
-              setState(() {
-                _isCollapsed = !_isCollapsed;
-              });
-            },
-            onLogout: _handleLogout,
-            employeeName: displayName,
-          ),
-
+          sideDrawer,
           Expanded(
             child: Column(
               children: [
+                // الشريط العلوي للشاشات الكبيرة مع حماية تامة ضد التجاوز
                 Container(
                   height: 64,
-                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     border: Border(
@@ -104,20 +234,20 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   ),
                   child: Row(
                     children: [
-                      Text(
+                      const Text(
                         'بوابة الموظف',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: AppColors.primary,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       const Text(
                         '•',
                         style: TextStyle(color: AppColors.textMuted),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,

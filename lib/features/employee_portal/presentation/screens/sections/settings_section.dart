@@ -1,154 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../../../core/theme/app_colors.dart';
+import '../../widgets/portal_section_scaffold.dart';
 
-/// واجهة قسم الإعدادات
+/// واجهة قسم الإعدادات المتجاوبة
 class SettingsSection extends StatelessWidget {
   const SettingsSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // شريط العنوان والأدوات
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return PortalSectionScaffold(
+      title: 'الإعدادات',
+      subtitle: 'تخصيص النظام وإعدادات الربط والشبكة',
+      icon: Icons.settings_outlined,
+      searchHint: 'بحث في الإعدادات...',
+      content: Card(
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: AppColors.border),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text(
-                    'الإعدادات',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'تفضيلات وإعدادات النظام وقواعد البيانات',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
+              const Text(
+                'إعدادات الاتصال والشبكة',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
               ),
-              Row(
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text('تحديث'),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: const BorderSide(color: AppColors.border),
-                    ),
+              const SizedBox(height: 12),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () {},
-                    icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('إضافة جديد'),
+                  child: const Icon(Icons.dns_rounded, color: AppColors.primary),
+                ),
+                title: const Text(
+                  'إعدادات خادم الـ API',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'تغيير رابط الـ API الأساسي وفحص الاتصال بالخادم',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                onTap: () => context.push('/api-settings'),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'تفضيلات المظهر واللغة',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: AppColors.border),
+                ),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                ],
+                  child: const Icon(Icons.language_rounded, color: AppColors.accent),
+                ),
+                title: const Text(
+                  'اللغة واتجاه الواجهة',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                subtitle: const Text(
+                  'اللغة العربية (RTL) مفعلة افتراضياً',
+                  style: TextStyle(fontSize: 12),
+                ),
+                trailing: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
               ),
             ],
           ),
-          const SizedBox(height: 24),
-
-          // شريط البحث والفرز والفلترة
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: AppColors.border),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'بحث في الإعدادات...',
-                      prefixIcon: const Icon(Icons.search_rounded),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppColors.border),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.filter_list_rounded),
-                  tooltip: 'تصفية',
-                ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.print_outlined),
-                  tooltip: 'طباعة',
-                ),
-                const SizedBox(width: 8),
-                IconButton.outlined(
-                  onPressed: () {},
-                  icon: const Icon(Icons.download_outlined),
-                  tooltip: 'تصدير',
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // بطاقة عرض البيانات والمحتوى
-          Expanded(
-            child: Card(
-              child: Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.08),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.table_chart_outlined,
-                        size: 48,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'بيانات الإعدادات جاهزة للربط مع قاعدة بيانات Oracle',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'يمكن استعراض الجداول والاستعلام عنها عبر API أوراكل',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

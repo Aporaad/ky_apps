@@ -73,6 +73,10 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// التحقق من حالة تسجيل الدخول عند بدء التطبيق
   Future<void> checkAuthStatus() async {
+    // تحميل وتهيئة رابط الـ API المخصص من الذاكرة المشفرة
+    final client = ref.read(dioClientProvider);
+    await client.initializeBaseUrl();
+
     final loggedIn = await _repository.isLoggedIn();
     if (loggedIn) {
       final cachedUser = await _repository.getCachedUser();

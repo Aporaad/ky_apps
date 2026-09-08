@@ -2,8 +2,12 @@
 /// API endpoints and configuration constants
 class ApiConstants {
   // الرابط الأساسي للـ API
-  // Base URL for local development (use 10.0.2.2 for Android Emulator if needed)
-  static const String baseUrl = 'http://127.0.0.1:8000/api';
+  // الرابط الأساسي الافتراضي للـ API
+  static const String defaultBaseUrl = 'http://192.168.0.11:8000/api';
+  static const String baseUrl = defaultBaseUrl;
+
+  // مسار فحص الاتصال بالخادم
+  static const String testConnectionEndpoint = '/hello';
 
   static const String login = '/auth/login';
   static const String logout = '/auth/logout';
@@ -11,4 +15,5 @@ class ApiConstants {
 
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
+  static const Duration testTimeout = Duration(seconds: 7);
 }

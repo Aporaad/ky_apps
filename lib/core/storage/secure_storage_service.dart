@@ -14,6 +14,7 @@ class SecureStorageService {
   static const String _tokenKey = 'ky_auth_token';
   static const String _userTypeKey = 'ky_user_type';
   static const String _userDataKey = 'ky_user_data';
+  static const String _apiBaseUrlKey = 'ky_api_base_url';
 
   /// حفظ رمز الوصول (Token)
   Future<void> saveToken(String token) async {
@@ -50,8 +51,31 @@ class SecureStorageService {
     return await _storage.read(key: _userDataKey);
   }
 
-  /// مسح جميع البيانات المخزنة عند تسجيل الخروج
+  /// حفظ عنوان ورابط الـ API المخصص
+  Future<void> saveApiBaseUrl(String url) async {
+    await _storage.write(key: _apiBaseUrlKey, value: url);
+  }
+
+  /// قراءة عنوان ورابط الـ API المخصص
+  Future<String?> getApiBaseUrl() async {
+    return await _storage.read(key: _apiBaseUrlKey);
+  }
+
+  /// حذف عنوان ورابط الـ API المخصص (للعودة للافتراضي)
+  Future<void> deleteApiBaseUrl() async {
+    await _storage.delete(key: _apiBaseUrlKey);
+  }
+
+  /// مسح بيانات جلسة المستخدم المخزنة عند تسجيل الخروج مع الاحتفاظ بعنوان الـ API
   Future<void> clearAll() async {
+    await _storage.delete(key: _tokenKey);
+    await _storage.delete(key: _userTypeKey);
+    await _storage.delete(key: _userDataKey);
+  }
+
+  /// مسح كافة البيانات تماماً من الذاكرة بما فيها عنوان الـ API
+  Future<void> purgeEverything() async {
     await _storage.deleteAll();
   }
 }
+

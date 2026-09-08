@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"path": "../../../../accounts_api"
+		},
+		{
+			"path": "../../.."
+		}
+	],
+	"settings": {
+		"window.autoDetectColorScheme": false
+	}
+}

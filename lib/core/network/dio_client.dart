@@ -11,10 +11,14 @@ class DioClient {
   final SecureStorageService storage;
   final void Function()? onUnauthorized;
 
-  DioClient({required this.storage, this.onUnauthorized}) {
+  DioClient({required this.storage, this.onUnauthorized, String? baseUrl}) {
+    final initialUrl = (baseUrl != null && baseUrl.isNotEmpty)
+        ? baseUrl
+        : ApiConstants.defaultBaseUrl;
+
     dio = Dio(
       BaseOptions(
-        baseUrl: ApiConstants.baseUrl,
+        baseUrl: initialUrl,
         connectTimeout: ApiConstants.connectTimeout,
         receiveTimeout: ApiConstants.receiveTimeout,
         headers: {
@@ -35,5 +39,21 @@ class DioClient {
         responseHeader: false,
       ),
     ]);
+  }
+
+  /// الحصول على الرابط الأساسي الحالي
+  String get baseUrl => dio.options.baseUrl;
+
+  /// تحديث رابط الخادم فورياً في الـ Dio
+  void updateBaseUrl(String newUrl) {
+    dio.options.baseUrl = newUrl.trim();
+  }
+
+  /// تهيئة الرابط الأساسي من الذاكرة المشفرة إذا كان موجوداً
+  Future<void> initializeBaseUrl() async {
+    final savedUrl = await storage.getApiBaseUrl();
+    if (savedUrl != null && savedUrl.trim().isNotEmpty) {
+      dio.options.baseUrl = savedUrl.trim();
+    }
   }
 }

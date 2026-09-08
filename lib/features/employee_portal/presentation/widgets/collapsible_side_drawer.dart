@@ -11,6 +11,8 @@ class CollapsibleSideDrawer extends StatelessWidget {
   final VoidCallback onLogout;
   final String employeeName;
 
+  final bool isDrawerMode;
+
   const CollapsibleSideDrawer({
     super.key,
     required this.selectedIndex,
@@ -19,6 +21,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
     required this.onToggleCollapse,
     required this.onLogout,
     required this.employeeName,
+    this.isDrawerMode = false,
   });
 
   static const List<({String title, IconData icon})> _menuItems = [
@@ -34,7 +37,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final width = isCollapsed ? 76.0 : 250.0;
+    final width = isDrawerMode ? double.infinity : (isCollapsed ? 76.0 : 250.0);
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
@@ -83,15 +86,21 @@ class CollapsibleSideDrawer extends StatelessWidget {
                   ),
                 ],
                 IconButton(
-                  onPressed: onToggleCollapse,
+                  onPressed: isDrawerMode
+                      ? () => Navigator.of(context).maybePop()
+                      : onToggleCollapse,
                   icon: Icon(
-                    isCollapsed
-                        ? Icons.keyboard_double_arrow_left_rounded
-                        : Icons.keyboard_double_arrow_right_rounded,
+                    isDrawerMode
+                        ? Icons.close_rounded
+                        : (isCollapsed
+                            ? Icons.keyboard_double_arrow_left_rounded
+                            : Icons.keyboard_double_arrow_right_rounded),
                     color: AppColors.textMuted,
                     size: 20,
                   ),
-                  tooltip: isCollapsed ? 'توسيع القائمة' : 'طي القائمة',
+                  tooltip: isDrawerMode
+                      ? 'إغلاق القائمة'
+                      : (isCollapsed ? 'توسيع القائمة' : 'طي القائمة'),
                 ),
               ],
             ),
@@ -108,7 +117,12 @@ class CollapsibleSideDrawer extends StatelessWidget {
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 4),
                   child: InkWell(
-                    onTap: () => onIndexChanged(index),
+                    onTap: () {
+                      onIndexChanged(index);
+                      if (isDrawerMode) {
+                        Navigator.of(context).maybePop();
+                      }
+                    },
                     borderRadius: BorderRadius.circular(10),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
