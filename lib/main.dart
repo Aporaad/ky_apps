@@ -21,7 +21,7 @@ class KyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp.router(
-      title: 'نظام الحسابات والإدارة',
+      title: 'الكبودي للخياطة الرجالية',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       routerConfig: appRouter,
