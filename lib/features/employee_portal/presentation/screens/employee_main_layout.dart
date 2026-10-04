@@ -44,21 +44,24 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تسجيل الخروج'),
-        content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج؟'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('إلغاء'),
+      builder:
+          (ctx) => AlertDialog(
+            title: const Text('تسجيل الخروج'),
+            content: const Text('هل أنت متأكد من رغبتك في تسجيل الخروج؟'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('إلغاء'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.error,
+                ),
+                child: const Text('تسجيل خروج'),
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
-            child: const Text('تسجيل خروج'),
-          ),
-        ],
-      ),
     );
 
     if (confirm == true && mounted) {
@@ -98,10 +101,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
       return Scaffold(
         key: _scaffoldKey,
         backgroundColor: AppColors.background,
-        drawer: Drawer(
-          width: 280,
-          child: SafeArea(child: sideDrawer),
-        ),
+        drawer: Drawer(width: 280, child: SafeArea(child: sideDrawer)),
         appBar: AppBar(
           backgroundColor: Colors.white,
           elevation: 0,
@@ -144,7 +144,10 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: AppColors.surfaceSubtle,
                     borderRadius: BorderRadius.circular(12),
@@ -153,11 +156,18 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.storefront_outlined, size: 14, color: AppColors.primary),
+                      const Icon(
+                        Icons.storefront_outlined,
+                        size: 14,
+                        color: AppColors.primary,
+                      ),
                       const SizedBox(width: 4),
                       Text(
                         'فرع ${user!.branchNo}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ],
                   ),
@@ -174,20 +184,13 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
             ),
           ],
         ),
-        body: IndexedStack(
-          index: _currentIndex,
-          children: _sections,
-        ),
+        body: IndexedStack(index: _currentIndex, children: _sections),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: _currentIndex < 4 ? _currentIndex : 4,
+          selectedIndex: (_currentIndex >= 0 && _currentIndex < 4) ? _currentIndex : 0,
           onDestinationSelected: (idx) {
-            if (idx == 4) {
-              _scaffoldKey.currentState?.openDrawer();
-            } else {
-              setState(() {
-                _currentIndex = idx;
-              });
-            }
+            setState(() {
+              _currentIndex = idx;
+            });
           },
           destinations: const [
             NavigationDestination(
@@ -210,10 +213,6 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
               selectedIcon: Icon(Icons.account_balance_rounded),
               label: 'الحسابات',
             ),
-            NavigationDestination(
-              icon: Icon(Icons.menu_rounded),
-              label: 'المزيد',
-            ),
           ],
         ),
       );
@@ -234,9 +233,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   decoration: const BoxDecoration(
                     color: Colors.white,
-                    border: Border(
-                      bottom: BorderSide(color: AppColors.border),
-                    ),
+                    border: Border(bottom: BorderSide(color: AppColors.border)),
                   ),
                   child: Row(
                     children: [

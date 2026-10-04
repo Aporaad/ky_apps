@@ -8,6 +8,9 @@ class SecureStorageService {
   SecureStorageService([FlutterSecureStorage? storage])
       : _storage = storage ??
             const FlutterSecureStorage(
+              aOptions: AndroidOptions(
+                resetOnError: true,
+              ),
               iOptions: IOSOptions(accessibility: KeychainAccessibility.first_unlock),
             );
 

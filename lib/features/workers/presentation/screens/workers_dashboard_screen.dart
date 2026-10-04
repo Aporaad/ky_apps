@@ -13,41 +13,52 @@ class WorkersDashboardScreen extends StatelessWidget {
     final canPop = Navigator.canPop(context);
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: canPop
-          ? AppBar(
-              backgroundColor: Colors.white,
-              elevation: 0,
-              scrolledUnderElevation: 1,
-              surfaceTintColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                onPressed: () => Navigator.pop(context),
-              ),
-              title: const Row(
-                children: [
-                  Icon(Icons.groups_2_rounded, color: Color(0xFF6B21A8), size: 22),
-                  SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'جاري العاملين',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
-                        ),
+      appBar:
+          canPop
+              ? AppBar(
+                backgroundColor: Colors.white,
+                elevation: 0,
+                scrolledUnderElevation: 1,
+                surfaceTintColor: Colors.transparent,
+                leading: IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => Navigator.pop(context),
+                ),
+                title: Row(
+                  children: const [
+                    Icon(
+                      Icons.groups_2_rounded,
+                      color: Color(0xFF6B21A8),
+                      size: 22,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'جاري العاملين',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          Text(
+                            'إدارة الموظفين والقصاصين والخياطين',
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: AppColors.textMuted,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                      Text(
-                        'إدارة الموظفين والقصاصين والخياطين',
-                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            )
-          : null,
+                    ),
+                  ],
+                ),
+              )
+              : null,
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -72,6 +83,7 @@ class WorkersDashboardScreen extends StatelessWidget {
                   ),
                 ],
               ),
+              //'جاري العاملين'
               child: const Row(
                 children: [
                   Icon(Icons.groups_2_rounded, color: Colors.white, size: 36),
@@ -91,10 +103,7 @@ class WorkersDashboardScreen extends StatelessWidget {
                         SizedBox(height: 4),
                         Text(
                           'إدارة شاملة للموظفين والقصاصين والخياطين',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white70,
-                          ),
+                          style: TextStyle(fontSize: 12, color: Colors.white70),
                         ),
                       ],
                     ),
@@ -123,11 +132,12 @@ class WorkersDashboardScreen extends StatelessWidget {
               subtitle: 'إدارة بيانات الموظفين وكشف الحضور والحساب',
               color: const Color(0xFF1E3A8A),
               lightColor: const Color(0xFF3B82F6),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const EmployeesListScreen(),
-                ),
-              ),
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const EmployeesListScreen(),
+                    ),
+                  ),
             ),
 
             const SizedBox(height: 14),
@@ -139,11 +149,12 @@ class WorkersDashboardScreen extends StatelessWidget {
               subtitle: 'إدارة بيانات القصاصين وكشف العمل والحساب',
               color: const Color(0xFF065F46),
               lightColor: const Color(0xFF10B981),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const CuttersListScreen(),
-                ),
-              ),
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const CuttersListScreen(),
+                    ),
+                  ),
             ),
 
             const SizedBox(height: 14),
@@ -155,11 +166,12 @@ class WorkersDashboardScreen extends StatelessWidget {
               subtitle: 'إدارة بيانات الخياطين وكشف العمل والحساب',
               color: const Color(0xFF7C2D12),
               lightColor: const Color(0xFFF97316),
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const TailorsListScreen(),
-                ),
-              ),
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const TailorsListScreen(),
+                    ),
+                  ),
             ),
 
             const SizedBox(height: 32),

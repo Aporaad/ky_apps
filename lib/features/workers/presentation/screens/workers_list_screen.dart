@@ -174,23 +174,26 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
           children: [
             Icon(widget.icon, color: widget.accentColor, size: 22),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.title,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                if (!state.isLoading && state.error == null)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
                   Text(
-                    '${displayedWorkers.length} عامل',
-                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    widget.title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
-              ],
+                  if (!state.isLoading && state.error == null)
+                    Text(
+                      '${displayedWorkers.length} عامل',
+                      style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                ],
+              ),
             ),
           ],
         ),
@@ -511,32 +514,41 @@ class _WorkerListTile extends StatelessWidget {
                     const SizedBox(height: 2),
                     Row(
                       children: [
-                        Text(
-                          'رقم: ${worker.id}',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        if (worker.accNo != null) ...[
-                          const SizedBox(width: 12),
-                          Text(
-                            'حساب: ${worker.accNo}',
+                        Flexible(
+                          child: Text(
+                            'رقم: ${worker.id}',
                             style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textMuted,
                             ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (worker.accNo != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              'حساب: ${worker.accNo}',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                color: AppColors.textMuted,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                         if (worker.phone1 != null) ...[
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           const Icon(Icons.phone_outlined,
                               size: 11, color: AppColors.textMuted),
                           const SizedBox(width: 2),
-                          Text(
-                            worker.phone1!,
-                            style: const TextStyle(
-                                fontSize: 11, color: AppColors.textMuted),
+                          Flexible(
+                            child: Text(
+                              worker.phone1!,
+                              style: const TextStyle(
+                                  fontSize: 11, color: AppColors.textMuted),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
                         ],
                       ],

@@ -346,20 +346,22 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Row(
-                            children: [
+                          Row(
+                            children: const [
                               Icon(
                                 Icons.dns_rounded,
                                 color: AppColors.primary,
                                 size: 22,
                               ),
                               SizedBox(width: 8),
-                              Text(
-                                'عنوان رابط الـ API الأساسي (Base URL)',
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.textPrimary,
+                              Expanded(
+                                child: Text(
+                                  'عنوان رابط الـ API الأساسي (Base URL)',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.textPrimary,
+                                  ),
                                 ),
                               ),
                             ],
@@ -555,24 +557,43 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppColors.border),
                     ),
-                    child: Row(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Icon(
-                          Icons.check_circle_outline_rounded,
-                          color: AppColors.success,
-                          size: 20,
+                        Row(
+                          children: const [
+                            Icon(
+                              Icons.check_circle_outline_rounded,
+                              color: AppColors.success,
+                              size: 18,
+                            ),
+                            SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'الرابط النشط حالياً في النظام:',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 10),
-                        const Text(
-                          'الرابط النشط حالياً في النظام:',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: AppColors.border.withValues(alpha: 0.5),
+                            ),
+                          ),
                           child: Text(
                             state.activeApiUrl,
                             style: const TextStyle(
@@ -618,15 +639,16 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             children: [
               Icon(icon, color: color, size: 22),
               const SizedBox(width: 8),
-              Text(
-                isSuccess ? 'نجح الاتصال بالخادم!' : 'فشل الاتصال بالخادم!',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                  color: color,
+              Expanded(
+                child: Text(
+                  isSuccess ? 'نجح الاتصال بالخادم!' : 'فشل الاتصال بالخادم!',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                    color: color,
+                  ),
                 ),
               ),
-              const Spacer(),
               if (result.latencyMs != null)
                 Container(
                   padding: const EdgeInsets.symmetric(

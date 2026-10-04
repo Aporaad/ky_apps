@@ -19,19 +19,35 @@ class WorkerResult {
 /// مستودع بيانات العمال - يتصل بالـ API وسيرفر أوراكل
 class WorkerRepository {
   final DioClient client;
-  CancelToken? _cancelToken;
+
+  /// توكن مستقل لطلبات قائمة العمال (فهرسة + بحث)
+  CancelToken? _listCancelToken;
+
+  /// توكن مستقل لطلبات كشف الحساب (لا يتداخل مع توكن القائمة)
+  CancelToken? _statementCancelToken;
 
   WorkerRepository({required this.client});
 
+  /// إلغاء جميع الطلبات الجارية
   void cancel() {
-    _cancelToken?.cancel('cancelled');
-    _cancelToken = null;
+    _listCancelToken?.cancel('cancelled');
+    _listCancelToken = null;
+    _statementCancelToken?.cancel('cancelled');
+    _statementCancelToken = null;
   }
 
-  CancelToken _newToken() {
-    _cancelToken?.cancel('new_request');
-    _cancelToken = CancelToken();
-    return _cancelToken!;
+  /// توكن جديد لطلبات القائمة (يلغي طلب قائمة سابق فقط)
+  CancelToken _newListToken() {
+    _listCancelToken?.cancel('new_request');
+    _listCancelToken = CancelToken();
+    return _listCancelToken!;
+  }
+
+  /// توكن جديد لطلبات كشف الحساب (يلغي طلب كشف سابق فقط)
+  CancelToken _newStatementToken() {
+    _statementCancelToken?.cancel('new_request');
+    _statementCancelToken = CancelToken();
+    return _statementCancelToken!;
   }
 
   /// جلب قائمة العمال
@@ -49,7 +65,7 @@ class WorkerRepository {
           'page': page,
           'limit': limit,
         },
-        cancelToken: _newToken(),
+        cancelToken: _newListToken(),
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -153,7 +169,7 @@ class WorkerRepository {
           if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
           if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
         },
-        cancelToken: _newToken(),
+        cancelToken: _newStatementToken(),
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {

@@ -125,15 +125,17 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
-                    children: [
+                  Row(
+                    children: const [
                       Icon(Icons.print_rounded, color: Color(0xFF6B2D1B)),
                       SizedBox(width: 8),
-                      Text(
-                        'خيارات طباعة وتصدير الكشف',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Expanded(
+                        child: Text(
+                          'خيارات طباعة وتصدير الكشف',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                     ],
@@ -1332,25 +1334,30 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
         border: Border.all(color: const Color(0xFFE5E7EB)),
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'عرض صفحة $currentPage من $totalPages (إجمالي $totalRows حركة)',
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppColors.textMuted,
-              fontWeight: FontWeight.bold,
+          Expanded(
+            child: Text(
+              'صفحة $currentPage/$totalPages  ·  $totalRows حركة',
+              style: const TextStyle(
+                fontSize: 11,
+                color: AppColors.textMuted,
+                fontWeight: FontWeight.bold,
+              ),
+              overflow: TextOverflow.ellipsis,
             ),
           ),
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 onPressed:
                     currentPage > 1
                         ? () => setState(() => _currentPage--)
                         : null,
-                icon: const Icon(Icons.chevron_right_rounded),
+                icon: const Icon(Icons.chevron_right_rounded, size: 20),
                 tooltip: 'الصفحة السابقة',
               ),
               Container(
@@ -1372,11 +1379,14 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
                 ),
               ),
               IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
                 onPressed:
                     currentPage < totalPages
                         ? () => setState(() => _currentPage++)
                         : null,
-                icon: const Icon(Icons.chevron_left_rounded),
+                icon: const Icon(Icons.chevron_left_rounded, size: 20),
                 tooltip: 'الصفحة التالية',
               ),
             ],

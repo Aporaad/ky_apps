@@ -68,9 +68,7 @@ class PortalSectionScaffold extends StatelessWidget {
                   const SizedBox(height: 16),
 
                   // 3. مساحة المحتوى الرئيسية
-                  Expanded(
-                    child: content ?? _buildDefaultEmptyContent(),
-                  ),
+                  Expanded(child: content ?? _buildDefaultEmptyContent()),
                 ],
               ),
             ),
@@ -139,11 +137,7 @@ class PortalSectionScaffold extends StatelessWidget {
     if (isCompact) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          titleWidget,
-          const SizedBox(height: 12),
-          actionsWidget,
-        ],
+        children: [titleWidget, const SizedBox(height: 12), actionsWidget],
       );
     }
 
@@ -176,10 +170,16 @@ class PortalSectionScaffold extends StatelessWidget {
               style: const TextStyle(fontSize: 13),
               decoration: InputDecoration(
                 hintText: searchHint ?? 'بحث في $title...',
-                hintStyle: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                hintStyle: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.textMuted,
+                ),
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+                contentPadding: const EdgeInsets.symmetric(
+                  vertical: 9,
+                  horizontal: 8,
+                ),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: AppColors.border),
@@ -214,28 +214,29 @@ class PortalSectionScaffold extends StatelessWidget {
                 if (val == 'print') onPrint?.call();
                 if (val == 'export') onExport?.call();
               },
-              itemBuilder: (ctx) => [
-                const PopupMenuItem(
-                  value: 'print',
-                  child: Row(
-                    children: [
-                      Icon(Icons.print_outlined, size: 18),
-                      SizedBox(width: 8),
-                      Text('طباعة'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'export',
-                  child: Row(
-                    children: [
-                      Icon(Icons.download_outlined, size: 18),
-                      SizedBox(width: 8),
-                      Text('تصدير البيانات'),
-                    ],
-                  ),
-                ),
-              ],
+              itemBuilder:
+                  (ctx) => [
+                    const PopupMenuItem(
+                      value: 'print',
+                      child: Row(
+                        children: [
+                          Icon(Icons.print_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('طباعة'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'export',
+                      child: Row(
+                        children: [
+                          Icon(Icons.download_outlined, size: 18),
+                          SizedBox(width: 8),
+                          Text('تصدير البيانات'),
+                        ],
+                      ),
+                    ),
+                  ],
             ),
           ] else ...[
             const SizedBox(width: 6),
@@ -285,15 +286,12 @@ class PortalSectionScaffold extends StatelessWidget {
                   color: AppColors.primary.withValues(alpha: 0.08),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(
-                  icon,
-                  size: 42,
-                  color: AppColors.primary,
-                ),
+                child: Icon(icon, size: 42, color: AppColors.primary),
               ),
               const SizedBox(height: 16),
               Text(
-                emptyTitle ?? 'بيانات $title جاهزة للربط مع قاعدة بيانات Oracle',
+                emptyTitle ??
+                    'بيانات $title جاهزة للربط مع قاعدة بيانات Oracle',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 15,
@@ -303,7 +301,8 @@ class PortalSectionScaffold extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                emptyDescription ?? 'يمكن استعراض الجداول والاستعلام عنها عبر API أوراكل',
+                emptyDescription ??
+                    'يمكن استعراض الجداول والاستعلام عنها عبر API أوراكل',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 12.5,

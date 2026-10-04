@@ -148,3 +148,49 @@
   2. تحسين استعلام كشف الحساب وتصفية التواريخ بدالة `TRUNC(ENTRY_DATE)` وتحويل التواريخ بصيغة `TO_CHAR(ENTRY_DATE, 'DD/MM/YYYY')`.
   3. إضافة مؤقت تأخير تفاعلي (Debounce 300ms) في `WorkersListScreen` لإرسال طلب البحث بعد توقف المستخدم عن الكتابة وتفادي إلغاء الطلبات والضغط غير الضروري على الخادم.
   4. فحص واختبار مسارات كشف الحساب والبحث بنجاح واجتياز `flutter analyze` بدون أي خطأ أو تحذير (`No issues found!`).
+
+## [2026-09-12 21:10:29] - تطوير قسم الحسابات والشجرة المحاسبية والعملات وإصلاح كافة المشاكل البرمجية
+- **الهدف من التحديث:**
+  بناء وتطوير قسم الحسابات بالكامل لربطه بقاعدة بيانات Oracle مع واجهات المستخدم التفاعلية المتطورة:
+  1. إنشاء حساب (مجموعة حسابات جزئية وحساب مالي).
+  2. تعديل حساب مالي.
+  3. كشف حساب عادي.
+  4. كشف حساب مفصل مع خيارات تصفية متقدمة.
+  5. الشجرة المحاسبية التفاعلية (مع فلترة استثناء العملاء ما عدا "عملاء الكبودي للخياطة" رقم 12310000 وخيارات الطباعة والتصدير والبحث).
+  6. إدارة العملات وأسعار الصرف اليومية والتاريخية.
+  7. حل كافة الأخطاء والتحذيرات واجتياز `flutter analyze lib` بنجاح كامل بدون أي خطأ أو تحذير (`No issues found!`).
+
+- **التغييرات المنفذة بالتفصيل:**
+  1. **الـ Backend (Laravel API):**
+     - إنشاء `AccountController.php`: دوال جلب هيكل الشجرة (`ACCOUNT`، `ACC_MAIN`، `ACC_SUB`، `ACC_SUB_GROUP`)، جلب وإنشاء وتعديل الحسابات المالية (`CHART_ACC`)، واستخراج كشف الحساب العادي والمفصل مع معالجة ترميز النصوص العربية (Windows-1256).
+     - إنشاء `CurrencyController.php`: دوال إدارة العملات (`CURRENCY` و `CUR_CODE`) وأسعار الصرف وسجل التغيرات السعرية السابقة (`CUR_PRICE`).
+     - تسجيل كافة المسارات في `routes/api.php`.
+  2. **طبقة البيانات في Flutter (Data Layer):**
+     - إنشاء نماذج البيانات: `account_model.dart` (يمثل الشجرة والعقد والمجموعات)، `chart_account_model.dart` (يمثل الحساب المالي وكشوفات الحركات)، و `currency_model.dart` (يمثل العملات وأسعار الصرف).
+     - إنشاء مستودعات البيانات: `account_repository.dart` و `currency_repository.dart` عبر عميل Dio المركزي مع دعم إلغاء الطلبات وإدارة الأخطاء.
+  3. **مزودات الحالة (Riverpod Providers):**
+     - إنشاء `accounts_provider.dart`: يتضمن `AccountTreeNotifier` و `ChartAccountsNotifier` ومزودي السلسلة الهرمية للحسابات الأب المتتالية.
+     - إنشاء `currency_provider.dart`: يتضمن `CurrenciesNotifier` وإدارة إضافة وتعديل العملات وأسعار الصرف التاريخية `currencyPricesProvider`.
+  4. **واجهات المستخدم (Presentation UI):**
+     - `accounts_dashboard_screen.dart`: لوحة تحكم متكاملة ببطاقات ذات تدرج لوني وتصميم حديث وإحصائيات سريعة.
+     - `create_account_screen.dart`: واجهة تفاعلية تتيح للمستخدم الاختيار بين إنشاء "حساب مالي" أو "مجموعة حسابات جزئية" مع قوائم منسدلة متسلسلة للأب والتحقق من المدخلات.
+     - `edit_account_screen.dart`: واجهة تعديل بيانات الحساب وسقف الرصيد وحالة التوقيف.
+     - `account_statement_screen.dart`: شاشة كشف حساب مالي مشابهة لكشف حساب العاملين مع محدد الحساب والتاريخ وبطاقات ملخص الرصيد والدائن والمدين.
+     - `account_statement_detail_screen.dart`: شاشة كشف حساب مفصل مع تصفية مستويات الحساب (الكل، قسم رئيسي، فرعي، جزئي، مجموعة، حساب مالي) وتصفية العملات والتواريخ.
+     - `account_tree_screen.dart`: شاشة الشجرة المحاسبية التفاعلية، تدعم البحث اللحظي، وتوسيع/طي الكل، وتصدير/طباعة (PDF، Excel)، وتطبيق قاعدة استثناء حسابات العملاء ما عدا حساب "عملاء الكبودي للخياطة" (12310000).
+     - `currency_screen.dart`: شاشة عرض بطاقات العملات مع مؤشرات الارتفاع/الانخفاض، وإضافة وتعديل العملات، ونافذة سفلية لإدارة سجل أسعار الصرف التاريخية.
+     - دمج `AccountsDashboardScreen` داخل `AccountsSection` في `ky_apps/lib/features/employee_portal/presentation/screens/sections/accounts_section.dart`.
+  5. **إصلاح المشاكل والتوافق البرمجي:**
+     - استبدال `AppColors.cardBackground` بـ `AppColors.surface` و `lightBackground` بـ `AppColors.surfaceSubtle` لتطابق ثيم التطبيق المعتمد.
+     - استبدال `MaterialStateProperty` بـ `WidgetStateProperty` المتوافق مع إصدارات Flutter الحديثة.
+     - استبدال استخدام حزمة `intl` بدوال تنسيق محلية احترافية بدون إضافة اعتمادات خارجية غير ضرورية.
+     - استبدال `withOpacity` بـ `withValues(alpha: ...)` لمعالجة كافة التحذيرات.
+     - إزالة المتغيرات والاستيرادات غير المستخدمة.
+     - اجتياز اختبار `flutter analyze lib` بنجاح تام: `No issues found!`.
+
+
+## [2026-10-04 06:14:00] - ����� DioException ������ RenderFlex �� ��� ��������
+- ����� CancelToken �� WorkerRepository ��� _listCancelToken � _statementCancelToken
+- ����� Overflow �� pagination bar �� Expanded � TextOverflow.ellipsis
+- ����� Overflow �� workers_list_screen.dart �� Flexible ��� ����� Row ������� ������
+- �������: worker_repository.dart - worker_statement_screen.dart - workers_list_screen.dart

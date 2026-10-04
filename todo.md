@@ -59,3 +59,25 @@
 - [x] تفعيل وتحسين استعلام كشف الحساب وتصفية التواريخ (`TRUNC(ENTRY_DATE) BETWEEN ...`) وإرجاع ملخص الحركات والرصيد والبيان العربي بنجاح 100%.
 - [x] إضافة مؤقت تأخير تفاعلي (Debounce 300ms) في البحث بقوائم العاملين (الموظفين، القصاصين، الخياطين) لمنع إلغاء الطلبات المتكررة وتجنب استثناءات Dio.
 - [x] اجتياز فحص `flutter analyze` بنجاح كامل بدون أي خطأ أو تحذير (`No issues found!`).
+
+## [2026-09-12 21:10:29] - تطوير قسم الحسابات والشجرة المحاسبية والعملات وحل المشاكل
+- [x] بناء وتطوير الـ API في Laravel (`AccountController.php` و `CurrencyController.php` وتحديث `routes/api.php`) للتعامل مع حسابات أوراكل والعملات وأسعار الصرف.
+- [x] إنشاء طبقة البيانات Data Layer في Flutter: النماذج (`account_model.dart`، `chart_account_model.dart`، `currency_model.dart`) والمستودعات (`account_repository.dart`، `currency_repository.dart`).
+- [x] بناء مزودات الحالة Riverpod (`accounts_provider.dart`، `currency_provider.dart`) للشجرة المحاسبية، والحسابات المالية، والعملات، وسجل أسعار الصرف.
+- [x] تطوير واجهات المستخدم (UI):
+  - لوحة تحكم قسم الحسابات (`accounts_dashboard_screen.dart`) تحتوي بطاقات الخدمات المحاسبية وإحصائيات سريعة.
+  - إنشاء حساب جديد (`create_account_screen.dart`) لدعم إنشاء "مجموعة حسابات جزئية" و "حساب مالي" مع السلسلة الهرمية للأب.
+  - تعديل حساب مالي (`edit_account_screen.dart`) لتعديل الاسم، الرصيد، سقف الحساب، وخيار التوقيف.
+  - كشف حساب مالي (`account_statement_screen.dart`) مشابه لكشف حساب العاملين مع اختيار الحساب وتصفية التواريخ وملخص الرصيد.
+  - كشف حساب مفصل (`account_statement_detail_screen.dart`) مع خيارات متقدمة وتصفية المستويات والعملات.
+  - الشجرة المحاسبية (`account_tree_screen.dart`) بطريقة تفاعلية مع خيارات البحث، وتوسيع/طي الكل، وتصدير/طباعة، واستثناء حسابات العملاء وإظهار حساب "عملاء الكبودي للخياطة" (12310000) فقط.
+  - العملات وأسعار الصرف (`currency_screen.dart`) لإدارة العملات وتحديث أسعار الصرف اليومية وسجل الأسعار السابقة.
+- [x] دمج قسم الحسابات بالكامل داخل `AccountsSection` في بوابة الموظفين (`EmployeePortal`).
+- [x] حل كافة أخطاء وتحذيرات `current_problems` (تحديث `AppColors.surface`، `WidgetStateProperty`، دوال تنسيق التواريخ بدون حزمة خارجية، واستخدام `withValues`).
+- [x] اجتياز فحص `flutter analyze lib` بنجاح تام بدون أي أخطاء أو تحذيرات (`No issues found!`).
+
+
+## [2026-10-04 06:14:00] - ����� DioException ������ RenderFlex Overflow �� ��� ��������
+- [x] ��� CancelToken �� WorkerRepository ��� ������ ������� (_listCancelToken � _statementCancelToken) ���� ����� ����� ����� ������ �� ����� ��� ������.
+- [x] ����� RenderFlex overflow �� ���� ������ ��� ������� (_buildPaginationBar) �� worker_statement_screen.dart ��� ����� ���� �� Expanded �� TextOverflow.ellipsis.
+- [x] ����� RenderFlex overflow �� �� ������� ������ (��� / ���� / ����) �� workers_list_screen.dart ��� ����� ������� �� Flexible.
