@@ -18,6 +18,9 @@ class SecureStorageService {
   static const String _userTypeKey = 'ky_user_type';
   static const String _userDataKey = 'ky_user_data';
   static const String _apiBaseUrlKey = 'ky_api_base_url';
+  // مفاتيح المقاييس الحيوية
+  static const String _biometricEnabledKey = 'ky_biometric_enabled';
+  static const String _biometricUserIdKey = 'ky_biometric_user_id';
 
   /// حفظ رمز الوصول (Token)
   Future<void> saveToken(String token) async {
@@ -74,6 +77,43 @@ class SecureStorageService {
     await _storage.delete(key: _tokenKey);
     await _storage.delete(key: _userTypeKey);
     await _storage.delete(key: _userDataKey);
+    // لا نمسح بيانات البصمة عند الخروج حتى يستطيع المستخدم الدخول بها مجدداً
+  }
+
+  // ── البصمة والمصادقة الحيوية ─────────────────────────────
+
+  /// حفظ حالة تفعيل البصمة
+  Future<void> saveBiometricEnabled(bool enabled) async {
+    await _storage.write(
+      key: _biometricEnabledKey,
+      value: enabled ? '1' : '0',
+    );
+  }
+
+  /// قراءة حالة تفعيل البصمة
+  Future<bool> getBiometricEnabled() async {
+    final val = await _storage.read(key: _biometricEnabledKey);
+    return val == '1';
+  }
+
+  /// حفظ معرّف المستخدم لاستخدامه في تسجيل الدخول بالبصمة
+  Future<void> saveUserId(int userId) async {
+    await _storage.write(
+      key: _biometricUserIdKey,
+      value: userId.toString(),
+    );
+  }
+
+  /// قراءة معرّف المستخدم المخزّن
+  Future<int?> getUserId() async {
+    final val = await _storage.read(key: _biometricUserIdKey);
+    return val != null ? int.tryParse(val) : null;
+  }
+
+  /// مسح بيانات البصمة من التخزين المحلي (عند إلغاء التسجيل)
+  Future<void> clearBiometricData() async {
+    await _storage.delete(key: _biometricEnabledKey);
+    await _storage.delete(key: _biometricUserIdKey);
   }
 
   /// مسح كافة البيانات تماماً من الذاكرة بما فيها عنوان الـ API

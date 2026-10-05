@@ -12,8 +12,8 @@ class SalesSection extends StatelessWidget {
       subtitle: 'إدارة الفواتير والطلبات اليومية',
       icon: Icons.point_of_sale_outlined,
       searchHint: 'بحث في فواتير المبيعات...',
-      emptyTitle: 'سجلات المبيعات جاهزة للربط مع قاعدة بيانات Oracle',
-      emptyDescription: 'يمكن استعراض فواتير العملاء وسندات القبض المباشرة عبر الـ API',
+      emptyTitle: 'سجلات المبيعات ',
+      emptyDescription: 'يمكن استعراض فواتير العملاء وسندات القبض المباشرة ',
     );
   }
 }

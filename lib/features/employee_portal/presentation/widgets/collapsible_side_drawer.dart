@@ -28,13 +28,13 @@ class CollapsibleSideDrawer extends StatelessWidget {
     (title: 'الرئيسية', icon: Icons.dashboard_outlined),
     (title: 'المبيعات', icon: Icons.point_of_sale_outlined),
     (title: 'التفصيل', icon: Icons.content_cut_outlined),
-    (title: 'الحسابات', icon: Icons.account_balance_outlined),
     (title: 'العملاء', icon: Icons.people_outline_rounded),
+    (title: 'جاري العاملين', icon: Icons.groups_2_rounded),
+    (title: 'الحسابات', icon: Icons.account_balance_outlined),
     (title: 'المخازن', icon: Icons.inventory_2_outlined),
     (title: 'الإدارة', icon: Icons.admin_panel_settings_outlined),
     (title: 'الإعدادات', icon: Icons.settings_outlined),
     (title: 'الماليه', icon: Icons.groups_2_rounded),
-    (title: 'جاري العاملين', icon: Icons.groups_2_rounded),
   ];
 
   @override

@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/constants/api_constants.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/biometric_service.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../providers/api_config_notifier.dart';
+import '../providers/biometric_settings_notifier.dart';
 
 /// شاشة إعدادات والتحكم برابط Laravel API
 class ApiSettingsScreen extends ConsumerStatefulWidget {
@@ -90,79 +93,81 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                 ),
               ],
             ),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Divider(height: 1),
-                const SizedBox(height: 16),
-                const Text(
-                  '⚠️ تنبيه تقني هام:',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.error,
-                    fontSize: 14,
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Divider(height: 1),
+                  const SizedBox(height: 16),
+                  const Text(
+                    '⚠️ تنبيه تقني هام:',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.error,
+                      fontSize: 14,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'تغيير عنوان خادم الـ API سيؤدي إلى توجيه كافة عمليات النظام (تسجيل الدخول، التحقق، المزامنة، واسترجاع البيانات) إلى العنوان الجديد فوراً.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.5,
-                    color: AppColors.textSecondary,
+                  const SizedBox(height: 8),
+                  const Text(
+                    'تغيير عنوان خادم الـ API سيؤدي إلى توجيه كافة عمليات النظام (تسجيل الدخول، التحقق، المزامنة، واسترجاع البيانات) إلى العنوان الجديد فوراً.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'في حال كان العنوان غير صالح أو الخادم غير مستجيب، فلن تتمكن من تسجيل الدخول أو استخدام التطبيق.',
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.5,
-                    color: AppColors.textSecondary,
+                  const SizedBox(height: 10),
+                  const Text(
+                    'في حال كان العنوان غير صالح أو الخادم غير مستجيب، فلن تتمكن من تسجيل الدخول أو استخدام التطبيق.',
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.link_rounded,
-                        size: 18,
-                        color: AppColors.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          targetUrl,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.primary,
-                          ),
-                          textDirection: TextDirection.ltr,
-                          overflow: TextOverflow.ellipsis,
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.link_rounded,
+                          size: 18,
+                          color: AppColors.primary,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            targetUrl,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.primary,
+                            ),
+                            textDirection: TextDirection.ltr,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                const Text(
-                  'هل أنت متأكد من رغبتك في اعتماد وتطبيق هذا التغيير؟',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
+                  const SizedBox(height: 14),
+                  const Text(
+                    'هل أنت متأكد من رغبتك في اعتماد وتطبيق هذا التغيير؟',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             actions: [
               TextButton(
@@ -609,6 +614,11 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 20),
+
+                  // بطاقة إعدادات تسجيل الدخول بالبصمة
+                  _buildBiometricCard(),
                 ],
               ),
             ),
@@ -692,6 +702,229 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
             ),
           ],
         ],
+      ),
+    );
+  }
+
+  /// بطاقة إعدادات المصادقة بالمقاييس الحيوية (البصمة / Face ID)
+  Widget _buildBiometricCard() {
+    final bioState = ref.watch(biometricSettingsNotifierProvider);
+    final authState = ref.watch(authNotifierProvider);
+
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: AppColors.border),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    bioState.deviceCapability == BiometricCapability.faceId
+                        ? Icons.face_rounded
+                        : Icons.fingerprint_rounded,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'المقاييس الحيوية (البصمة والوجه)',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                if (bioState.isLoading)
+                  const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+
+            // حالة دعم الجهاز
+            if (bioState.deviceCapability == BiometricCapability.notSupported) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.border),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        color: AppColors.textSecondary, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'هذا الجهاز لا يدعم المقاييس الحيوية (البصمة أو Face ID).',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else if (bioState.deviceCapability ==
+                BiometricCapability.notEnrolled) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.warning.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.3),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: AppColors.warning, size: 20),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'الجهاز يدعم البصمة لكن لم يتم تسجيل أي بصمة في إعدادات النظام. يرجى إعداد البصمة في جهازك أولاً.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              // إشعار إذا لم يكن مسجل دخول
+              if (!authState.isAuthenticated) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.info.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: AppColors.info.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.lock_outline_rounded,
+                          color: AppColors.info, size: 20),
+                      SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'لتفعيل أو إلغاء البصمة، يجب تسجيل الدخول بحسابك أولاً لربط هذا الجهاز به.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
+              SwitchListTile.adaptive(
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  bioState.deviceCapability == BiometricCapability.faceId
+                      ? 'تسجيل الدخول بـ Face ID'
+                      : 'تسجيل الدخول ببصمة الإصبع',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: Text(
+                  bioState.isEnabled
+                      ? 'البصمة مفعلة لهذا الجهاز (${bioState.deviceName ?? 'الجهاز الحالي'})'
+                      : 'تفعيل تسجيل الدخول التلقائي السريع بالبصمة',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                value: bioState.isEnabled,
+                activeColor: AppColors.primary,
+                onChanged: (!authState.isAuthenticated || bioState.isLoading)
+                    ? null
+                    : (val) async {
+                        await ref
+                            .read(biometricSettingsNotifierProvider.notifier)
+                            .toggleBiometric(val);
+                      },
+              ),
+
+              if (bioState.errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.error.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.error.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    bioState.errorMessage!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.error,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+
+              if (bioState.successMessage != null) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.success.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.success.withValues(alpha: 0.3),
+                    ),
+                  ),
+                  child: Text(
+                    bioState.successMessage!,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: AppColors.success,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ],
+        ),
       ),
     );
   }

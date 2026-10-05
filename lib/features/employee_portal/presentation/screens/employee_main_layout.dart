@@ -33,12 +33,12 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     HomeDashboardSection(),
     SalesSection(),
     TailoringSection(),
-    AccountsSection(),
     CustomersSection(),
+    WorkersSection(),
+    AccountsSection(),
     StoresSection(),
     ManagementSection(),
     SettingsSection(),
-    WorkersSection(),
   ];
 
   Future<void> _handleLogout() async {
@@ -186,7 +186,8 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
         ),
         body: IndexedStack(index: _currentIndex, children: _sections),
         bottomNavigationBar: NavigationBar(
-          selectedIndex: (_currentIndex >= 0 && _currentIndex < 4) ? _currentIndex : 0,
+          selectedIndex:
+              (_currentIndex >= 0 && _currentIndex < 4) ? _currentIndex : 0,
           onDestinationSelected: (idx) {
             setState(() {
               _currentIndex = idx;

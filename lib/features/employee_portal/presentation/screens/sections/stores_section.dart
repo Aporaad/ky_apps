@@ -12,8 +12,8 @@ class StoresSection extends StatelessWidget {
       subtitle: 'مراقبة حركة الأصناف والمخزون',
       icon: Icons.inventory_2_outlined,
       searchHint: 'بحث بكود الصنف أو الاسم...',
-      emptyTitle: 'أرصدة المخزون جاهزة للربط مع قاعدة بيانات Oracle',
-      emptyDescription: 'استعراض كميات الأصناف، أسعار التكلفة، وجرد المستودعات عبر الـ API',
+      emptyTitle: 'أرصدة المخزون  ',
+      emptyDescription: 'استعراض كميات الأصناف، أسعار التكلفة، وجرد المستودعات',
     );
   }
 }

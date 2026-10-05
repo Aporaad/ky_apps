@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>يستخدم التطبيق Face ID لتسجيل الدخول بشكل آمن وسريع</string>
 	<key>CFBundleDisplayName</key>
 	<string>Ky Apps</string>
 	<key>CFBundleExecutable</key>

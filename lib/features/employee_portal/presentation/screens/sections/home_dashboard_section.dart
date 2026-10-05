@@ -13,8 +13,8 @@ class HomeDashboardSection extends StatelessWidget {
       subtitle: 'لوحة المعلومات والإحصائيات العامة',
       icon: Icons.dashboard_outlined,
       searchHint: 'بحث في الرئيسية...',
-      emptyTitle: 'لوحة المعلومات جاهزة للربط مع قاعدة بيانات Oracle',
-      emptyDescription: 'يمكن استعراض الجداول والإحصائيات عبر API أوراكل',
+      emptyTitle: 'لوحة المعلومات ',
+      emptyDescription: 'يمكن استعراض الجداول والإحصائيات ',
     );
   }
 }

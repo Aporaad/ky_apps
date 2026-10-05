@@ -12,8 +12,8 @@ class TailoringSection extends StatelessWidget {
       subtitle: 'إدارة مقاسات وتفصيل الأزياء',
       icon: Icons.content_cut_outlined,
       searchHint: 'بحث في طلبات التفصيل والمقاسات...',
-      emptyTitle: 'سجلات التفصيل جاهزة للربط مع قاعدة بيانات Oracle',
-      emptyDescription: 'استعراض بيانات كروت التفصيل، القياسات، وحالات الإنجاز عبر الـ API',
+      emptyTitle: 'سجلات التفصيل ',
+      emptyDescription: 'استعراض بيانات كروت التفصيل، القياسات، وحالات الإنجاز',
     );
   }
 }

@@ -13,6 +13,11 @@ class ApiConstants {
   static const String logout = '/auth/logout';
   static const String me = '/auth/me';
 
+  // مسارات المقاييس الحيوية
+  static const String biometricLogin    = '/auth/biometric/login';
+  static const String biometricRegister = '/auth/biometric/register';
+  static const String biometricRevoke   = '/auth/biometric/revoke';
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

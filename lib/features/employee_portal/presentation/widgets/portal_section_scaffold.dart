@@ -290,8 +290,7 @@ class PortalSectionScaffold extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               Text(
-                emptyTitle ??
-                    'بيانات $title جاهزة للربط مع قاعدة بيانات Oracle',
+                emptyTitle ?? 'لا توجد بيانات',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 15,
@@ -301,8 +300,7 @@ class PortalSectionScaffold extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                emptyDescription ??
-                    'يمكن استعراض الجداول والاستعلام عنها عبر API أوراكل',
+                emptyDescription ?? 'لا توجد بيانات',
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 12.5,

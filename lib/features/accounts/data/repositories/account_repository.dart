@@ -206,8 +206,9 @@ class AccountRepository {
       }
       return {'data': [], 'meta': {}};
     } catch (e) {
-      if (e is DioException && CancelToken.isCancel(e))
+      if (e is DioException && CancelToken.isCancel(e)) {
         return {'data': [], 'meta': {}};
+      }
       rethrow;
     }
   }
@@ -303,8 +304,9 @@ class AccountRepository {
       }
       return const AccountStatementData();
     } catch (e) {
-      if (e is DioException && CancelToken.isCancel(e))
+      if (e is DioException && CancelToken.isCancel(e)) {
         return const AccountStatementData();
+      }
       rethrow;
     }
   }

@@ -194,3 +194,15 @@
 - ÇÕáÇÍ Overflow İí pagination bar ÈÜ Expanded æ TextOverflow.ellipsis
 - ÇÕáÇÍ Overflow İí workers_list_screen.dart ÈÜ Flexible Úáì ÚäÇÕÑ Row ãÚáæãÇÊ ÇáÚÇãá
 - ÇáãáİÇÊ: worker_repository.dart - worker_statement_screen.dart - workers_list_screen.dart
+
+---
+## [2026-10-04 23:41:00] - ÊÍáíá ãÊØáÈÇÊ Biometric Authentication - Claude Sonnet 4.6 (Thinking)
+- **ÇáãåãÉ:** ÊÍáíá ÇáÊØÈíŞ æŞÇÚÏÉ ÇáÈíÇäÇÊ áæÖÚ ÎØÉ ÊäİíĞ ãíÒÉ ÊÓÌíá ÇáÏÎæá ÈÇáãŞÇííÓ ÇáÍíæíÉ
+- **ÇáÊÍáíá ÇáãäÌÒ:**
+  - ãÑÇÌÚÉ AuthController.php, User.php Model, routes/api.php
+  - ãÑÇÌÚÉ auth_repository.dart, auth_notifier.dart, login_screen.dart, secure_storage_service.dart
+  - ÇÓÊÚáÇã Oracle DB: NEW_USERS table ÊÍÊæí 15 ÚãæÏ (áÇ íæÌÏ ÚãæÏ biometric)
+  - ÇÓÊÚáÇã ÌÏÇæá Oracle ÇáãÊÇÍÉ (USER_BIOMETRIC_DEVICES ÛíÑ ãæÌæÏ)
+- **ÇáŞÑÇÑ ÇáãÚãÇÑí:** ÊÎÒíä device_token ãÔİøÑ İí ÌÏæá ÌÏíÏ USER_BIOMETRIC_DEVICES + ÇáãÕÇÏŞÉ ÇáÍíæíÉ ãÍáíÇğ ÚÈÑ local_auth
+- **ÇáäÊíÌÉ:** ÎØÉ ÊäİíĞ ÔÇãáÉ ÊÔãá 16 ÎØæÉ æ 16 ãáİ (5 ÌÏíÏ + 11 ÊÚÏíá + ÌÏæá DB ÌÏíÏ)
+

@@ -32,9 +32,10 @@ class CustomersDashboardScreen extends StatelessWidget {
           // شبكة البطاقات
           LayoutBuilder(
             builder: (ctx, constraints) {
-              final crossAxisCount = constraints.maxWidth < 480
-                  ? 1
-                  : constraints.maxWidth < 800
+              final crossAxisCount =
+                  constraints.maxWidth < 480
+                      ? 1
+                      : constraints.maxWidth < 800
                       ? 2
                       : 3;
               return GridView.builder(
@@ -76,7 +77,11 @@ class CustomersDashboardScreen extends StatelessWidget {
               ),
             ],
           ),
-          child: const Icon(Icons.people_rounded, color: Colors.white, size: 26),
+          child: const Icon(
+            Icons.people_rounded,
+            color: Colors.white,
+            size: 26,
+          ),
         ),
         const SizedBox(width: 14),
         const Column(
@@ -93,10 +98,7 @@ class CustomersDashboardScreen extends StatelessWidget {
             SizedBox(height: 3),
             Text(
               'سجل وإدارة بيانات العملاء وأرصدتهم',
-              style: TextStyle(
-                fontSize: 12.5,
-                color: AppColors.textSecondary,
-              ),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
           ],
         ),
@@ -115,9 +117,10 @@ class CustomersDashboardScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
-        ),
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
+            ),
       ),
       _CustomerActionCard(
         title: 'تعديل عميل',
@@ -131,11 +134,12 @@ class CustomersDashboardScreen extends StatelessWidget {
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
-              builder: (_) => const CustomerPickerScreen(
-                title: 'اختر العميل للتعديل',
-                subtitle: 'ابحث عن العميل الذي تريد تعديل بياناته',
-                icon: Icons.edit_rounded,
-              ),
+              builder:
+                  (_) => const CustomerPickerScreen(
+                    title: 'اختر العميل للتعديل',
+                    subtitle: 'ابحث عن العميل الذي تريد تعديل بياناته',
+                    icon: Icons.edit_rounded,
+                  ),
             ),
           );
           if (picked != null && context.mounted) {
@@ -159,11 +163,12 @@ class CustomersDashboardScreen extends StatelessWidget {
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
-              builder: (_) => const CustomerPickerScreen(
-                title: 'اختر العميل للحذف',
-                subtitle: 'ابحث وحدد العميل المراد حذفه',
-                icon: Icons.person_remove_rounded,
-              ),
+              builder:
+                  (_) => const CustomerPickerScreen(
+                    title: 'اختر العميل للحذف',
+                    subtitle: 'ابحث وحدد العميل المراد حذفه',
+                    icon: Icons.person_remove_rounded,
+                  ),
             ),
           );
           if (picked != null && context.mounted) {
@@ -187,21 +192,23 @@ class CustomersDashboardScreen extends StatelessWidget {
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
-              builder: (_) => const CustomerPickerScreen(
-                title: 'اختر العميل لكشف الحساب',
-                subtitle: 'ابحث بالاسم أو الرقم لعرض كشف حسابه',
-                icon: Icons.account_balance_wallet_rounded,
-              ),
+              builder:
+                  (_) => const CustomerPickerScreen(
+                    title: 'اختر العميل لكشف الحساب',
+                    subtitle: 'ابحث بالاسم أو الرقم لعرض كشف حسابه',
+                    icon: Icons.account_balance_wallet_rounded,
+                  ),
             ),
           );
           if (picked != null && context.mounted) {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) => CustomerStatementScreen(
-                  custNo: picked.custNo,
-                  custName: picked.custName,
-                  accNo: picked.accNo,
-                ),
+                builder:
+                    (_) => CustomerStatementScreen(
+                      custNo: picked.custNo,
+                      custName: picked.custName,
+                      accNo: picked.accNo,
+                    ),
               ),
             );
           }
@@ -216,9 +223,10 @@ class CustomersDashboardScreen extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const AllCustomersScreen()),
-        ),
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AllCustomersScreen()),
+            ),
       ),
     ];
   }
@@ -256,9 +264,10 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
       vsync: this,
       duration: const Duration(milliseconds: 180),
     );
-    _scaleAnimation = Tween<double>(begin: 1.0, end: 0.965).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOut),
-    );
+    _scaleAnimation = Tween<double>(
+      begin: 1.0,
+      end: 0.965,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
   }
 
   @override
@@ -279,10 +288,7 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
       child: AnimatedBuilder(
         animation: _controller,
         builder: (_, child) {
-          return Transform.scale(
-            scale: _scaleAnimation.value,
-            child: child,
-          );
+          return Transform.scale(scale: _scaleAnimation.value, child: child);
         },
         child: Container(
           decoration: BoxDecoration(
@@ -303,7 +309,7 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  mainAxisAlignment: MainAxisAlignment.start,
                   children: [
                     Container(
                       padding: const EdgeInsets.all(10),
@@ -312,6 +318,22 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Icon(widget.icon, color: Colors.white, size: 24),
+                    ),
+
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Text(
+                        widget.title,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                     Container(
                       padding: const EdgeInsets.all(6),
@@ -327,23 +349,20 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
                     ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
-                    Text(
-                      widget.title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.85),
-                        fontSize: 12,
+                      child: Text(
+                        widget.subtitle,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                   ],

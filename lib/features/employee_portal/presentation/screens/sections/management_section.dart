@@ -12,8 +12,8 @@ class ManagementSection extends StatelessWidget {
       subtitle: 'صلاحيات المستخدمين والتقارير الرقابية',
       icon: Icons.admin_panel_settings_outlined,
       searchHint: 'بحث في المستخدمين أو السجلات...',
-      emptyTitle: 'شاشة الإدارة والرقابة جاهزة للربط مع قاعدة بيانات Oracle',
-      emptyDescription: 'استعراض صلاحيات الفروع والمستخدمين وتقارير الأداء المالي عبر الـ API',
+      emptyTitle: 'شاشة الإدارة والرقابة ',
+      emptyDescription: 'استعراض صلاحيات المستخدمين',
     );
   }
 }

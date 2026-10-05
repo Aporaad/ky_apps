@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/biometric_service.dart';
 import '../providers/auth_notifier.dart';
+import '../widgets/biometric_login_button.dart';
 import '../widgets/user_type_selector.dart';
 
 /// شاشة تسجيل الدخول المتجاوبة
@@ -34,6 +36,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           username: _usernameController.text.trim(),
           password: _passwordController.text,
         );
+
+    if (success && mounted) {
+      final userType = ref.read(authNotifierProvider).selectedUserType;
+      if (userType == 'employee') {
+        context.go('/employee');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('بوابة العميل قيد التطوير حالياً'),
+            backgroundColor: AppColors.info,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleBiometricLogin() async {
+    final success =
+        await ref.read(authNotifierProvider.notifier).loginWithBiometric();
 
     if (success && mounted) {
       final userType = ref.read(authNotifierProvider).selectedUserType;
@@ -220,7 +241,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
                       // زر تسجيل الدخول مع مؤشر التحميل
                       ElevatedButton(
-                        onPressed: authState.isLoading ? null : _handleLogin,
+                        onPressed: (authState.isLoading || authState.isBiometricLoading)
+                            ? null
+                            : _handleLogin,
                         child: authState.isLoading
                             ? const SizedBox(
                                 height: 20,
@@ -233,6 +256,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('دخول'),
                       ),
+
+                      // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز
+                      if (authState.isBiometricEnabled &&
+                          authState.biometricCapability !=
+                              BiometricCapability.notSupported &&
+                          authState.biometricCapability !=
+                              BiometricCapability.notEnrolled) ...[
+                        const SizedBox(height: 20),
+                        Row(
+                          children: const [
+                            Expanded(child: Divider()),
+                            Padding(
+                              padding: EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                'أو عبر البصمة',
+                                style: TextStyle(
+                                  color: AppColors.textSecondary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 20),
+                        BiometricLoginButton(
+                          capability: authState.biometricCapability,
+                          isLoading: authState.isBiometricLoading,
+                          onPressed: authState.isLoading
+                              ? null
+                              : _handleBiometricLogin,
+                        ),
+                      ],
                     ],
                   ),
                 ),

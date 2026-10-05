@@ -81,3 +81,22 @@
 - [x] İÕá CancelToken İí WorkerRepository Åáì Êæßäíä ãÓÊŞáíä (_listCancelToken æ _statementCancelToken) áãäÚ ÊÚÇÑÖ ØáÈÇÊ ŞÇÆãÉ ÇáÚãÇá ãÚ ØáÈÇÊ ßÔİ ÇáÍÓÇÈ.
 - [x] ÅÕáÇÍ RenderFlex overflow İí ÔÑíØ ÇáÊäŞá Èíä ÇáÕİÍÇÊ (_buildPaginationBar) İí worker_statement_screen.dart ÚÈÑ ÊÛáíİ ÇáäÕ ÈÜ Expanded ãÚ TextOverflow.ellipsis.
 - [x] ÅÕáÇÍ RenderFlex overflow İí Õİ ãÚáæãÇÊ ÇáÚÇãá (ÑŞã / ÍÓÇÈ / åÇÊİ) İí workers_list_screen.dart ÚÈÑ ÊÛáíİ ÇáÚäÇÕÑ ÈÜ Flexible.
+
+## [2026-10-04 23:51:00] - ÊÓÌíá ÇáÏÎæá ÈÇáãŞÇííÓ ÇáÍíæíÉ (Biometric Authentication)
+- [ ] **DB**: ÅäÔÇÁ ÌÏæá USER_BIOMETRIC_DEVICES İí Oracle
+- [ ] **API**: ÅäÔÇÁ Model: app/Models/UserBiometricDevice.php
+- [ ] **API**: ÅÖÇİÉ registerBiometric(), biometricLogin(), revokeBiometric() İí AuthController
+- [ ] **API**: ÅÖÇİÉ ÇáãÓÇÑÇÊ İí routes/api.php
+- [ ] **Flutter**: ÅÖÇİÉ local_auth, device_info_plus, crypto İí pubspec.yaml
+- [ ] **Flutter**: ÅÚÏÇÏ Android Manifest æ iOS Info.plist
+- [ ] **Flutter**: ÅäÔÇÁ core/utils/device_id_helper.dart
+- [ ] **Flutter**: ÊÍÏíË secure_storage_service.dart (ÅÖÇİÉ biometric keys)
+- [ ] **Flutter**: ÅäÔÇÁ auth/data/models/biometric_status_model.dart
+- [ ] **Flutter**: ÊÍÏíË auth_repository.dart (ÅÖÇİÉ biometric methods)
+- [ ] **Flutter**: ÅäÔÇÁ settings/presentation/providers/biometric_settings_notifier.dart
+- [ ] **Flutter**: ÊÍÏíË auth_notifier.dart (ÅÖÇİÉ biometric state)
+- [ ] **Flutter**: ÅäÔÇÁ auth/presentation/widgets/biometric_login_button.dart
+- [ ] **Flutter**: ÊÍÏíË login_screen.dart (ÅÖÇİÉ ÒÑ ÇáÈÕãÉ)
+- [ ] **Flutter**: ÊÍÏíË api_settings_screen.dart (ÅÖÇİÉ ŞÓã ÅÚÏÇÏÇÊ ÇáÈÕãÉ)
+- [ ] **ÇÎÊÈÇÑ**: ÇÎÊÈÇÑ ßÇãá Úáì ÌåÇÒ ÍŞíŞí
+
