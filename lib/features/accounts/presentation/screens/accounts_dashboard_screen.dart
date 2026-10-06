@@ -10,13 +10,37 @@ import 'create_account_screen.dart';
 import 'currency_screen.dart';
 import 'edit_account_screen.dart';
 
-/// الشاشة الرئيسية ولوحة التحكم بقسم الحسابات
-class AccountsDashboardScreen extends ConsumerWidget {
+/// واجهة قسم الحسابات والمالية - تصميم عصري، منظم ومتناسق الأحجام
+class AccountsDashboardScreen extends ConsumerStatefulWidget {
   const AccountsDashboardScreen({super.key});
 
-  void _showEditAccountSelectionDialog(BuildContext context, WidgetRef ref) {
-    final searchCtrl = TextEditingController();
+  @override
+  ConsumerState<AccountsDashboardScreen> createState() =>
+      _AccountsDashboardScreenState();
+}
 
+class _AccountsDashboardScreenState
+    extends ConsumerState<AccountsDashboardScreen> {
+  final TextEditingController _quickSearchController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chartAccountsProvider.notifier).loadAccounts();
+      ref.read(accountTreeProvider.notifier).loadTree();
+      ref.read(currenciesProvider.notifier).loadCurrencies();
+    });
+  }
+
+  @override
+  void dispose() {
+    _quickSearchController.dispose();
+    super.dispose();
+  }
+
+  void _showEditAccountSelectionDialog(BuildContext context) {
+    final searchCtrl = TextEditingController();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -38,7 +62,10 @@ class AccountsDashboardScreen extends ConsumerWidget {
                   children: [
                     const Text(
                       'اختر الحساب المراد تعديله',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
@@ -50,12 +77,31 @@ class AccountsDashboardScreen extends ConsumerWidget {
                 TextField(
                   controller: searchCtrl,
                   onChanged: (val) {
-                    ref.read(chartAccountsProvider.notifier).loadAccounts(search: val.trim());
+                    ref
+                        .read(chartAccountsProvider.notifier)
+                        .loadAccounts(search: val.trim());
                   },
                   decoration: InputDecoration(
                     hintText: 'بحث باسم أو رقم الحساب...',
-                    prefixIcon: const Icon(Icons.search),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                    prefixIcon: const Icon(Icons.search, size: 20),
+                    filled: true,
+                    fillColor: AppColors.background,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppColors.border.withValues(alpha: 0.5),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppColors.border.withValues(alpha: 0.5),
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -63,31 +109,70 @@ class AccountsDashboardScreen extends ConsumerWidget {
                   child: state.isLoading
                       ? const Center(child: CircularProgressIndicator())
                       : state.accounts.isEmpty
-                          ? const Center(child: Text('لا توجد حسابات'))
-                          : ListView.separated(
-                              itemCount: state.accounts.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1),
-                              itemBuilder: (context, index) {
-                                final acc = state.accounts[index];
-                                return ListTile(
-                                  leading: const Icon(Icons.edit_note, color: AppColors.primary),
-                                  title: Text(acc.accName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                  subtitle: Text('رقم الحساب: ${acc.accNo}'),
-                                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
-                                  onTap: () {
-                                    Navigator.pop(ctx);
-                                    Navigator.of(context).push(
-                                      MaterialPageRoute(
-                                        builder: (_) => EditAccountScreen(
-                                          accNo: acc.accNo,
-                                          accName: acc.accName,
-                                        ),
-                                      ),
-                                    );
-                                  },
+                      ? const Center(
+                          child: Text(
+                            'لا توجد حسابات مطابقة للبحث',
+                            style: TextStyle(color: AppColors.textMuted),
+                          ),
+                        )
+                      : ListView.separated(
+                          itemCount: state.accounts.length,
+                          separatorBuilder: (_, __) =>
+                              const Divider(height: 1),
+                          itemBuilder: (context, index) {
+                            final acc = state.accounts[index];
+                            return ListTile(
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
+                              leading: Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary.withValues(
+                                    alpha: 0.1,
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: const Icon(
+                                  Icons.edit_note_rounded,
+                                  color: AppColors.primary,
+                                  size: 20,
+                                ),
+                              ),
+                              title: Text(
+                                acc.accName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              subtitle: Text(
+                                'رقم الحساب: ${acc.accNo}',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                              trailing: const Icon(
+                                Icons.arrow_forward_ios,
+                                size: 14,
+                                color: AppColors.textMuted,
+                              ),
+                              onTap: () {
+                                Navigator.pop(ctx);
+                                Navigator.of(context).push(
+                                  MaterialPageRoute(
+                                    builder: (_) => EditAccountScreen(
+                                      accNo: acc.accNo,
+                                      accName: acc.accName,
+                                    ),
+                                  ),
                                 );
                               },
-                            ),
+                            );
+                          },
+                        ),
                 ),
               ],
             ),
@@ -97,8 +182,10 @@ class AccountsDashboardScreen extends ConsumerWidget {
     );
   }
 
+
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final treeState = ref.watch(accountTreeProvider);
     final currenciesState = ref.watch(currenciesProvider);
     final chartState = ref.watch(chartAccountsProvider);
@@ -106,191 +193,164 @@ class AccountsDashboardScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // العنوان الرئيسي والوصف
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: const Icon(
-                    Icons.account_balance,
-                    color: AppColors.primary,
-                    size: 32,
-                  ),
+            // رأس الصفحة المصغر والأنيق
+            Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.border.withValues(alpha: 0.6),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text(
-                        'إدارة الحسابات والشجرة المحاسبية',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'التحكم بالحسابات المالية، الكشوفات التفصيلية، والعملات مع الربط المباشر بـ Oracle',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                    ],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 24),
-
-            // شريط الإحصائيات السريعة
-            Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    title: 'الحسابات المالية',
-                    value: '${chartState.accounts.length}',
-                    subtitle: 'حساب مسجل',
-                    icon: Icons.account_balance_wallet_outlined,
-                    color: Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    title: 'العملات النشطة',
-                    value: '${currenciesState.currencies.length}',
-                    subtitle: 'عملة مفعلة',
-                    icon: Icons.currency_exchange,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    context,
-                    title: 'الشجرة المحاسبية',
-                    value: '${treeState.tree.length}',
-                    subtitle: 'أقسام رئيسية',
-                    icon: Icons.account_tree_outlined,
-                    color: Colors.purple,
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 28),
-
-            const Text(
-              'الخدمات والعمليات المحاسبية الرئيسية',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
+                ],
               ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.account_balance_rounded,
+                      color: AppColors.primary,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'إدارة الحسابات والمالية',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        SizedBox(height: 2),
+                        Text(
+                          'الشجرة المحاسبية، كشوفات الحساب، العملات والصرف',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.refresh_rounded,
+                      color: AppColors.primary,
+                      size: 22,
+                    ),
+                    tooltip: 'تحديث البيانات',
+                    onPressed: () {
+                      ref.read(chartAccountsProvider.notifier).loadAccounts();
+                      ref.read(accountTreeProvider.notifier).loadTree();
+                      ref.read(currenciesProvider.notifier).loadCurrencies();
+                    },
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // شريط إحصائيات سريع متوازن الحجم
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCompactStatCard(
+                    title: 'الحسابات',
+                    value: '${chartState.accounts.length}',
+                    icon: Icons.account_balance_wallet_rounded,
+                    accentColor: const Color(0xFF1976D2),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactStatCard(
+                    title: 'العملات',
+                    value: '${currenciesState.currencies.length}',
+                    icon: Icons.currency_exchange_rounded,
+                    accentColor: const Color(0xFF2E7D32),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactStatCard(
+                    title: 'أقسام الشجرة',
+                    value: '${treeState.tree.length}',
+                    icon: Icons.account_tree_rounded,
+                    accentColor: const Color(0xFF7B1FA2),
+                  ),
+                ),
+              ],
             ),
 
             const SizedBox(height: 16),
 
-            // بطاقات الأقسام والتطبيقات
+            // قسم 1: التقارير والكشوفات المالية
+            _buildSectionHeader(
+              title: 'التقارير والكشوفات المالية',
+              icon: Icons.analytics_outlined,
+            ),
+            const SizedBox(height: 8),
             LayoutBuilder(
               builder: (context, constraints) {
-                final crossAxisCount = constraints.maxWidth > 800 ? 3 : (constraints.maxWidth > 500 ? 2 : 1);
+                final crossAxisCount = constraints.maxWidth > 520 ? 2 : 1;
                 return GridView.count(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: 1.4,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: crossAxisCount == 1 ? 3.4 : 2.5,
                   children: [
-                    // 1. إنشاء حساب
-                    _buildFeatureCard(
-                      context,
-                      title: 'إنشاء حساب',
-                      description: 'تتيح إنشاء "مجموعات الحسابات الجزئية" و "الحسابات المالية" والسلسلة الأب',
-                      icon: Icons.add_card,
-                      gradientColors: [const Color(0xFF1E88E5), const Color(0xFF1565C0)],
+                    _buildModernActionTile(
+                      title: 'كشف حساب مالي',
+                      subtitle: 'عرض حركات المدين والدائن والأرصدة',
+                      icon: Icons.receipt_long_rounded,
+                      badgeText: 'عام',
+                      badgeColor: const Color(0xFFE65100),
+                      iconColor: const Color(0xFFE65100),
                       onTap: () {
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const CreateAccountScreen()),
+                          MaterialPageRoute(
+                            builder: (_) => const AccountStatementScreen(),
+                          ),
                         );
                       },
                     ),
-
-                    // 2. تعديل حساب
-                    _buildFeatureCard(
-                      context,
-                      title: 'تعديل حساب',
-                      description: 'تعديل بيانات وأسماء وسقف الأرصدة وتوقيف الحسابات المالية',
-                      icon: Icons.edit_calendar,
-                      gradientColors: [const Color(0xFF00897B), const Color(0xFF00695C)],
-                      onTap: () => _showEditAccountSelectionDialog(context, ref),
-                    ),
-
-                    // 3. كشف حساب
-                    _buildFeatureCard(
-                      context,
-                      title: 'كشف حساب',
-                      description: 'عرض الحركات اليومية والمدين والدائن (مثل كشف حساب الموظفين والقصاصين)',
-                      icon: Icons.receipt_long,
-                      gradientColors: [const Color(0xFFFB8C00), const Color(0xFFEF6C00)],
+                    _buildModernActionTile(
+                      title: 'كشف حساب تحليلي مفصل',
+                      subtitle: 'تصفية حسب المستويات والفئات والعملات',
+                      icon: Icons.query_stats_rounded,
+                      badgeText: 'متقدم',
+                      badgeColor: const Color(0xFF6A1B9A),
+                      iconColor: const Color(0xFF6A1B9A),
                       onTap: () {
                         Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AccountStatementScreen()),
-                        );
-                      },
-                    ),
-
-                    // 4. كشف حساب مفصل
-                    _buildFeatureCard(
-                      context,
-                      title: 'كشف حساب مفصل',
-                      description: 'كشف بخيارات متقدمة وتصفية متعددة للمستويات والعملات والتاريخ',
-                      icon: Icons.analytics,
-                      gradientColors: [const Color(0xFF8E24AA), const Color(0xFF6A1B9A)],
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AccountStatementDetailScreen()),
-                        );
-                      },
-                    ),
-
-                    // 5. الشجرة المحاسبية
-                    _buildFeatureCard(
-                      context,
-                      title: 'الشجرة المحاسبية',
-                      description: 'عرض هيكل الشجرة مرتب ومنظم مع استثناء العملاء ما عدا "عملاء الكبودي لخياطة" (12310000)',
-                      icon: Icons.account_tree,
-                      gradientColors: [const Color(0xFF3949AB), const Color(0xFF283593)],
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const AccountTreeScreen()),
-                        );
-                      },
-                    ),
-
-                    // 6. العملات وأسعار الصرف
-                    _buildFeatureCard(
-                      context,
-                      title: 'العملات وأسعار الصرف',
-                      description: 'إدارة العملات وسجل تحديثات أسعار الصرف اليومية والتنبيهات السعرية',
-                      icon: Icons.price_change,
-                      gradientColors: [const Color(0xFF43A047), const Color(0xFF2E7D32)],
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const CurrencyScreen()),
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const AccountStatementDetailScreen(),
+                          ),
                         );
                       },
                     ),
@@ -298,57 +358,172 @@ class AccountsDashboardScreen extends ConsumerWidget {
                 );
               },
             ),
+
+            const SizedBox(height: 16),
+
+            // قسم 2: الشجرة المحاسبية وإدارة الحسابات
+            _buildSectionHeader(
+              title: 'الهيكل المحاسبي وإدارة الحسابات',
+              icon: Icons.account_tree_outlined,
+            ),
+            const SizedBox(height: 8),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final crossAxisCount = constraints.maxWidth > 520 ? 3 : 1;
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: crossAxisCount,
+                  crossAxisSpacing: 10,
+                  mainAxisSpacing: 10,
+                  childAspectRatio: crossAxisCount == 1 ? 3.4 : 2.1,
+                  children: [
+                    _buildModernActionTile(
+                      title: 'الشجرة المحاسبية',
+                      subtitle: 'هيكل الشجرة وفروع الحسابات',
+                      icon: Icons.account_tree_rounded,
+                      badgeText: 'الهيكل',
+                      badgeColor: const Color(0xFF1565C0),
+                      iconColor: const Color(0xFF1565C0),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AccountTreeScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildModernActionTile(
+                      title: 'إضافة حساب جديد',
+                      subtitle: 'إنشاء حساب مالي أو مجموعة جزئية',
+                      icon: Icons.add_circle_outline_rounded,
+                      badgeText: 'جديد',
+                      badgeColor: const Color(0xFF00897B),
+                      iconColor: const Color(0xFF00897B),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const CreateAccountScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildModernActionTile(
+                      title: 'تعديل بيانات حساب',
+                      subtitle: 'تعديل الأسماء وسقف الأرصدة',
+                      icon: Icons.edit_note_rounded,
+                      badgeText: 'تعديل',
+                      badgeColor: const Color(0xFF00695C),
+                      iconColor: const Color(0xFF00695C),
+                      onTap: () => _showEditAccountSelectionDialog(context),
+                    ),
+                  ],
+                );
+              },
+            ),
+
+            const SizedBox(height: 16),
+
+            // قسم 3: العملات وأسعار الصرف
+            _buildSectionHeader(
+              title: 'العملات وأسعار الصرف',
+              icon: Icons.currency_exchange_outlined,
+            ),
+            const SizedBox(height: 8),
+            _buildModernActionTile(
+              title: 'دليل العملات وأسعار الصرف اليومية',
+              subtitle:
+                  'إدارة العملات المعتمدة وسجل تحديثات أسعار الصرف والتنبيهات',
+              icon: Icons.price_change_rounded,
+              badgeText: 'الصرف',
+              badgeColor: const Color(0xFF2E7D32),
+              iconColor: const Color(0xFF2E7D32),
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const CurrencyScreen()),
+                );
+              },
+            ),
+
+            const SizedBox(height: 20),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(
-    BuildContext context, {
+  Widget _buildSectionHeader({
+    required String title,
+    required IconData icon,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.primary),
+        const SizedBox(width: 6),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.bold,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactStatCard({
     required String title,
     required String value,
-    required String subtitle,
     required IconData icon,
-    required Color color,
+    required Color accentColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: accentColor.withValues(alpha: 0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: color.withValues(alpha: 0.1),
-            child: Icon(icon, color: color, size: 22),
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: accentColor, size: 17),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  title,
-                  style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-                const SizedBox(height: 2),
-                Text(
                   value,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: color),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: accentColor,
+                  ),
                 ),
                 Text(
-                  subtitle,
-                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                  title,
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
@@ -358,77 +533,101 @@ class AccountsDashboardScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildFeatureCard(
-    BuildContext context, {
+  Widget _buildModernActionTile({
     required String title,
-    required String description,
+    required String subtitle,
     required IconData icon,
-    required List<Color> gradientColors,
+    required String badgeText,
+    required Color badgeColor,
+    required Color iconColor,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(18),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: gradientColors,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.6),
+            ),
           ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: gradientColors.last.withValues(alpha: 0.3),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  child: Icon(icon, color: Colors.white, size: 24),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: iconColor.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                const Icon(
-                  Icons.arrow_forward_ios,
-                  color: Colors.white70,
-                  size: 16,
+                child: Icon(icon, color: iconColor, size: 20),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: badgeColor.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: badgeColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textMuted,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.85),
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ),
-          ],
+              ),
+              const SizedBox(width: 4),
+              const Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 13,
+                color: AppColors.textMuted,
+              ),
+            ],
+          ),
         ),
       ),
     );

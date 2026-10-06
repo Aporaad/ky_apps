@@ -34,8 +34,8 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     SalesSection(),
     TailoringSection(),
     CustomersSection(),
-    WorkersSection(),
     AccountsSection(),
+    WorkersSection(),
     StoresSection(),
     ManagementSection(),
     SettingsSection(),
@@ -187,7 +187,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
         body: IndexedStack(index: _currentIndex, children: _sections),
         bottomNavigationBar: NavigationBar(
           selectedIndex:
-              (_currentIndex >= 0 && _currentIndex < 4) ? _currentIndex : 0,
+              (_currentIndex >= 0 && _currentIndex < 5) ? _currentIndex : 0,
           onDestinationSelected: (idx) {
             setState(() {
               _currentIndex = idx;
@@ -208,6 +208,11 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
               icon: Icon(Icons.content_cut_outlined),
               selectedIcon: Icon(Icons.content_cut_rounded),
               label: 'التفصيل',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'العملاء',
             ),
             NavigationDestination(
               icon: Icon(Icons.account_balance_outlined),
@@ -274,7 +279,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                             ),
                             const SizedBox(width: 6),
                             const Text(
-                              'متصل بقاعدة أوراكل',
+                              'متصل',
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.bold,
@@ -307,6 +312,11 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                           color: AppColors.error,
                         ),
                         tooltip: 'خروج',
+                      ),
+                      IconButton(
+                        onPressed: _handleLogout,
+                        icon: const Icon(Icons.key, color: AppColors.primary),
+                        tooltip: 'خيارات',
                       ),
                     ],
                   ),

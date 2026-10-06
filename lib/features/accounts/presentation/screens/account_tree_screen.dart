@@ -6,7 +6,7 @@ import '../providers/accounts_provider.dart';
 import 'create_account_screen.dart';
 import 'edit_account_screen.dart';
 
-/// شاشة الشجرة المحاسبية المحترفة
+/// شاشة الشجرة المحاسبية المحترفة - تصميم عصري، منظم ومتناسق
 /// تعرض حسابات الشجرة مرتبة ومنظمة مع استثناء العملاء ما عدا "عملاء الكبودي للخياطة" (12310000)
 class AccountTreeScreen extends ConsumerStatefulWidget {
   const AccountTreeScreen({super.key});
@@ -46,7 +46,8 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
     final nodeName = node.name.toLowerCase();
     final accNoStr = node.accNo?.toString() ?? '';
 
-    bool isCustomerGroup = nodeName.contains('عملاء') || nodeName.contains('العملاء');
+    bool isCustomerGroup =
+        nodeName.contains('عملاء') || nodeName.contains('العملاء');
     if (isCustomerGroup) {
       if (accNoStr != allowedCustomerAccNo && !nodeName.contains('الكبودي')) {
         List<AccountTreeNode> keptChildren = [];
@@ -126,66 +127,6 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
     }
   }
 
-  void _showPrintExportDialog(BuildContext context, List<AccountTreeNode> nodes) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Row(
-          children: const [
-            Icon(Icons.print_outlined, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('طباعة وتصدير الشجرة المحاسبية'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('اختر صيغة التصدير أو إجراء الطباعة:'),
-            const SizedBox(height: 16),
-            ListTile(
-              leading: const Icon(Icons.picture_as_pdf, color: Colors.red),
-              title: const Text('تصدير كملف PDF'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم تجهيز الشجرة المحاسبية وتصديرها بصيغة PDF')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.table_chart, color: Colors.green),
-              title: const Text('تصدير كملف Excel (CSV)'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('تم تصدير الشجرة المحاسبية بنجاح كملف Excel')),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.print, color: AppColors.primary),
-              title: const Text('طباعة مباشرة'),
-              onTap: () {
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('جاري إرسال الشجرة المحاسبية للطباعة...')),
-                );
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('إغلاق'),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final treeState = ref.watch(accountTreeProvider);
@@ -193,12 +134,18 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('الشجرة المحاسبية'),
+        title: const Text(
+          'الشجرة المحاسبية',
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        ),
         backgroundColor: AppColors.surface,
         elevation: 0.5,
         actions: [
           IconButton(
-            icon: Icon(_expandAll ? Icons.unfold_less : Icons.unfold_more),
+            icon: Icon(
+              _expandAll ? Icons.unfold_less_rounded : Icons.unfold_more_rounded,
+              size: 20,
+            ),
             tooltip: _expandAll ? 'طي الكل' : 'توسيع الكل',
             onPressed: () {
               if (treeState.tree.isNotEmpty) {
@@ -207,16 +154,7 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
             },
           ),
           IconButton(
-            icon: const Icon(Icons.print_outlined),
-            tooltip: 'طباعة وتصدير',
-            onPressed: () {
-              if (treeState.tree.isNotEmpty) {
-                _showPrintExportDialog(context, _filterTree(treeState.tree));
-              }
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh_rounded, size: 20),
             tooltip: 'تحديث الشجرة',
             onPressed: () => ref.read(accountTreeProvider.notifier).loadTree(),
           ),
@@ -224,9 +162,9 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
       ),
       body: Column(
         children: [
-          // شريط البحث والفرز والتنبيهات
+          // لوحة البحث والتنبيه المصغرة
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             color: AppColors.surface,
             child: Column(
               children: [
@@ -239,10 +177,11 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                   },
                   decoration: InputDecoration(
                     hintText: 'بحث في الشجرة برقم الحساب أو الاسم...',
-                    prefixIcon: const Icon(Icons.search, color: AppColors.textMuted),
+                    hintStyle: const TextStyle(fontSize: 12.5),
+                    prefixIcon: const Icon(Icons.search, size: 18, color: AppColors.textMuted),
                     suffixIcon: _searchQuery.isNotEmpty
                         ? IconButton(
-                            icon: const Icon(Icons.clear),
+                            icon: const Icon(Icons.clear, size: 16),
                             onPressed: () {
                               _searchController.clear();
                               setState(() {
@@ -254,33 +193,51 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                     filled: true,
                     fillColor: AppColors.background,
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide.none,
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.border.withValues(alpha: 0.6),
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide(
+                        color: AppColors.border.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 9,
+                    ),
                   ),
                 ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: const [
-                          Icon(Icons.info_outline, size: 16, color: AppColors.primary),
-                          SizedBox(width: 6),
-                          Text(
-                            'تم استثناء حسابات العملاء وتخصيص حساب "عملاء الكبودي لخياطة" (12310000)',
-                            style: TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: AppColors.primary.withValues(alpha: 0.15),
                     ),
-                  ],
+                  ),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.info_outline, size: 14, color: AppColors.primary),
+                      SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'تخصيص: تم استثناء العملاء ما عدا "عملاء الكبودي للخياطة" (12310000)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -292,39 +249,73 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                 ? const Center(child: CircularProgressIndicator())
                 : treeState.error != null
                     ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'حدث خطأ أثناء تحميل الشجرة: ${treeState.error}',
-                              style: const TextStyle(color: AppColors.error),
-                            ),
-                            const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: () => ref.read(accountTreeProvider.notifier).loadTree(),
-                              icon: const Icon(Icons.refresh),
-                              label: const Text('إعادة المحاولة'),
-                            ),
-                          ],
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(
+                                Icons.error_outline_rounded,
+                                size: 40,
+                                color: AppColors.error,
+                              ),
+                              const SizedBox(height: 12),
+                              Text(
+                                'حدث خطأ أثناء تحميل الشجرة:\n${treeState.error}',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  color: AppColors.error,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 14),
+                              OutlinedButton.icon(
+                                onPressed: () =>
+                                    ref.read(accountTreeProvider.notifier).loadTree(),
+                                icon: const Icon(Icons.refresh, size: 16),
+                                label: const Text('إعادة المحاولة'),
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       )
                     : Builder(
                         builder: (_) {
                           final filteredNodes = _filterTree(treeState.tree);
                           if (filteredNodes.isEmpty) {
-                            return const Center(
-                              child: Text(
-                                'لا توجد نتائج مطابقة للشجرة المحاسبية',
-                                style: TextStyle(color: AppColors.textMuted, fontSize: 16),
+                            return Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.account_tree_outlined,
+                                    size: 42,
+                                    color: AppColors.textMuted.withValues(alpha: 0.5),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  const Text(
+                                    'لا توجد حسابات مطابقة للبحث',
+                                    style: TextStyle(
+                                      color: AppColors.textMuted,
+                                      fontSize: 13.5,
+                                    ),
+                                  ),
+                                ],
                               ),
                             );
                           }
 
                           return ListView.builder(
-                            padding: const EdgeInsets.all(16),
+                            padding: const EdgeInsets.fromLTRB(12, 10, 12, 80),
                             itemCount: filteredNodes.length,
                             itemBuilder: (context, index) {
-                              return _buildTreeNodeWidget(filteredNodes[index], levelDepth: 0);
+                              return _buildTreeNodeWidget(
+                                filteredNodes[index],
+                                levelDepth: 0,
+                              );
                             },
                           );
                         },
@@ -332,21 +323,25 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton.small(
         onPressed: () {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (_) => const CreateAccountScreen()),
           );
         },
-        icon: const Icon(Icons.add),
-        label: const Text('إضافة حساب / مجموعة'),
         backgroundColor: AppColors.primary,
+        tooltip: 'إضافة حساب جديد',
+        child: const Icon(Icons.add, color: Colors.white),
       ),
     );
   }
 
-  Widget _buildTreeNodeWidget(AccountTreeNode node, {required int levelDepth}) {
-    final isExpanded = _expandedNodes.contains(node.id) || _expandAll || _searchQuery.isNotEmpty;
+  Widget _buildTreeNodeWidget(
+    AccountTreeNode node, {
+    required int levelDepth,
+  }) {
+    final isExpanded =
+        _expandedNodes.contains(node.id) || _expandAll || _searchQuery.isNotEmpty;
     final hasChildren = node.children.isNotEmpty;
 
     Color levelColor;
@@ -355,157 +350,231 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
 
     switch (node.level) {
       case 'account':
-        levelColor = Colors.indigo;
-        levelIcon = Icons.folder_special;
-        levelTitle = 'قسم رئيسي';
+        levelColor = const Color(0xFF283593);
+        levelIcon = Icons.folder_special_rounded;
+        levelTitle = 'رئيسي';
         break;
       case 'main':
-        levelColor = Colors.blue;
-        levelIcon = Icons.folder;
-        levelTitle = 'حساب فرعي';
+        levelColor = const Color(0xFF1565C0);
+        levelIcon = Icons.folder_rounded;
+        levelTitle = 'فرعي';
         break;
       case 'sub':
-        levelColor = Colors.teal;
-        levelIcon = Icons.snippet_folder;
-        levelTitle = 'حساب جزئي';
+        levelColor = const Color(0xFF00796B);
+        levelIcon = Icons.snippet_folder_rounded;
+        levelTitle = 'جزئي';
         break;
       case 'group':
-        levelColor = Colors.amber.shade800;
-        levelIcon = Icons.create_new_folder;
-        levelTitle = 'مجموعة جزئية';
+        levelColor = const Color(0xFFD84315);
+        levelIcon = Icons.create_new_folder_rounded;
+        levelTitle = 'مجموعة';
         break;
       default: // chart
-        levelColor = Colors.green.shade700;
-        levelIcon = Icons.account_balance_wallet;
-        levelTitle = 'حساب مالي';
+        levelColor = const Color(0xFF2E7D32);
+        levelIcon = Icons.account_balance_wallet_rounded;
+        levelTitle = 'مالي';
     }
+
+    // تقييد إزاحة العمق بحيث لا تتجاوز 48 بكسل لمنع انضغاط النصوص في الهواتف الصغيرة
+    final safeIndent = (levelDepth.clamp(0, 3) * 12.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        InkWell(
-          onTap: hasChildren ? () => _toggleExpand(node.id) : null,
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 6),
-            padding: EdgeInsets.only(
-              right: 12.0 + (levelDepth * 16.0),
-              left: 12,
-              top: 10,
-              bottom: 10,
+        Container(
+          margin: const EdgeInsets.only(bottom: 5),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: levelColor.withValues(alpha: 0.18),
+              width: 1,
             ),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: levelColor.withValues(alpha: 0.2),
-                width: 1,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.015),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.02),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: hasChildren ? () => _toggleExpand(node.id) : null,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  right: 8.0 + safeIndent,
+                  left: 8,
+                  top: 8,
+                  bottom: 8,
                 ),
-              ],
-            ),
-            child: Row(
-              children: [
-                if (hasChildren)
-                  Icon(
-                    isExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_left,
-                    color: levelColor,
-                    size: 22,
-                  )
-                else
-                  const SizedBox(width: 22),
-                const SizedBox(width: 8),
-                Icon(levelIcon, color: levelColor, size: 20),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                child: Row(
+                  children: [
+                    // زر التوسيع / الطي
+                    if (hasChildren)
+                      SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: Icon(
+                          isExpanded
+                              ? Icons.keyboard_arrow_down_rounded
+                              : Icons.keyboard_arrow_left_rounded,
+                          color: levelColor,
+                          size: 20,
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 22),
+                    const SizedBox(width: 4),
+
+                    // أيقونة نوع الحساب
+                    Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: levelColor.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(levelIcon, color: levelColor, size: 16),
+                    ),
+                    const SizedBox(width: 8),
+
+                    // الاسم ورقم الحساب
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            node.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: levelColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              levelTitle,
-                              style: TextStyle(fontSize: 10, color: levelColor, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                          if (node.isStoppped == true) ...[
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: AppColors.error.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  node.name,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
-                              child: const Text(
-                                'موقف',
-                                style: TextStyle(fontSize: 10, color: AppColors.error, fontWeight: FontWeight.bold),
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 5,
+                                  vertical: 1.5,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: levelColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  levelTitle,
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    color: levelColor,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              if (node.isStoppped == true) ...[
+                                const SizedBox(width: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 1.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.error.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: const Text(
+                                    'موقف',
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      color: AppColors.error,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          if (node.accNo != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 2),
+                              child: Text(
+                                'رقم: ${node.accNo}',
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  color: AppColors.textMuted,
+                                ),
                               ),
                             ),
-                          ],
                         ],
                       ),
-                      if (node.accNo != null)
-                        Text(
-                          'رقم الحساب: ${node.accNo}',
-                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-                        ),
-                    ],
-                  ),
-                ),
-
-                if (node.balance != null) ...[
-                  Text(
-                    '${node.balance!.toStringAsFixed(2)} ر.ي',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                      color: (node.balance ?? 0) >= 0 ? Colors.green.shade800 : AppColors.error,
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
 
-                if (node.level == 'chart' && node.accNo != null) ...[
-                  IconButton(
-                    icon: const Icon(Icons.edit, size: 18, color: AppColors.primary),
-                    tooltip: 'تعديل الحساب',
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => EditAccountScreen(accNo: node.accNo!, accName: node.name),
+                    // الرصيد وزر التعديل
+                    if (node.balance != null) ...[
+                      const SizedBox(width: 6),
+                      Text(
+                        '${node.balance!.toStringAsFixed(2)} ر.ي',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 11.5,
+                          color: (node.balance ?? 0) >= 0
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.error,
                         ),
-                      );
-                    },
-                  ),
-                ],
-              ],
+                      ),
+                    ],
+
+                    if (node.level == 'chart' && node.accNo != null) ...[
+                      const SizedBox(width: 2),
+                      InkWell(
+                        onTap: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => EditAccountScreen(
+                                accNo: node.accNo!,
+                                accName: node.name,
+                              ),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(6),
+                        child: Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: const Icon(
+                            Icons.edit_outlined,
+                            size: 15,
+                            color: AppColors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
 
+        // الفروع والأبناء
         if (hasChildren && isExpanded)
           Column(
             children: node.children
-                .map((child) => _buildTreeNodeWidget(child, levelDepth: levelDepth + 1))
+                .map((child) =>
+                    _buildTreeNodeWidget(child, levelDepth: levelDepth + 1))
                 .toList(),
           ),
       ],

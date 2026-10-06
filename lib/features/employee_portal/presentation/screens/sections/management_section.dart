@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../widgets/portal_section_scaffold.dart';
 
-/// واجهة قسم الإدارة المتجاوبة
+/// واجهة قسم الإدارة - ليست قائمة بيانات لذا تستخدم PortalSectionScaffold
 class ManagementSection extends StatelessWidget {
   const ManagementSection({super.key});
 
@@ -11,9 +11,8 @@ class ManagementSection extends StatelessWidget {
       title: 'الإدارة',
       subtitle: 'صلاحيات المستخدمين والتقارير الرقابية',
       icon: Icons.admin_panel_settings_outlined,
-      searchHint: 'بحث في المستخدمين أو السجلات...',
-      emptyTitle: 'شاشة الإدارة والرقابة ',
-      emptyDescription: 'استعراض صلاحيات المستخدمين',
+      emptyTitle: 'لوحة الإدارة والرقابة',
+      emptyDescription: 'ستتضمن هنا إدارة صلاحيات المستخدمين والتقارير الإدارية',
     );
   }
 }

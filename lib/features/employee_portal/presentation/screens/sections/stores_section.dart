@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../widgets/portal_section_scaffold.dart';
+import '../../widgets/data_list_scaffold.dart';
 
-/// واجهة قسم المخازن المتجاوبة
+/// واجهة قسم المخازن - قائمة بيانات لذا تستخدم DataListScaffold
 class StoresSection extends StatelessWidget {
   const StoresSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const PortalSectionScaffold(
+    return const DataListScaffold(
       title: 'المخازن',
       subtitle: 'مراقبة حركة الأصناف والمخزون',
       icon: Icons.inventory_2_outlined,
       searchHint: 'بحث بكود الصنف أو الاسم...',
-      emptyTitle: 'أرصدة المخزون  ',
-      emptyDescription: 'استعراض كميات الأصناف، أسعار التكلفة، وجرد المستودعات',
+      emptyTitle: 'لا توجد أصناف مخزنية',
+      emptyDescription: 'ستظهر هنا كميات الأصناف وأسعار التكلفة وجرد المستودعات',
+      emptyActionLabel: 'إضافة صنف',
     );
   }
 }

@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 /// Application unified color palette
 class AppColors {
   // الألوان الأساسية
-  static const Color primary = Color(0xFF1E3A8A); // أزرق كحلي ملكي
+  static const Color primary = Color(0xFF7C2D12); // أزرق كحلي ملكي
   static const Color primaryLight = Color(0xFF3B82F6);
   static const Color primaryDark = Color(0xFF0F172A);
 

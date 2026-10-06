@@ -61,7 +61,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             ),
             const SizedBox(height: 24),
             const Text(
-              'نظام الحسابات والإدارة',
+              'الكبودي للخياطة الرجالية',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,

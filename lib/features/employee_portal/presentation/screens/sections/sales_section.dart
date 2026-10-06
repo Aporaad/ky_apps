@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
-import '../../widgets/portal_section_scaffold.dart';
+import '../../widgets/data_list_scaffold.dart';
 
-/// واجهة قسم المبيعات المتجاوبة
+/// واجهة قسم المبيعات - تعرض قائمة بيانات لذا تستخدم DataListScaffold
 class SalesSection extends StatelessWidget {
   const SalesSection({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return const PortalSectionScaffold(
+    return const DataListScaffold(
       title: 'المبيعات',
-      subtitle: 'إدارة الفواتير والطلبات اليومية',
+      subtitle: 'فواتير المبيعات والمدفوعات',
       icon: Icons.point_of_sale_outlined,
-      searchHint: 'بحث في فواتير المبيعات...',
-      emptyTitle: 'سجلات المبيعات ',
-      emptyDescription: 'يمكن استعراض فواتير العملاء وسندات القبض المباشرة ',
+      searchHint: 'بحث برقم الفاتورة أو اسم العميل...',
+      emptyTitle: 'لا توجد فواتير بعد',
+      emptyDescription: 'ستظهر هنا فواتير المبيعات والمعاملات المالية',
+      emptyActionLabel: 'إنشاء فاتورة',
     );
   }
 }
