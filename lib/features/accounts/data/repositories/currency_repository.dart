@@ -18,25 +18,16 @@ class CurrencyResult {
 // ================================================================
 class CurrencyRepository {
   final DioClient client;
-  CancelToken? _cancelToken;
-
   CurrencyRepository({required this.client});
 
   void cancel() {
-    _cancelToken?.cancel('cancelled');
-    _cancelToken = null;
-  }
-
-  CancelToken _newToken() {
-    _cancelToken?.cancel('new_request');
-    _cancelToken = CancelToken();
-    return _cancelToken!;
+    // دعم دالة الإلغاء العامة عند الحاجة
   }
 
   /// جلب جميع العملات مع بياناتها وآخر سعر صرف
-  Future<List<CurrencyModel>> fetchCurrencies() async {
+  Future<List<CurrencyModel>> fetchCurrencies({CancelToken? cancelToken}) async {
     try {
-      final resp = await client.dio.get('/currencies', cancelToken: _newToken());
+      final resp = await client.dio.get('/currencies', cancelToken: cancelToken);
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
         return (body['data'] as List? ?? [])
@@ -94,12 +85,12 @@ class CurrencyRepository {
   }
 
   /// جلب سجل أسعار الصرف لعملة محددة
-  Future<Map<String, dynamic>> fetchPrices(int curNo, {int page = 1, int limit = 30}) async {
+  Future<Map<String, dynamic>> fetchPrices(int curNo, {int page = 1, int limit = 30, CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/currencies/$curNo/prices',
         queryParameters: {'page': page, 'limit': limit},
-        cancelToken: _newToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {

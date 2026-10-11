@@ -95,6 +95,7 @@ class ChartAccountsState {
 
 class ChartAccountsNotifier extends StateNotifier<ChartAccountsState> {
   final AccountRepository _repo;
+  int _searchVersion = 0;
 
   ChartAccountsNotifier(this._repo) : super(const ChartAccountsState()) {
     loadAccounts();
@@ -102,16 +103,21 @@ class ChartAccountsNotifier extends StateNotifier<ChartAccountsState> {
 
   Future<void> loadAccounts({String? search, int page = 1}) async {
     final query = search ?? state.search;
+    final currentVersion = ++_searchVersion;
     state = state.copyWith(isLoading: true, search: query, error: null);
     try {
       final res = await _repo.fetchChartAccounts(search: query, page: page);
-      state = state.copyWith(
-        isLoading: false,
-        accounts: res['data'] as List<ChartAccountModel>? ?? [],
-        meta: res['meta'] as Map<String, dynamic>? ?? {},
-      );
+      if (currentVersion == _searchVersion) {
+        state = state.copyWith(
+          isLoading: false,
+          accounts: res['data'] as List<ChartAccountModel>? ?? [],
+          meta: res['meta'] as Map<String, dynamic>? ?? {},
+        );
+      }
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      if (currentVersion == _searchVersion) {
+        state = state.copyWith(isLoading: false, error: e.toString());
+      }
     }
   }
 }

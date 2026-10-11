@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -588,9 +589,11 @@ class _AccountPickerBottomSheet extends ConsumerStatefulWidget {
 class _AccountPickerBottomSheetState
     extends ConsumerState<_AccountPickerBottomSheet> {
   final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -629,7 +632,10 @@ class _AccountPickerBottomSheetState
           TextField(
             controller: _searchCtrl,
             onChanged: (val) {
-              ref.read(chartAccountsProvider.notifier).loadAccounts(search: val.trim());
+              _debounce?.cancel();
+              _debounce = Timer(const Duration(milliseconds: 300), () {
+                ref.read(chartAccountsProvider.notifier).loadAccounts(search: val.trim());
+              });
             },
             decoration: InputDecoration(
               hintText: 'بحث باسم الحساب أو رقمه...',

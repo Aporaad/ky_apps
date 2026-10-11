@@ -20,34 +20,11 @@ class WorkerResult {
 class WorkerRepository {
   final DioClient client;
 
-  /// توكن مستقل لطلبات قائمة العمال (فهرسة + بحث)
-  CancelToken? _listCancelToken;
-
-  /// توكن مستقل لطلبات كشف الحساب (لا يتداخل مع توكن القائمة)
-  CancelToken? _statementCancelToken;
-
   WorkerRepository({required this.client});
 
   /// إلغاء جميع الطلبات الجارية
   void cancel() {
-    _listCancelToken?.cancel('cancelled');
-    _listCancelToken = null;
-    _statementCancelToken?.cancel('cancelled');
-    _statementCancelToken = null;
-  }
-
-  /// توكن جديد لطلبات القائمة (يلغي طلب قائمة سابق فقط)
-  CancelToken _newListToken() {
-    _listCancelToken?.cancel('new_request');
-    _listCancelToken = CancelToken();
-    return _listCancelToken!;
-  }
-
-  /// توكن جديد لطلبات كشف الحساب (يلغي طلب كشف سابق فقط)
-  CancelToken _newStatementToken() {
-    _statementCancelToken?.cancel('new_request');
-    _statementCancelToken = CancelToken();
-    return _statementCancelToken!;
+    // دعم دالة الإلغاء العامة عند الحاجة
   }
 
   /// جلب قائمة العمال
@@ -56,6 +33,7 @@ class WorkerRepository {
     String search = '',
     int page = 1,
     int limit = 100,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -65,7 +43,7 @@ class WorkerRepository {
           'page': page,
           'limit': limit,
         },
-        cancelToken: _newListToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -161,6 +139,7 @@ class WorkerRepository {
     int id, {
     String? fromDate,
     String? toDate,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -169,7 +148,7 @@ class WorkerRepository {
           if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
           if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
         },
-        cancelToken: _newStatementToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {

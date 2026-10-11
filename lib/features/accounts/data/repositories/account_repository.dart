@@ -24,42 +24,10 @@ class AccountResult {
 class AccountRepository {
   final DioClient client;
 
-  /// توكن مستقل لطلبات شجرة وهيكل الحسابات
-  CancelToken? _treeCancelToken;
-
-  /// توكن مستقل لطلبات جدول الحسابات المالية والبحث
-  CancelToken? _chartCancelToken;
-
-  /// توكن مستقل لطلبات كشف الحساب
-  CancelToken? _statementCancelToken;
-
   AccountRepository({required this.client});
 
   void cancel() {
-    _treeCancelToken?.cancel('cancelled');
-    _treeCancelToken = null;
-    _chartCancelToken?.cancel('cancelled');
-    _chartCancelToken = null;
-    _statementCancelToken?.cancel('cancelled');
-    _statementCancelToken = null;
-  }
-
-  CancelToken _newTreeToken() {
-    _treeCancelToken?.cancel('new_request');
-    _treeCancelToken = CancelToken();
-    return _treeCancelToken!;
-  }
-
-  CancelToken _newChartToken() {
-    _chartCancelToken?.cancel('new_request');
-    _chartCancelToken = CancelToken();
-    return _chartCancelToken!;
-  }
-
-  CancelToken _newStatementToken() {
-    _statementCancelToken?.cancel('new_request');
-    _statementCancelToken = CancelToken();
-    return _statementCancelToken!;
+    // دعم دالة الإلغاء العامة عند الحاجة
   }
 
   // ============================================================
@@ -67,11 +35,11 @@ class AccountRepository {
   // ============================================================
 
   /// جلب الأقسام الرئيسية (ACCOUNT)
-  Future<List<AccountModel>> fetchAccounts() async {
+  Future<List<AccountModel>> fetchAccounts({CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/accounts/account',
-        cancelToken: _newTreeToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -87,12 +55,12 @@ class AccountRepository {
   }
 
   /// جلب الحسابات الفرعية (ACC_MAIN)
-  Future<List<AccMainModel>> fetchAccMain({int? accNo}) async {
+  Future<List<AccMainModel>> fetchAccMain({int? accNo, CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/accounts/main',
         queryParameters: {if (accNo != null) 'acc_no': accNo},
-        cancelToken: _newTreeToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -108,12 +76,12 @@ class AccountRepository {
   }
 
   /// جلب الحسابات الجزئية (ACC_SUB)
-  Future<List<AccSubModel>> fetchAccSub({int? accSub}) async {
+  Future<List<AccSubModel>> fetchAccSub({int? accSub, CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/accounts/sub',
         queryParameters: {if (accSub != null) 'acc_sub': accSub},
-        cancelToken: _newTreeToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -129,12 +97,12 @@ class AccountRepository {
   }
 
   /// جلب مجموعات الحسابات الجزئي (ACC_SUB_GROUP)
-  Future<List<AccSubGroupModel>> fetchAccSubGroup({int? accPart}) async {
+  Future<List<AccSubGroupModel>> fetchAccSubGroup({int? accPart, CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/accounts/sub-group',
         queryParameters: {if (accPart != null) 'acc_part': accPart},
-        cancelToken: _newTreeToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -150,11 +118,11 @@ class AccountRepository {
   }
 
   /// جلب الشجرة المحاسبية الكاملة
-  Future<List<AccountTreeNode>> fetchAccountTree() async {
+  Future<List<AccountTreeNode>> fetchAccountTree({CancelToken? cancelToken}) async {
     try {
       final resp = await client.dio.get(
         '/accounts/tree',
-        cancelToken: _newTreeToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -179,6 +147,7 @@ class AccountRepository {
     int page = 1,
     int limit = 50,
     int? groupId,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -189,7 +158,7 @@ class AccountRepository {
           'limit': limit,
           if (groupId != null) 'group_id': groupId,
         },
-        cancelToken: _newChartToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -286,6 +255,7 @@ class AccountRepository {
     String? toDate,
     int page = 1,
     int limit = 50,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -296,7 +266,7 @@ class AccountRepository {
           'page': page,
           'limit': limit,
         },
-        cancelToken: _newStatementToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -318,6 +288,7 @@ class AccountRepository {
     String? fromDate,
     String? toDate,
     int? curNo,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -329,7 +300,7 @@ class AccountRepository {
           if (toDate != null) 'to_date': toDate,
           if (curNo != null) 'cur_no': curNo,
         },
-        cancelToken: _newStatementToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       return body;

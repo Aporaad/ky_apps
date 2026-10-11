@@ -20,20 +20,12 @@ class CustomerResult {
 /// Customer repository - connects to API and Oracle server
 class CustomerRepository {
   final DioClient client;
-  CancelToken? _cancelToken;
 
   CustomerRepository({required this.client});
 
   /// إلغاء الطلبات الجارية
   void cancel() {
-    _cancelToken?.cancel('cancelled');
-    _cancelToken = null;
-  }
-
-  CancelToken _newToken() {
-    _cancelToken?.cancel('new_request');
-    _cancelToken = CancelToken();
-    return _cancelToken!;
+    // دعم دالة الإلغاء العامة عند الحاجة
   }
 
   /// جلب قائمة العملاء مع البحث والتصفح
@@ -41,6 +33,7 @@ class CustomerRepository {
     String search = '',
     int page = 1,
     int limit = 100,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -50,6 +43,7 @@ class CustomerRepository {
           'page': page,
           'limit': limit,
         },
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
@@ -64,9 +58,9 @@ class CustomerRepository {
   }
 
   /// جلب عميل واحد بالرقم
-  Future<CustomerModel?> fetchCustomer(int custNo) async {
+  Future<CustomerModel?> fetchCustomer(int custNo, {CancelToken? cancelToken}) async {
     try {
-      final resp = await client.dio.get('/customers/$custNo', cancelToken: _newToken());
+      final resp = await client.dio.get('/customers/$custNo', cancelToken: cancelToken);
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true && body['data'] != null) {
         return CustomerModel.fromJson(body['data'] as Map<String, dynamic>);
@@ -129,6 +123,7 @@ class CustomerRepository {
     int custNo, {
     String? fromDate,
     String? toDate,
+    CancelToken? cancelToken,
   }) async {
     try {
       final resp = await client.dio.get(
@@ -137,7 +132,7 @@ class CustomerRepository {
           if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
           if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
         },
-        cancelToken: _newToken(),
+        cancelToken: cancelToken,
       );
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {

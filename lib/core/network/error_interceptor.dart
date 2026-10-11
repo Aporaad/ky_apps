@@ -11,6 +11,23 @@ class ErrorInterceptor extends Interceptor {
 
   @override
   Future<void> onError(DioException err, ErrorInterceptorHandler handler) async {
+    // 1. معالجة طلبات الإلغاء بسلاسة (DioExceptionType.cancel) دون رمي استثناءات غير متوقعة للمنقح
+    if (err.type == DioExceptionType.cancel) {
+      return handler.resolve(
+        Response(
+          requestOptions: err.requestOptions,
+          data: const <String, dynamic>{
+            'success': false,
+            'cancelled': true,
+            'data': <dynamic>[],
+            'meta': <String, dynamic>{},
+          },
+          statusCode: 200,
+        ),
+      );
+    }
+
+    // 2. معالجة انتهاء الجلسة 401
     if (err.response?.statusCode == 401) {
       // حذف التوكن المنتهي الصلاحية وتسجيل الخروج التلقائي
       await _storage.clearAll();

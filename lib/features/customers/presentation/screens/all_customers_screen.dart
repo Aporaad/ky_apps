@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -16,9 +17,11 @@ class AllCustomersScreen extends ConsumerStatefulWidget {
 
 class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
+  Timer? _debounce;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _searchCtrl.dispose();
     super.dispose();
   }
@@ -79,7 +82,12 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
               children: [
                 TextField(
                   controller: _searchCtrl,
-                  onChanged: (q) => ref.read(customersListProvider.notifier).search(q),
+                  onChanged: (q) {
+                    _debounce?.cancel();
+                    _debounce = Timer(const Duration(milliseconds: 300), () {
+                      ref.read(customersListProvider.notifier).search(q);
+                    });
+                  },
                   style: const TextStyle(fontSize: 14),
                   decoration: InputDecoration(
                     hintText: 'بحث بالاسم أو الرقم...',
@@ -89,6 +97,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
                         ? IconButton(
                             icon: const Icon(Icons.clear_rounded, size: 18),
                             onPressed: () {
+                              _debounce?.cancel();
                               _searchCtrl.clear();
                               ref.read(customersListProvider.notifier).search('');
                             },

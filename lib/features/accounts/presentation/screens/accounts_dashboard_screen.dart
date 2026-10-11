@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
@@ -21,26 +22,17 @@ class AccountsDashboardScreen extends ConsumerStatefulWidget {
 
 class _AccountsDashboardScreenState
     extends ConsumerState<AccountsDashboardScreen> {
-  final TextEditingController _quickSearchController = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(chartAccountsProvider.notifier).loadAccounts();
-      ref.read(accountTreeProvider.notifier).loadTree();
-      ref.read(currenciesProvider.notifier).loadCurrencies();
-    });
-  }
+  Timer? _searchDebounce;
 
   @override
   void dispose() {
-    _quickSearchController.dispose();
+    _searchDebounce?.cancel();
     super.dispose();
   }
 
   void _showEditAccountSelectionDialog(BuildContext context) {
     final searchCtrl = TextEditingController();
+    Timer? modalDebounce;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -69,7 +61,10 @@ class _AccountsDashboardScreenState
                     ),
                     IconButton(
                       icon: const Icon(Icons.close),
-                      onPressed: () => Navigator.pop(ctx),
+                      onPressed: () {
+                        modalDebounce?.cancel();
+                        Navigator.pop(ctx);
+                      },
                     ),
                   ],
                 ),
@@ -77,9 +72,12 @@ class _AccountsDashboardScreenState
                 TextField(
                   controller: searchCtrl,
                   onChanged: (val) {
-                    ref
-                        .read(chartAccountsProvider.notifier)
-                        .loadAccounts(search: val.trim());
+                    modalDebounce?.cancel();
+                    modalDebounce = Timer(const Duration(milliseconds: 300), () {
+                      ref
+                          .read(chartAccountsProvider.notifier)
+                          .loadAccounts(search: val.trim());
+                    });
                   },
                   decoration: InputDecoration(
                     hintText: 'بحث باسم أو رقم الحساب...',
