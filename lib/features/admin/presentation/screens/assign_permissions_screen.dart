@@ -224,7 +224,7 @@ class _Head extends StatelessWidget {
                   userName,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 17,
                     color: AppColors.textPrimary,
@@ -232,7 +232,7 @@ class _Head extends StatelessWidget {
                 ),
               ),
               if (targetIsAdmin)
-                const _Pill(label: 'مدير النظام', color: AppColors.accent),
+                _Pill(label: 'مدير النظام', color: AppColors.accent),
             ],
           ),
           const SizedBox(height: 8),
@@ -249,7 +249,7 @@ class _Head extends StatelessWidget {
                   targetIsAdmin
                       ? 'يتجاوز جدول المنح — كل الأكواد مسموحة له أصلًا'
                       : '${state.selectedCount} صلاحيّة ممنوحة',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textSecondary,
                   ),
@@ -406,7 +406,7 @@ class _LoadError extends StatelessWidget {
           Text(
             message,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 10),
           FilledButton.tonal(onPressed: onRetry, child: const Text('إعادة المحاولة')),

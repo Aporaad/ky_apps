@@ -138,7 +138,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
           scrolledUnderElevation: 1,
           surfaceTintColor: Colors.transparent,
           leading: IconButton(
-            icon: const Icon(Icons.menu_rounded, color: AppColors.primary),
+            icon: Icon(Icons.menu_rounded, color: AppColors.primary),
             tooltip: 'القائمة الرئيسية',
             onPressed: () => _scaffoldKey.currentState?.openDrawer(),
           ),
@@ -148,7 +148,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
+                Text(
                   'بوابة الموظف',
                   style: TextStyle(
                     fontSize: 16,
@@ -186,7 +186,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.storefront_outlined,
                         size: 14,
                         color: AppColors.primary,
@@ -267,7 +267,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   ),
                   child: Row(
                     children: [
-                      const Text(
+                      Text(
                         'بوابة الموظف',
                         style: TextStyle(
                           fontSize: 16,
@@ -302,7 +302,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                               ),
                             ),
                             const SizedBox(width: 6),
-                            const Text(
+                            Text(
                               'متصل',
                               style: TextStyle(
                                 fontSize: 12,
@@ -317,7 +317,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
 
                       if (user?.branchNo != null) ...[
                         Chip(
-                          avatar: const Icon(
+                          avatar: Icon(
                             Icons.storefront_outlined,
                             size: 16,
                             color: AppColors.primary,
@@ -339,7 +339,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                       ),
                       IconButton(
                         onPressed: _handleLogout,
-                        icon: const Icon(Icons.key, color: AppColors.primary),
+                        icon: Icon(Icons.key, color: AppColors.primary),
                         tooltip: 'خيارات',
                       ),
                     ],

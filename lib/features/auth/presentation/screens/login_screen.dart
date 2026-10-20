@@ -3,7 +3,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/biometric_service.dart';
+import '../../../../core/widgets/app_logo.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../providers/auth_notifier.dart';
+import '../widgets/api_password_dialog.dart';
 import '../widgets/biometric_login_button.dart';
 import '../widgets/user_type_selector.dart';
 
@@ -71,9 +74,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
+  /// بوابة كلمة السر لإعدادات الـ API من شاشة الدخول: تحقق ثم افتح الشاشة إن نجح
+  /// API-settings password gate from the login screen: verify first, then open on success.
+  Future<void> _openApiSettingsWithGate() async {
+    final allowed = await ApiPasswordDialog.show(context);
+    if (allowed && mounted) {
+      context.push('/api-settings');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
+    // اسم الشركة من التهيئة — ينعكس فوراً على شاشة الدخول
+    // Company name from config — reflects on the login screen immediately.
+    final companyName =
+        ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -85,9 +101,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             child: IconButton(
-              icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondary),
+              // اللون ديناميكي الآن — لا يصلح const على Icon
+              // The color is dynamic now — no const on Icon.
+              icon: const Icon(Icons.settings_outlined),
+              color: AppColors.textSecondary,
               tooltip: 'إعدادات خادم الـ API',
-              onPressed: () => context.push('/api-settings'),
+              onPressed: () => _openApiSettingsWithGate(),
             ),
           ),
         ],
@@ -118,25 +137,36 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           //   color: AppColors.primary.withValues(alpha: 0.00),
                           //   borderRadius: BorderRadius.circular(0),
                           // ),
-                          child: Image.asset(
-                            'assets/logo3.jpg',
+                          child: AppLogo(
                             width: 250,
-                            height:170
+                            height: 170,
                           ),
                         ),
                       ),
                       const SizedBox(height: 20),
-                      const Text(
+                      // اسم الشركة من التهيئة بدل النص المثبّت
+                      // Company name from config instead of a hardcoded literal.
+                      Text(
+                        companyName,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
                         'تسجيل الدخول',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.bold,
-                          color: AppColors.textPrimary,
+                          color: AppColors.primary,
                         ),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
+                      Text(
                         'أدخل بيانات حسابك للمتابعة إلى النظام',
                         textAlign: TextAlign.center,
                         style: TextStyle(
@@ -266,7 +296,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               BiometricCapability.notEnrolled) ...[
                         const SizedBox(height: 20),
                         Row(
-                          children: const [
+                          children: [
                             Expanded(child: Divider()),
                             Padding(
                               padding: EdgeInsets.symmetric(horizontal: 16),

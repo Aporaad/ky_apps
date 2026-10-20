@@ -266,7 +266,7 @@ class _CurrencyScreenState extends ConsumerState<CurrencyScreen> {
                       currency.code?.isNotEmpty == true
                           ? currency.code!
                           : currency.curName.substring(0, 1),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
                         color: AppColors.primary,
@@ -284,7 +284,7 @@ class _CurrencyScreenState extends ConsumerState<CurrencyScreen> {
                     children: [
                       Text(
                         currency.curName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textPrimary,
@@ -312,7 +312,7 @@ class _CurrencyScreenState extends ConsumerState<CurrencyScreen> {
                       color: AppColors.primary.withValues(alpha: 0.07),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.edit_outlined,
                       color: AppColors.primary,
                       size: 16,
@@ -343,7 +343,7 @@ class _CurrencyScreenState extends ConsumerState<CurrencyScreen> {
                     const SizedBox(height: 2),
                     Text(
                       currency.currentPrice.toStringAsFixed(2),
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: AppColors.textPrimary,
@@ -451,14 +451,14 @@ class _CurrencyScreenState extends ConsumerState<CurrencyScreen> {
               color: AppColors.primary.withValues(alpha: 0.07),
               shape: BoxShape.circle,
             ),
-            child: const Icon(
+            child: Icon(
               Icons.currency_exchange_rounded,
               size: 40,
               color: AppColors.primary,
             ),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'لا توجد عملات مضافة',
             style: TextStyle(
               fontSize: 15,
@@ -545,7 +545,7 @@ class _RateHistoryModalState extends ConsumerState<_RateHistoryModal> {
                   color: AppColors.primary.withValues(alpha: 0.09),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.history_rounded,
                   color: AppColors.primary,
                   size: 18,
@@ -643,7 +643,7 @@ class _RateHistoryModalState extends ConsumerState<_RateHistoryModal> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.calendar_today_outlined,
                               size: 14,
                               color: AppColors.primary,
@@ -651,7 +651,7 @@ class _RateHistoryModalState extends ConsumerState<_RateHistoryModal> {
                             const SizedBox(width: 5),
                             Text(
                               _formatDateShort(_selectedDate),
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 color: AppColors.primary,
@@ -741,7 +741,7 @@ class _RateHistoryModalState extends ConsumerState<_RateHistoryModal> {
                           color: AppColors.primary.withValues(alpha: 0.07),
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: const Icon(
+                        child: Icon(
                           Icons.price_change_outlined,
                           color: AppColors.primary,
                           size: 16,

@@ -266,7 +266,7 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
           children: [
             Text(
               'كشف حساب ${widget.workerType.label}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -558,7 +558,7 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textPrimary,
                 ),

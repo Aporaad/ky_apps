@@ -179,7 +179,7 @@ class _Trail extends StatelessWidget {
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+                style: TextStyle(color: AppColors.textSecondary, height: 1.5),
               ),
               const SizedBox(height: 12),
               FilledButton.tonal(
@@ -194,7 +194,7 @@ class _Trail extends StatelessWidget {
 
     if (rows.isEmpty) {
       return ListView(
-        children: const [
+        children: [
           SizedBox(height: 70),
           Icon(Icons.inbox_rounded, size: 42, color: AppColors.textMuted),
           SizedBox(height: 10),

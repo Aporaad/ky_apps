@@ -350,7 +350,7 @@ class _ExtrasTile extends StatelessWidget {
         selectedCount > 0
             ? 'صلاحيات أخرى ($count) — ممنوحة $selectedCount'
             : 'صلاحيات أخرى ($count)',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
           color: AppColors.textSecondary,

@@ -28,7 +28,7 @@ class BiometricLoginButton extends StatelessWidget {
     return OutlinedButton.icon(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.primary,
-        side: const BorderSide(color: AppColors.primary, width: 1.5),
+        side: BorderSide(color: AppColors.primary, width: 1.5),
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -36,7 +36,7 @@ class BiometricLoginButton extends StatelessWidget {
       ),
       onPressed: isLoading ? null : onPressed,
       icon: isLoading
-          ? const SizedBox(
+          ? SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
@@ -47,7 +47,7 @@ class BiometricLoginButton extends StatelessWidget {
           : Icon(icon, size: 24, color: AppColors.primary),
       label: Text(
         isLoading ? 'جاري التحقق...' : label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.bold,
           color: AppColors.primary,

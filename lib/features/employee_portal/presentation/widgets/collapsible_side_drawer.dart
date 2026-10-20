@@ -39,7 +39,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
     return AnimatedContainer(
       duration: const Duration(milliseconds: 250),
       width: width,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.primaryDark,
         border: Border(left: BorderSide(color: Color(0xFF1E293B))),
       ),

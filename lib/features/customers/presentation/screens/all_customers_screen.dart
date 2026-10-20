@@ -41,7 +41,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.people_alt_rounded, color: Color(0xFFD97706), size: 22),
             SizedBox(width: 10),
@@ -117,7 +117,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
                     ),
                     focusedBorder: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                      borderSide: BorderSide(color: AppColors.primary, width: 1.5),
                     ),
                   ),
                 ),
@@ -136,7 +136,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
                           const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
                           Text(
                             'نتائج البحث عن: "${state.searchQuery}"',
-                            style: const TextStyle(fontSize: 12, color: AppColors.accent),
+                            style: TextStyle(fontSize: 12, color: AppColors.accent),
                           ),
                         ],
                       ],
@@ -155,7 +155,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
 
   Widget _buildContent(BuildContext context, CustomersListState state) {
     if (state.isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -177,7 +177,7 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
               const Icon(Icons.wifi_off_rounded, size: 52, color: AppColors.error),
               const SizedBox(height: 14),
               Text(state.error!, textAlign: TextAlign.center,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                  style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
               const SizedBox(height: 16),
               ElevatedButton.icon(
                 onPressed: () => ref.read(customersListProvider.notifier).loadCustomers(refresh: true),
@@ -201,14 +201,14 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
           children: [
             const Icon(Icons.people_outline_rounded, size: 56, color: AppColors.textMuted),
             const SizedBox(height: 14),
-            const Text('لا يوجد عملاء',
+            Text('لا يوجد عملاء',
                 style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppColors.textPrimary)),
             const SizedBox(height: 6),
             Text(
               state.searchQuery.isNotEmpty
                   ? 'لا توجد نتائج للبحث عن "${state.searchQuery}"'
                   : 'لا يوجد عملاء مسجلون في النظام',
-              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
               textAlign: TextAlign.center,
             ),
           ],
@@ -303,7 +303,7 @@ class _CustomerCard extends StatelessWidget {
                     children: [
                       Text(
                         customer.custName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.bold,
                           fontSize: 13.5,
                           color: AppColors.textPrimary,
@@ -342,7 +342,7 @@ class _CustomerCard extends StatelessWidget {
                   Expanded(
                     child: Text(
                       customer.addr!,
-                      style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                      style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

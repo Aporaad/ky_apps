@@ -58,7 +58,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -113,7 +113,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+                  borderSide: BorderSide(color: AppColors.primary, width: 1.5),
                 ),
               ),
             ),
@@ -130,7 +130,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
 
   Widget _buildContent(CustomersListState state) {
     if (state.isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -154,7 +154,7 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -176,12 +176,12 @@ class _CustomerPickerScreenState extends ConsumerState<CustomerPickerScreen> {
           children: [
             Icon(widget.icon, size: 52, color: AppColors.textMuted),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'لا توجد نتائج',
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textPrimary),
             ),
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'جرب البحث بكلمة مختلفة',
               style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
@@ -260,7 +260,7 @@ class _CustomerListTile extends StatelessWidget {
                 children: [
                   Text(
                     customer.custName,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 13.5,
                       color: AppColors.textPrimary,

@@ -63,7 +63,7 @@ class CustomersDashboardScreen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [AppColors.primary, AppColors.accent],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -84,7 +84,7 @@ class CustomersDashboardScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 14),
-        const Column(
+        Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
@@ -113,7 +113,7 @@ class CustomersDashboardScreen extends StatelessWidget {
         subtitle: 'تسجيل عميل جديد في النظام',
         icon: Icons.person_add_rounded,
         gradient: const LinearGradient(
-          colors: [Color(0xFF1E3A8A), Color(0xFF3B82F6)],
+          colors: [Color.fromARGB(255, 247, 247, 249), Color(0xFF3B82F6)],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),

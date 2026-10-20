@@ -58,7 +58,7 @@ class _CustomerStatementPickerScreenState
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(
               Icons.receipt_long_rounded,
@@ -107,7 +107,7 @@ class _CustomerStatementPickerScreenState
                   ),
                 ),
                 const SizedBox(height: 20),
-                const Text(
+                Text(
                   'عرض كشف حساب العميل',
                   style: TextStyle(
                     fontSize: 18,
@@ -116,7 +116,7 @@ class _CustomerStatementPickerScreenState
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'حدد العميل لعرض تقرير كشف حسابه بالتنسيق الرسمي لشركة الكبودي للخياطة الرجالية مع إمكانية التصفية بالتواريخ',
                   textAlign: TextAlign.center,
                   style: TextStyle(
@@ -278,7 +278,7 @@ class _CustomerStatementScreenState
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'كشف حساب عميل',
               style: TextStyle(
                 fontSize: 15,
@@ -532,7 +532,7 @@ class _CustomerStatementScreenState
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                 ),

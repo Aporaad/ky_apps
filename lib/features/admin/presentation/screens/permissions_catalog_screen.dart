@@ -206,7 +206,7 @@ class _ModuleCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.folder_outlined,
                   size: 18,
                   color: AppColors.primary,
@@ -232,7 +232,7 @@ class _ModuleCard extends StatelessWidget {
                   ),
                   child: Text(
                     '${module.permissions.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textSecondary,
@@ -283,7 +283,7 @@ class _ExtrasExpander extends StatelessWidget {
       collapsedIconColor: AppColors.textMuted,
       title: Text(
         'صلاحيات أخرى (${permissions.length})',
-        style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
       ),
       children: [
         for (final permission in permissions)
@@ -298,12 +298,12 @@ class _ExtrasExpander extends StatelessWidget {
 class _PermissionRow extends StatelessWidget {
   final AppPermissionModel permission;
   final bool compact;
-  final Color tone;
+  final Color? tone;
 
   const _PermissionRow({
     required this.permission,
     required this.compact,
-    this.tone = AppColors.textPrimary,
+    this.tone,
   });
 
   @override
@@ -316,7 +316,7 @@ class _PermissionRow extends StatelessWidget {
           Icon(
             permission.isWildcard ? Icons.all_inclusive : Icons.check_rounded,
             size: permission.isWildcard ? 16 : 14,
-            color: tone,
+            color: tone ?? AppColors.textPrimary,
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -328,7 +328,7 @@ class _PermissionRow extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: tone,
+                    color: tone ?? AppColors.textPrimary,
                   ),
                 ),
                 if (!compact) ...[
@@ -368,7 +368,7 @@ class _NoMatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
+    return Center(
       child: Padding(
         padding: EdgeInsets.all(28),
         child: Text(
@@ -406,7 +406,7 @@ class _Failure extends StatelessWidget {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+              style: TextStyle(color: AppColors.textSecondary, height: 1.5),
             ),
             const SizedBox(height: 12),
             FilledButton.tonal(

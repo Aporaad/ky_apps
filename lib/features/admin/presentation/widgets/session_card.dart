@@ -95,7 +95,7 @@ class SessionCard extends StatelessWidget {
                         Flexible(
                           child: Text(
                             session.displayName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
@@ -106,7 +106,7 @@ class SessionCard extends StatelessWidget {
                         ),
                         if (session.isCurrent) ...[
                           const SizedBox(width: 6),
-                          const Flexible(
+                          Flexible(
                             child: _Badge(
                               label: 'هذه الجلسة',
                               color: AppColors.primary,
@@ -119,7 +119,7 @@ class SessionCard extends StatelessWidget {
                     Text(
                       'مستخدم ${session.userId} · ${session.userTypeLabel}'
                       '${session.branchNo == null ? '' : ' · فرع ${session.branchNo}'}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         color: AppColors.textSecondary,
                       ),
@@ -311,7 +311,7 @@ class _Fact extends StatelessWidget {
               text,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 color: AppColors.textSecondary,
               ),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/app_logo.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../providers/auth_notifier.dart';
 
 /// شاشة البداية لفحص حالة المصادقة والتوجيه التلقائي
@@ -34,23 +36,27 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // نقرأ اسم الشركة من التهيئة فينعكس أي تغيير فوراً على شاشة البداية
+    // Read the company name from config so any change reflects on the splash immediately.
+    final companyName =
+        ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
+
     return Scaffold(
       backgroundColor: AppColors.primaryDark,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // الشعار بحجمه المباشر: الغلاف الذي كان يلفّه لم يكن يضيف شيئاً
-            // The logo is sized directly — the wrapper that used to hold it added nothing
-            Image.asset(
-              'assets/logo3.jpg',
+            // الشعار الموحّد — محلي إن وُجد وإلا الأصل المضمّن
+            // Unified logo — local file when present, otherwise the bundled asset.
+            AppLogo(
               width: 370,
               height: 300,
             ),
             const SizedBox(height: 24),
-            const Text(
-              'الكبودي للخياطة الرجالية',
-              style: TextStyle(
+            Text(
+              companyName,
+              style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
                 color: Colors.white,
@@ -67,7 +73,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
               ),
             ),
             const SizedBox(height: 48),
-            const SizedBox(
+            SizedBox(
               width: 28,
               height: 28,
               child: CircularProgressIndicator(

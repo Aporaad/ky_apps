@@ -92,7 +92,7 @@ class _SettingTileState extends State<SettingTile> {
                             widget.setting.nameAr.isEmpty
                                 ? widget.setting.key
                                 : widget.setting.nameAr,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
@@ -207,7 +207,7 @@ class _SettingTileState extends State<SettingTile> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(10),
-          borderSide: const BorderSide(color: AppColors.primary, width: 1.4),
+          borderSide: BorderSide(color: AppColors.primary, width: 1.4),
         ),
       ),
     );

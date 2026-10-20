@@ -42,6 +42,10 @@ dependencies:
   local_auth: ^2.3.0
   device_info_plus: ^10.1.0
   crypto: ^3.0.3
+  # اختيار صورة الشعار من الجهاز وحفظها محلياً في مساحة التطبيق
+  # Pick the logo image from the device and persist it locally in the app's document directory.
+  image_picker: ^1.1.2
+  path_provider: ^2.1.5
   flutter_localizations:
     sdk: flutter
 

@@ -425,3 +425,52 @@
 - [ ] **الإثبات النهائي لإنشاء المستخدم**: إنشاء مستخدم من واجهة التطبيق، أو بتجربة كتابة مُرجَّعة
   داخل معاملة — عُرضت الثانية فصدّها التنفيذ الآمن لأنها كتابة في القاعدة الحيّة، فتبقى على إذن
   المستخدم الصريح.
+
+---
+
+## مهمة: إدارة إعدادات API الآمنة + التهيئة الديناميكية للتطبيق — 2026-10-20 (المنفّذ: Qoder)
+
+خطة بثلاثة أجزاء: طبقة Oracle/بذر، خلفية Laravel، عميل Flutter. كل الإعدادات النصية/الألوان
+في `APP_SETTINGS` القائمة (لا جداول جديدة)، والشعار يُحفظ محلياً على الجهاز فقط.
+
+### الخلفية (Laravel + Oracle) — مكتملة وموثّقة
+- [x] **كتالوج الصلاحيات**: وحدة `app_config` جديدة (قبل `system`) — 93←97 كوداً، 17←18 وحدة.
+- [x] **فئة دعم `AppConfig.php`**: مصدر وحيد لمفاتيح الهوية/المظهر وقيمها الافتراضية وحمولتها
+  العامة (تستثني `api_settings_password` أبداً) + الخطوط المسموحة.
+- [x] **متحكم `AppConfigController.php`**: `GET /app-config` (عام)، `PUT /app-config`
+  (`app_config.update`)، `POST /app-config/verify-api-password` (عام + `throttle:5,1`)،
+  `PUT /app-config/api-password` (`app_config.api_manage`).
+- [x] **مسارات `api.php`**: أربع نقاط جديدة؛ `SettingController` يعزل مفاتيح `app_config` عن
+  شاشة «إعدادات الأمان» (تصفية في `index`، رفض في `update`).
+- [x] **`SettingsStore`**: تمييز `HOT_KEYS` لكاش الأمان + `raw()` لقراءة تجزئة bcrypt بلا إصلاح
+  ترميز، حفاظاً على سقف حجم الكاش (ORA-01461).
+- [x] **بذر Oracle (02_ibac_seed.php)**: 12 صفاً في `APP_SETTINGS` (شركة/تطبيق/مظهر + كلمة سر
+  API مجزّأة bcrypt `IS_LOCKABLE=1`، القيمة `A1.b2.c3.d4`). النتيجة الحيّة: **97 صلاحية / 22 إعداداً**.
+- [x] **اختبارات**: `AppConfigTest.php` (9) + تحديث `BusinessRoutesSealedTest`/`IbacCoreTest`
+  (97/22)/`PermissionSyncTest` (97/18)/`SecuritySettingsTest`. `php artisan test` أخضر · `pint` نظيف.
+
+### العميل (Flutter) — مكتمل وموثّق
+- [x] **الاعتماديات**: `image_picker ^1.1.2` + `path_provider ^2.1.5` (ثم `flutter pub get`).
+- [x] **لوحة زمنية `AppPalette` + تفكيك `const`**: الحقول الخمسة في `AppColors` صارت `getters`
+  تفوّض إلى `AppPalette`؛ `AppTheme.build()` يبني `ThemeData` من اللوحة والخط المختار. أُزيلت
+  `const` من 43 ملفاً (تغيير ميكانيكي) حتى `flutter analyze` = «No issues found!».
+- [x] **ميزة `app_config`**: نموذج `AppConfigModel` (snake_case + تحليل hex آمن)، مستودع (شبكة +
+  كاش + شعار محلي + تحقّق/تجزئة SHA-256)، مُبلِغ `AppConfigNotifier` (تحميل من الكاش ثم مزامنة،
+  حفظ، اختيار شعار، تغيير كلمة سر API).
+- [x] **التخزين الآمن**: مفاتيح `ky_app_config` / `ky_app_logo_path` / `ky_api_pw_hash` (تبقى بعد
+  `clearAll` وتُمسح في `purgeEverything`).
+- [x] **`AppLogo`**: ودجت موحّد (ملف محلي إن وُجد وإلا `assets/logo3.jpg`) استبدل الشعار المثبّت في
+  الدخول والبدء.
+- [x] **الإقلاع وإعادة التشغيل**: `main()` أصبح async (تهيئة اللوحة من الكاش)، `KyApp` صار
+  `ConsumerWidget` يراقب السمة/العنوان، و`RestartWidget` يعيد تركيب الشجرة بعد تغيير الألوان/الخط.
+- [x] **بوابة كلمة سر الدخول**: `ApiPasswordDialog` يتحقق من الخادم ثم الاحتياط المحلي قبل فتح
+  `/api-settings`. **بوابة الصلاحية بالبوابة**: بطاقة API خلف `app_config.api_manage`، وبطاقة
+  تهيئة جديدة خلف `app_config.update` تفتح `AppConfigScreen` (دفع أمرِي).
+- [x] **مرآة الصلاحيات**: `permission_codes.dart` أضافت أكواد `app_config.*` + التسميات العربية.
+- [x] **اختبارات العميل**: `test/app_config_model_test.dart` (فك/توليد/hex/افتراضيات/copyWith/لوحة).
+  `flutter test` = **60 ناجحة** · `flutter analyze` = لا مشاكل.
+
+### ملاحظات أمنية
+- كلمة سر API لا تظهر في أي حمولة عامة؛ التحقق عام مُقيّد المعدل يسجّل المحاولات الفاشلة ويعيد
+  200 دائماً (يمنع تسريب السبب ويميّز الخطأ عن تعذّر الخادم). الكتابة كلها خلف `auth:sanctum` +
+  صلاحية، ومعاملة ذرّية، وسجل تدقيق. الشعار محلي بحت لا يغادر الجهاز.

@@ -126,7 +126,7 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
                       ),
                       child: Text(
                         '#${widget.accNo}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: AppColors.primary,
@@ -137,7 +137,7 @@ class _EditAccountScreenState extends ConsumerState<EditAccountScreen> {
                     Expanded(
                       child: Text(
                         widget.accName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 14,
                           color: AppColors.textSecondary,
                         ),

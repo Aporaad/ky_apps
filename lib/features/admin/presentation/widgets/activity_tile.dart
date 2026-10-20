@@ -53,7 +53,7 @@ class ActivityTile extends StatelessWidget {
               children: [
                 Text(
                   row.descriptionAr.isEmpty ? _fallbackLabel() : row.descriptionAr,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,

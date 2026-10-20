@@ -542,7 +542,7 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
       isExpanded: true,
       items: items,
       onChanged: onChanged,
-      style: const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+      style: TextStyle(fontSize: 13, color: AppColors.textPrimary),
     );
   }
 

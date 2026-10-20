@@ -485,7 +485,7 @@ class _FormSectionTitle extends StatelessWidget {
         const SizedBox(width: 8),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -523,7 +523,7 @@ class _ReadOnlyNote extends StatelessWidget {
           Expanded(
             child: Text(
               text,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11.5,
                 color: AppColors.textSecondary,
                 height: 1.5,

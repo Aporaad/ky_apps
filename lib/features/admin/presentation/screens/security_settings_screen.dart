@@ -120,7 +120,7 @@ class _Body extends ConsumerWidget {
           Text(
             state.error!,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
           ),
           const SizedBox(height: 14),
           Center(
@@ -135,7 +135,7 @@ class _Body extends ConsumerWidget {
 
     if (state.settings.isEmpty) {
       return ListView(
-        children: const [
+        children: [
           SizedBox(height: 80),
           Icon(Icons.settings_outlined, size: 42, color: AppColors.textMuted),
           SizedBox(height: 10),
@@ -334,7 +334,7 @@ class _OwnSessionCard extends ConsumerWidget {
                   minutes <= 0
                       ? 'انتهت — ستُطرد عند أول طلب بلا صلاحية.'
                       : 'تنتهي خلال $minutes دقيقة، وتُجدَّد تلقائياً مع كل طلب.',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12.5,
                     color: AppColors.textSecondary,
                     height: 1.4,
@@ -363,7 +363,7 @@ class _AppliesNowNote extends StatelessWidget {
         color: AppColors.info.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.bolt_rounded, size: 18, color: AppColors.info),
           SizedBox(width: 8),
@@ -394,7 +394,7 @@ class _ReadOnlyNote extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.visibility_outlined, size: 18, color: AppColors.textMuted),
           SizedBox(width: 8),
@@ -432,7 +432,7 @@ class _ResultNote extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
           ),
         ],
@@ -492,7 +492,7 @@ class _SaveBar extends StatelessWidget {
             Expanded(
               child: Text(
                 '${state.pendingCount} مفتاح معدَّل بانتظار الحفظ',
-                style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
               ),
             ),
             TextButton(

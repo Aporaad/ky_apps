@@ -126,7 +126,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
           children: [
             Text(
               widget.title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -184,7 +184,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
                 ),
                 focusedBorder: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
+                  borderSide: BorderSide(
                     color: AppColors.primary,
                     width: 1.5,
                   ),
@@ -200,7 +200,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -224,7 +224,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   color: AppColors.textSecondary,
                   fontSize: 13,
                 ),
@@ -246,7 +246,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
     }
 
     if (_results.isEmpty) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -312,7 +312,7 @@ class _UserPickerScreenState extends ConsumerState<UserPickerScreen> {
                     children: [
                       Text(
                         user.displayName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 13.5,
                           color: AppColors.textPrimary,

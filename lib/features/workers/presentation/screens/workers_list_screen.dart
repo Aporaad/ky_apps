@@ -180,7 +180,7 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
                 children: [
                   Text(
                     widget.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -315,7 +315,7 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
               const SizedBox(height: 16),
               ElevatedButton.icon(
@@ -339,7 +339,7 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
             const SizedBox(height: 12),
             Text(
               'لا توجد بيانات',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textSecondary,

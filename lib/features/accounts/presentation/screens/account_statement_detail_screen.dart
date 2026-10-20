@@ -396,7 +396,7 @@ class _AccountStatementDetailScreenState
                                   children: [
                                     Text(
                                       item['description']?.toString() ?? '-',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
@@ -600,14 +600,14 @@ class _AccountStatementDetailScreenState
                 color: AppColors.primary.withValues(alpha: 0.07),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.query_stats_rounded,
                 size: 38,
                 color: AppColors.primary,
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'اضبط الخيارات أعلاه',
               style: TextStyle(
                 fontSize: 15,

@@ -109,7 +109,7 @@ class _AdminFilterSheetState extends State<AdminFilterSheet> {
           children: [
             const _SheetHandle(),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'تصفية قائمة المستخدمين',
               style: TextStyle(
                 fontSize: 16,
@@ -136,7 +136,7 @@ class _AdminFilterSheetState extends State<AdminFilterSheet> {
               value: _adminOnly,
               onChanged: (value) => setState(() => _adminOnly = value),
               contentPadding: EdgeInsets.zero,
-              title: const Text(
+              title: Text(
                 'المديرون فقط',
                 style: TextStyle(fontSize: 14, color: AppColors.textPrimary),
               ),
@@ -225,7 +225,7 @@ class _ChoiceGroup extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12.5,
             fontWeight: FontWeight.w700,
             color: AppColors.textSecondary,
@@ -379,7 +379,7 @@ class _SortSheetState extends State<_SortSheet> {
           children: [
             const _SheetHandle(),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'ترتيب القائمة',
               style: TextStyle(
                 fontSize: 16,

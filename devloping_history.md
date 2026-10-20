@@ -804,3 +804,51 @@ found!» — أي أن النظافة السابقة لم تعد سارية، و
 **لم يُنفَّذ (بحاجة إذن):** إثبات إنشاء المستخدم بتجربة كتابة مُرجَّعة داخل معاملة — صدّها التنفيذ
 الآمن لأنها كتابة في القاعدة الحيّة، فالمستخدم هو من يقرر إما التجربة المُرجَّعة أو إنشاء مستخدم
 حقيقي من واجهة التطبيق.
+
+---
+
+## 2026-10-20 — إدارة إعدادات API الآمنة + التهيئة الديناميكية (المنفّذ: Qoder)
+
+### خلفية Laravel (`ky_app_API`)
+- **`app/Support/PermissionCatalog.php`**: وحدة `app_config` (`view`/`update` + `api_manage`) قبل
+  `system`؛ الكتالوج 93←97 كوداً، 17←18 وحدة.
+- **`app/Support/AppConfig.php`** (جديد): ثوابت المفاتيح، `DEFAULTS` مطابقة لألوان `AppColors`
+  و`#A27E4E`/`#0D9488`/`#F8FAFC`/`#0F172A`/`#475569`، `ALLOWED_FONTS`، `WRITABLE_KEYS`/`COLOR_KEYS`،
+  `publicPayload()` يستثني كلمة السر، `keys()` لعزل المفاتيح، و`isValidColor/isValidFont`.
+- **`app/Support/SettingsStore.php`**: إضافة `raw()` (قراءة تجزئة bcrypt كما هي بلا `fixMojibake`).
+- **`app/Http/Controllers/AppConfigController.php`** (جديد): `publicConfig`، `update` (يرفض مفتاح
+  كلمة السر، تحقّق inline، معاملة oracle، `flush`، سجل نشاط)، `verifyApiPassword` (يعيد 200 دائماً،
+  يسجّل الفاشل)، `updateApiPassword` (`Hash::make`، `ignoreLock`، لا يعيد التجزئة).
+- **`routes/api.php`**: `GET /app-config` + `POST /app-config/verify-api-password` (عام، `throttle:5,1`)؛
+  `PUT /app-config` (`permission:app_config.update`) + `PUT /app-config/api-password`
+  (`permission:app_config.api_manage`).
+- **`app/Http/Controllers/SettingController.php`**: تصفية مفاتيح `AppConfig::keys()` في `index` ورفضها
+  في `update` (عزل تام عن شاشة إعدادات الأمان).
+- **الاختبارات**: جديد `tests/Feature/AppConfigTest.php` (9)؛ تحديث عدّادات
+  `IbacCoreTest`(97/22)، `PermissionSyncTest`(97/18)، `SecuritySettingsTest` (تصفية + عدّ ديناميكي)،
+  و`BusinessRoutesSealedTest` (السماح بالنقطتين العامتين الجديدتين). `php artisan test` أخضر · `pint` نظيف.
+
+### عميل Flutter (`lib/`)
+- **اعتماديات**: `image_picker ^1.1.2` + `path_provider ^2.1.5` في `pubspec.yaml`.
+- **السمة**: `core/theme/app_palette.dart` (جديد) حامل ألوان زمني؛ `app_colors.dart` حوّل الحقول
+  الخمسة (+`primaryDark`) إلى `getters`؛ `app_theme.dart` أضاف `build()` يبني من `AppPalette`
+  و`GoogleFonts.getFont`، وبقي `lightTheme` مفوّضاً. **تفكيك `const`**: أُزيلت `const` من 43 ملفاً
+  تضمّنت الألوان الديناميكية (إصلاح ميكانيكي، البوابة: `flutter analyze` = لا مشاكل).
+- **ميزة `app_config/`** (جذرية feature-first): نموذج/مستودع/مُبلِغ — تحميل من الكاش ثم مزامنة الخادم،
+  حفظ (PUT) يدفعل الألوان للوحة، اختيار/حفظ شعار محلي، تحقّق كلمة سر (خادم ثم احتياط SHA-256 محلي)،
+  وتغيير كلمة سر API.
+- **التخزين الآمن**: مفاتيح `ky_app_config`/`ky_app_logo_path`/`ky_api_pw_hash`+dوالها؛ تبقى بعد
+  `clearAll` وتستثنى من تسجيل الخروج، وتُمسح في `purgeEverything`.
+- **`core/widgets/app_logo.dart`** (جديد): ودجت موحّد يراقب حالة التهيئة (ملف محلي أو `assets/logo3.jpg`)؛
+  استبدل `Image.asset` في `login_screen.dart` و`splash_screen.dart`، وأضفى اسم الشركة من التهيئة.
+- **`core/widgets/restart_widget.dart`** (جديد) + **`main.dart`**: إقلاع async يهيّئ اللوحة من الكاش،
+  `KyApp` صار `ConsumerWidget` (سمة/عنوان من التهيئة)، وإعادة تشغيل كاملة بعد تغيير الألوان/الخط.
+- **بوابة الدخول**: `ApiPasswordDialog` يطلب كلمة السر قبل `/api-settings`. **بوابة البوابة**:
+  بطاقة API خلف `app_config.api_manage` وبطاقة «تهيئة التطبيق» خلف `app_config.update` تفتح
+  `AppConfigScreen` (شركة/تطبيق/خمس ألوان/خط/شعار + تغيير كلمة سر API).
+- **مرآة الصلاحيات**: `core/constants/permission_codes.dart` أضافت أكواد `app_config.*` + تسميات عربية.
+- **اختبار العميل**: `test/app_config_model_test.dart`. `flutter test` = **60 ناجحة** · `flutter analyze` نظيف.
+
+### قرار تقني مهم (فخّ مُسجّل)
+في هذا الإصدار `Color.r/g/b` قيم `double` بين 0.0–1.0؛ تحويلها إلى hex بـ `.toInt()` كان يبتّرها إلى
+0 (كل الألوان تصير `#000000`). الصواب: `(v*255).round()`. طُبِّق في `_colorToHex`/`_hex`.

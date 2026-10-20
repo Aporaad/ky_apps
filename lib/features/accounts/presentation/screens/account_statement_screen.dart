@@ -381,7 +381,7 @@ class _AccountStatementScreenState
                                   children: [
                                     Text(
                                       tx.description ?? '-',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600,
                                         color: AppColors.textPrimary,
@@ -552,7 +552,7 @@ class _AccountStatementScreenState
             const SizedBox(height: 16),
             Text(
               title,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -688,7 +688,7 @@ class _AccountPickerBottomSheetState
                             color: AppColors.primary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.account_balance_outlined,
                             color: AppColors.primary,
                             size: 18,

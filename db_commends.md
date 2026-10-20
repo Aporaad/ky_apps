@@ -860,3 +860,53 @@ SELECT COLUMN_NAME, NULLABLE, DATA_DEFAULT
 (`موظف` → `ظ…ظˆط¸ظپ`). الثبات عند التكرار على الصف الحيّ هو الدليل الميداني على عمل الحصانة.
 عُرضت تجربة كتابة مُرجَّعة (إنشاء مستخدم داخل معاملة تُلغى) لإثبات `store()` فصدّها التنفيذ الآمن،
 فلم تُنفَّذ أي كتابة في هذه الجولة أصلاً — القائمة المعلَّقة أعلاه لم تتغيّر.
+
+---
+
+## 2026-10-20 — بذر وحدة «إعدادات API والتهيئة الديناميكية» (المنفّذ: Qoder)
+
+**أمر البذر (يُدار عبر `02_ibac_seed.php` وليس SQL يدوياً):**
+```bash
+cd kyApp_API
+php artisan tinker database/oracle/02_ibac_seed.php
+# الناتج الحيّ: PERMISSIONS total=97 · SETTINGS total=22
+```
+
+**ما يكتبه السكربت في `APP_PERMISSIONS` (كتالوج `app_config` — 4 رموز):**
+```sql
+-- تُدرج عبر السكربت بأمر MERGE/INSERT على SEQ_APP_PERMISSIONS + TRG_APP_PERMISSIONS
+INSERT INTO APP_PERMISSIONS (PERMISSION_CODE, MODULE, ACTION, NAME_AR, DESCRIPTION_AR, SORT_ORDER)
+VALUES ('app_config.view',  'app_config', 'view',       'عرض إعدادات التطبيق',      '…', …);
+INSERT INTO APP_PERMISSIONS (PERMISSION_CODE, MODULE, ACTION, NAME_AR, DESCRIPTION_AR, SORT_ORDER)
+VALUES ('app_config.update','app_config', 'update',     'تعديل إعدادات التطبيق',    '…', …);
+INSERT INTO APP_PERMISSIONS (PERMISSION_CODE, MODULE, ACTION, NAME_AR, DESCRIPTION_AR, SORT_ORDER)
+VALUES ('app_config.api_manage','app_config','api_manage','إدارة اتصال API',        '…', …);
+-- بالإضافة إلى رمز النطاق app_config.*  ⇒ يرتفع الإجمالي من 93 إلى 97
+```
+
+**ما يكتبه السكربت في `APP_SETTINGS` (تهيئة التطبيق + كلمة السر المجزّأة):**
+```sql
+-- القيم النصية/اللونيّة من AppConfig::DEFAULTS؛ وكلمة السر bcrypt وليست نصاً
+INSERT INTO APP_SETTINGS (SETTING_KEY, SETTING_VALUE, VALUE_TYPE, …)
+VALUES ('api_settings_password', '$2y$12$…bcrypt(A1.b2.c3.d4)…', 'string', …);
+INSERT INTO APP_SETTINGS (SETTING_KEY, SETTING_VALUE, VALUE_TYPE, …)
+VALUES ('theme_primary_color', '#A27E4E', 'string', …);
+-- + company_name / company_address / company_website / company_phone
+-- + app_name / theme_secondary_color / theme_background_color
+-- + theme_text_primary_color / theme_text_secondary_color / theme_font_family
+-- ⇒ يرتفع إجمالي الإعدادات إلى 22 سطراً
+```
+
+**تحقق القراءة بعد البذر (قراءة فقط عبر @oracle):**
+```sql
+SELECT COUNT(*) FROM APP_PERMISSIONS;              -- ⇒ 97
+SELECT COUNT(*) FROM APP_SETTINGS;                 -- ⇒ 22
+SELECT PERMISSION_CODE FROM APP_PERMISSIONS
+ WHERE MODULE = 'APP_CONFIG' ORDER BY PERMISSION_CODE; -- view/update/api_manage (+ النطاق)
+SELECT SETTING_KEY, VALUE_TYPE FROM APP_SETTINGS
+ WHERE SETTING_KEY LIKE 'theme_%' OR SETTING_KEY='api_settings_password'; -- 6 ألوان/خط + كلمة السر
+```
+
+**ملاحظة أمان:** `api_settings_password` لا يُخرج أبداً من `GET /app-config` (الحمولة بلا سرّ)،
+وتغييرها يمرّ عبر `PUT /app-config/api-password` خلف `permission:app_config.api_manage`. لم تُجر أي
+كتابة على جداول الأعمال (business tables) في هذه الجولة — الكتابات محصورة في جدولَي IBAC/الإعدادات.

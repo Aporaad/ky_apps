@@ -139,7 +139,7 @@ class _UserFilter extends ConsumerWidget {
             focusedUserId == null
                 ? 'كل المستخدمين'
                 : 'مقتصرة على المستخدم رقم $focusedUserId',
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
         ),
         if (focusedUserId != null)
@@ -281,7 +281,7 @@ class _ListState extends ConsumerState<_List> {
               Text(
                 state.error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+                style: TextStyle(color: AppColors.textSecondary, height: 1.5),
               ),
               const SizedBox(height: 12),
               FilledButton.tonal(
@@ -310,7 +310,7 @@ class _ListState extends ConsumerState<_List> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           const SizedBox(height: 6),
-          const Text(
+          Text(
             'لا دخول مفتوحاً الآن عند هذا الفلتر — أي جلسة تُنهى تبقى في السجل بحالة منتهية.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textSecondary, height: 1.5),

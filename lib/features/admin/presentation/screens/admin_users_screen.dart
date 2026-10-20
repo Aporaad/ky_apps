@@ -170,7 +170,7 @@ class _TopBar extends StatelessWidget {
         Expanded(
           child: Text(
             'الحسابات التي تدخل التطبيق وتُمنح الصلاحيات',
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
           ),
         ),
         PermissionGate(
@@ -577,7 +577,7 @@ class _CenteredNotice extends StatelessWidget {
           child: Text(
             body,
             textAlign: TextAlign.center,
-            style: const TextStyle(color: AppColors.textSecondary, height: 1.5),
+            style: TextStyle(color: AppColors.textSecondary, height: 1.5),
           ),
         ),
         if (actionLabel != null) ...[

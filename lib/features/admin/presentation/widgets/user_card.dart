@@ -185,7 +185,7 @@ class _Identity extends StatelessWidget {
             Flexible(
               child: Text(
                 user.displayName,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                   color: AppColors.textPrimary,
@@ -213,7 +213,7 @@ class _Identity extends StatelessWidget {
         const SizedBox(height: 5),
         Text(
           'رقم ${user.userId} · ${user.branchLabel} · ${user.userTypeLabel}',
-          style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+          style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
@@ -227,7 +227,7 @@ class _Identity extends StatelessWidget {
               color: user.isActivated ? AppColors.success : AppColors.error,
             ),
             if (user.isAdmin)
-              const _Badge(label: 'مدير النظام', color: AppColors.accent),
+              _Badge(label: 'مدير النظام', color: AppColors.accent),
             // العدد من صف القائمة مباشرة: الخادم يحسبه، والواجهة لا تعدّ من جديد
             // The count comes from the list row: the server computes it, the client never re-counts.
             _Badge(
@@ -235,7 +235,7 @@ class _Identity extends StatelessWidget {
               color: AppColors.textSecondary,
             ),
             if (user.biometricEnabled)
-              const _Badge(label: 'بصمة', color: AppColors.primary),
+              _Badge(label: 'بصمة', color: AppColors.primary),
           ],
         ),
       ],
@@ -341,7 +341,7 @@ class _OverflowMenu extends ConsumerWidget {
             borderRadius: BorderRadius.circular(9),
             border: Border.all(color: AppColors.border),
           ),
-          child: const Row(
+          child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(Icons.more_horiz_rounded, size: 18, color: AppColors.primary),

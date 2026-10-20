@@ -132,7 +132,7 @@ class _AccountsDashboardScreenState
                                   ),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.edit_note_rounded,
                                   color: AppColors.primary,
                                   size: 20,
@@ -221,14 +221,14 @@ class _AccountsDashboardScreenState
                       color: AppColors.primary.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.account_balance_rounded,
                       color: AppColors.primary,
                       size: 24,
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -252,7 +252,7 @@ class _AccountsDashboardScreenState
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.refresh_rounded,
                       color: AppColors.primary,
                       size: 22,
@@ -460,7 +460,7 @@ class _AccountsDashboardScreenState
         const SizedBox(width: 6),
         Text(
           title,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13.5,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -576,7 +576,7 @@ class _AccountsDashboardScreenState
                         Expanded(
                           child: Text(
                             title,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13.5,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,

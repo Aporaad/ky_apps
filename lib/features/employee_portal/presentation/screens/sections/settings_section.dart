@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../../../core/constants/permission_codes.dart';
 import '../../../../../../core/theme/app_colors.dart';
+import '../../../../../../core/widgets/permission_gate.dart';
+import '../../../../app_config/presentation/screens/app_config_screen.dart';
 
 /// واجهة قسم الإعدادات - تصميم مستقل ومقسم إلى أقسام واضحة
 /// لا تستخدم PortalSectionScaffold لأنها ليست قائمة بيانات
@@ -38,6 +41,9 @@ class SettingsSection extends StatelessWidget {
                         // 1. إعدادات الـ API
                         _ApiSettingsCard(textScaler: textScaler, isNarrow: isNarrow),
                         const SizedBox(height: 16),
+                        // 1ب. تهيئة التطبيق (الشركة/المظهر) — خلف app_config.update
+                        _AppConfigCard(textScaler: textScaler, isNarrow: isNarrow),
+                        const SizedBox(height: 16),
                         // 2. إعدادات الأمان والبصمة
                         _SecuritySettingsCard(
                           textScaler: textScaler,
@@ -64,6 +70,8 @@ class SettingsSection extends StatelessWidget {
               Column(
                 children: [
                   _ApiSettingsCard(textScaler: textScaler, isNarrow: isNarrow),
+                  const SizedBox(height: 14),
+                  _AppConfigCard(textScaler: textScaler, isNarrow: isNarrow),
                   const SizedBox(height: 14),
                   _SecuritySettingsCard(
                     textScaler: textScaler,
@@ -156,25 +164,76 @@ class _ApiSettingsCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final scaledSection = textScaler.scale(isNarrow ? 13.0 : 14.0).clamp(11.0, 18.0);
 
-    return _SettingsGroup(
-      icon: Icons.dns_rounded,
-      iconColor: AppColors.primary,
-      title: 'إعدادات الاتصال بالخادم',
-      titleFontSize: scaledSection,
-      borderColor: AppColors.primary.withValues(alpha: 0.2),
-      headerColor: AppColors.primary.withValues(alpha: 0.05),
-      children: [
-        _SettingsTile(
-          icon: Icons.api_rounded,
-          iconColor: AppColors.primary,
-          title: 'رابط خادم الـ API',
-          subtitle: 'تغيير وفحص عنوان الخادم الأساسي',
-          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-          onTap: () => context.push('/api-settings'),
-          textScaler: textScaler,
-          isNarrow: isNarrow,
-        ),
-      ],
+    // لا تظهر بطاقة اتصال الـ API في البوابة إلا لحامل `app_config.api_manage`
+    // The API-connection card renders in the portal only for `app_config.api_manage` holders.
+    return PermissionGate(
+      code: Perm.appConfigApiManage,
+      child: _SettingsGroup(
+        icon: Icons.dns_rounded,
+        iconColor: AppColors.primary,
+        title: 'إعدادات الاتصال بالخادم',
+        titleFontSize: scaledSection,
+        borderColor: AppColors.primary.withValues(alpha: 0.2),
+        headerColor: AppColors.primary.withValues(alpha: 0.05),
+        children: [
+          _SettingsTile(
+            icon: Icons.api_rounded,
+            iconColor: AppColors.primary,
+            title: 'رابط خادم الـ API',
+            subtitle: 'تغيير وفحص عنوان الخادم الأساسي',
+            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+            onTap: () => context.push('/api-settings'),
+            textScaler: textScaler,
+            isNarrow: isNarrow,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+// القسم 1ب: تهيئة التطبيق (هوية الشركة والمظهر) — خلف app_config.update
+// App configuration (company identity and theming) — behind app_config.update
+// ─────────────────────────────────────────────
+class _AppConfigCard extends StatelessWidget {
+  final TextScaler textScaler;
+  final bool isNarrow;
+
+  const _AppConfigCard({required this.textScaler, required this.isNarrow});
+
+  @override
+  Widget build(BuildContext context) {
+    final scaledSection = textScaler.scale(isNarrow ? 13.0 : 14.0).clamp(11.0, 18.0);
+
+    return PermissionGate(
+      code: Perm.appConfigUpdate,
+      child: _SettingsGroup(
+        icon: Icons.palette_rounded,
+        iconColor: AppColors.accent,
+        title: 'تهيئة التطبيق',
+        titleFontSize: scaledSection,
+        borderColor: AppColors.accent.withValues(alpha: 0.2),
+        headerColor: AppColors.accent.withValues(alpha: 0.05),
+        children: [
+          _SettingsTile(
+            icon: Icons.business_center_rounded,
+            iconColor: AppColors.accent,
+            title: 'معلومات الشركة والمظهر',
+            subtitle: 'الاسم والعنوان والشعار والألوان والخط',
+            trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
+            // دفع أمرِي كما هو العرف في بقية الميزات (لا مسارات جديدة في GoRouter)
+            // Pushed imperatively like every other feature (no new GoRouter routes).
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const AppConfigScreen(),
+              ),
+            ),
+            textScaler: textScaler,
+            isNarrow: isNarrow,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -533,7 +592,7 @@ class _FontSizeTileState extends State<_FontSizeTile> {
                   color: AppColors.accent.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(Icons.text_fields_rounded,
+                child: Icon(Icons.text_fields_rounded,
                     color: AppColors.accent, size: 17),
               ),
               const SizedBox(width: 12),

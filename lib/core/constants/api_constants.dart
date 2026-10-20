@@ -17,6 +17,12 @@ class ApiConstants {
   // Current IBAC state — read at sign-in and when the app returns to the foreground.
   static const String permissions = '/auth/permissions';
 
+  // تهيئة التطبيق (الهوية/المظهر/اتصال API) — عامة للقراءة، ومحمية للكتابة
+  // App config (identity/theming/API connection) — public read, protected writes.
+  static const String appConfig = '/app-config';
+  static const String appConfigVerifyApiPassword = '/app-config/verify-api-password';
+  static const String appConfigApiPassword = '/app-config/api-password';
+
   // مسارات المقاييس الحيوية
   static const String biometricLogin    = '/auth/biometric/login';
   static const String biometricRegister = '/auth/biometric/register';

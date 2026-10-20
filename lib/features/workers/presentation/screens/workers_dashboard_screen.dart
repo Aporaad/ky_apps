@@ -25,7 +25,7 @@ class WorkersDashboardScreen extends StatelessWidget {
                   onPressed: () => Navigator.pop(context),
                 ),
                 title: Row(
-                  children: const [
+                  children: [
                     Icon(
                       Icons.groups_2_rounded,
                       color: Color(0xFF6B21A8),
@@ -115,7 +115,7 @@ class WorkersDashboardScreen extends StatelessWidget {
             const SizedBox(height: 28),
 
             // عنوان البطاقات
-            const Text(
+            Text(
               'اختر الفئة',
               style: TextStyle(
                 fontSize: 16,
@@ -293,7 +293,7 @@ class _WorkerCategoryCardState extends State<_WorkerCategoryCard>
                     const SizedBox(height: 4),
                     Text(
                       widget.subtitle,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,
                       ),

@@ -480,3 +480,31 @@ SELECT USER_ID, USER_NAME_EN, USER_TYPE, IS_ACTIVATED, IS_ADMIN FROM ACCOUNTS.AP
 **ما يبقى على إذن:** تجربة كتابة مُرجَّعة (إنشاء مستخدم داخل معاملة تُلغى) لإثبات مسار `store()`
 كاملاً — مُنعت بسياسة التنفيذ الآمنة لأنها كتابة في القاعدة الحيّة، ويبقى البديل إنشاء مستخدم
 حقيقي من واجهة التطبيق بعد الإصلاح.
+
+---
+
+## 2026-10-20 — وحدة «إعدادات API والتهيئة الديناميكية» (المنفّذ: Qoder)
+
+**لا مخططات جديدة (No new DDL):** الميزة تُعيد استخدام جدولين قائمين فقط ولا تُنشئ أي جدول —
+`APP_SETTINGS` (مفتاح/قيمة/نوع) لتخزين تهيئة التطبيق، و`APP_PERMISSIONS` + `APP_USERS_PERMISSIONS`
+لمنح رموز `app_config.*` وفق IBAC. هذا متوافق مع القاعدة «قاعدة أوراكل ليست ours للترحيل».
+
+**توسيع كتالوج الصلاحيات (Permission catalog):** أُضيف模块 `app_config` بأربعة رموز ASCII —
+`app_config.*` (النطاق)، `app_config.view` (قراءة الحمولة)، `app_config.update` (تعديل بيانات
+الشركة/الشعار/الثيم)، `app_config.api_manage` (تغيير كلمة سر إعدادات الاتصال). ترتب بذلك الكتالوج
+من **93 رمزاً/17模块اً** إلى **97 رمزاً/18模块اً**. البذر حيّاً عبر `02_ibac_seed.php`.
+
+**أسطر `APP_SETTINGS` الجديدة (عبر `AppConfig::DEFAULTS`):** معلومات الشركة (`company_name`,
+`company_address`, `company_website`, `company_phone`)، اسم التطبيق (`app_name`)، خمسة ألوان الثيم
+(`theme_primary_color`=#A27E4E، `theme_secondary_color`=#0D9488، `theme_background_color`=#F8FAFC،
+`theme_text_primary_color`=#0F172A، `theme_text_secondary_color`=#475569)، الخط (`theme_font_family`
+=Cairo)، و`api_settings_password` — يُبذر **كمجزّأة bcrypt** للكلمة الافتراضية `A1.b2.c3.d4` ولا
+يُخزَّن نصاً صريحاً أبداً، ولا يُخرج من `GET /app-config` (حمولة بلا سرّ). صارت القاعدة الحيّة بعد
+البذر: **الإعدادات = 22 سطراً**.
+
+**تلميع الكاش (`SettingsStore::HOT_KEYS`):** مفاتيح الثيم/الشركة أُدرجت ضمن المسار الساخن لتُقرأ
+بكاش قصير الأمد بدل ضربة أوراكل لكل فتح، مع مراعاة سقف ORA-01461 (٣٠٠٠ بايت) للقيم النصية.
+
+**التحقق الحي (قراءة فقط):** بعد تشغيل `php artisan tinker database/oracle/02_ibac_seed.php` أُحصيت
+الكتالوجات: `SELECT COUNT(*) FROM APP_PERMISSIONS` ⇒ **97**، و`SELECT COUNT(*) FROM APP_SETTINGS`
+⇒ **22**. لم تُجر أي كتابة يدوية على الجدول business في هذه الجولة خارج سكربت البذر المعتمد.

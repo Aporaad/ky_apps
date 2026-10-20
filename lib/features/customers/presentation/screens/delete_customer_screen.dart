@@ -82,7 +82,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
                       Expanded(
                         child: Text(
                           _selectedCustomer!.custName,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 14,
                             color: AppColors.textPrimary,
@@ -98,7 +98,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
                       const SizedBox(width: 8),
                       Text(
                         'رقم العميل: ${_selectedCustomer!.custNo}',
-                        style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                        style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                       ),
                     ],
                   ),
@@ -106,7 +106,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            const Text(
+            Text(
               'هل أنت متأكد من حذف هذا العميل؟\nهذا الإجراء لا يمكن التراجع عنه!',
               textAlign: TextAlign.center,
               style: TextStyle(
@@ -204,7 +204,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.person_remove_rounded, color: AppColors.error, size: 22),
             SizedBox(width: 10),
@@ -251,7 +251,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
                   size: 52, color: AppColors.error),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'اختر العميل للحذف',
               style: TextStyle(
                 fontSize: 18,
@@ -260,7 +260,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'ابحث وحدد العميل الذي تريد حذفه من النظام',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -333,7 +333,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
                         children: [
                           Text(
                             c.custName,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
                               color: AppColors.textPrimary,
@@ -453,7 +453,7 @@ class _DeleteCustomerScreenState extends ConsumerState<DeleteCustomerScreen> {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 12.5, color: AppColors.textPrimary),
+            style: TextStyle(fontSize: 12.5, color: AppColors.textPrimary),
             overflow: TextOverflow.ellipsis,
           ),
         ),

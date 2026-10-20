@@ -107,7 +107,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.edit_rounded, color: AppColors.accent, size: 22),
             SizedBox(width: 10),
@@ -164,11 +164,11 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
                 color: AppColors.accent.withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.person_search_rounded,
+              child: Icon(Icons.person_search_rounded,
                   size: 52, color: AppColors.accent),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'اختر العميل للتعديل',
               style: TextStyle(
                 fontSize: 18,
@@ -177,7 +177,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'ابحث وحدد العميل الذي تريد تعديل بياناته',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
@@ -231,7 +231,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
               color: AppColors.accent.withValues(alpha: 0.15),
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.person_rounded, color: AppColors.accent, size: 20),
+            child: Icon(Icons.person_rounded, color: AppColors.accent, size: 20),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -240,7 +240,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
               children: [
                 Text(
                   c.custName,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                     color: AppColors.textPrimary,
@@ -248,7 +248,7 @@ class _EditCustomerScreenState extends ConsumerState<EditCustomerScreen> {
                 ),
                 Text(
                   'رقم العميل: ${c.custNo} ${c.tel1 != null ? "• ${c.tel1}" : ""}',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                 ),
               ],
             ),

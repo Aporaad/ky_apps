@@ -142,7 +142,7 @@ class _AddEditWorkerScreenState extends ConsumerState<AddEditWorkerScreen> {
         ),
         title: Text(
           _isEdit ? 'تعديل $_typeLabel' : 'إضافة $_typeLabel',
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.bold,
             color: AppColors.textPrimary,
@@ -323,7 +323,7 @@ class _AddEditWorkerScreenState extends ConsumerState<AddEditWorkerScreen> {
   Widget _buildStatusRow() {
     return Row(
       children: [
-        const Text(
+        Text(
           'الحالة:',
           style: TextStyle(
             fontSize: 13,
@@ -408,7 +408,7 @@ class _FormField extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: AppColors.textSecondary,
@@ -435,7 +435,7 @@ class _FormField extends StatelessWidget {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
+              borderSide: BorderSide(color: AppColors.primary, width: 1.5),
             ),
             contentPadding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

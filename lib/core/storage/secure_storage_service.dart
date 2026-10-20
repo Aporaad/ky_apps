@@ -28,6 +28,11 @@ class SecureStorageService {
   static const String _permissionsKey = 'ky_user_permissions';
   static const String _isAdminKey = 'ky_is_admin';
   static const String _sessionExpiresAtKey = 'ky_session_expires_at';
+  // مفاتيح تهيئة التطبيق — على مستوى الجهاز، تبقى بعد تسجيل الخروج كالرابط المخصص
+  // App-config keys — device-level, kept across logout just like the custom API URL.
+  static const String _appConfigKey = 'ky_app_config'; // كاش JSON للتهيئة العامة
+  static const String _appLogoPathKey = 'ky_app_logo_path'; // مسار ملف الشعار المحلي
+  static const String _apiPasswordHashKey = 'ky_api_pw_hash'; // تجزئة محلية للاحتياط دون اتصال
 
   /// حفظ رمز الوصول (Token)
   Future<void> saveToken(String token) async {
@@ -200,6 +205,63 @@ class SecureStorageService {
   /// مسح كافة البيانات تماماً من الذاكرة بما فيها عنوان الـ API
   Future<void> purgeEverything() async {
     await _storage.deleteAll();
+  }
+
+  // ── تهيئة التطبيق (الشعار/الألوان/بيانات الشركة) ─────────
+  // App configuration (logo / colors / company info).
+
+  /// حفظ كاش التهيئة العامة كنص JSON (تُطبَّق عند الإقلاع قبل الوصول للخادم)
+  /// Persist the public config cache as JSON (applied at boot before the server is reached).
+  Future<void> saveAppConfig(String json) async {
+    await _storage.write(key: _appConfigKey, value: json);
+  }
+
+  /// قراءة كاش التهيئة (null = لا كاش بعد)
+  /// Read the config cache (null means nothing cached yet).
+  Future<String?> getAppConfig() async {
+    return await _storage.read(key: _appConfigKey);
+  }
+
+  /// حذف كاش التهيئة
+  /// Delete the config cache.
+  Future<void> deleteAppConfig() async {
+    await _storage.delete(key: _appConfigKey);
+  }
+
+  /// حفظ المسار المطلق لملف الشعار المحفوظ محلياً على الجهاز
+  /// Store the absolute path of the locally-saved logo file.
+  Future<void> saveAppLogoPath(String path) async {
+    await _storage.write(key: _appLogoPathKey, value: path);
+  }
+
+  /// قراءة مسار الشعار المحلي (null = استخدام الشعار الافتراضي من الأصول)
+  /// Read the local logo path (null means fall back to the bundled asset).
+  Future<String?> getAppLogoPath() async {
+    return await _storage.read(key: _appLogoPathKey);
+  }
+
+  /// حذف مسار الشعار المحلي
+  /// Delete the local logo path.
+  Future<void> deleteAppLogoPath() async {
+    await _storage.delete(key: _appLogoPathKey);
+  }
+
+  /// حفظ التجزئة المحلية (SHA-256) لكلمة سر إعدادات API للاستخدام دون اتصال
+  /// Store the local SHA-256 fallback hash of the API-settings password for offline use.
+  Future<void> saveApiPasswordHash(String hash) async {
+    await _storage.write(key: _apiPasswordHashKey, value: hash);
+  }
+
+  /// قراءة التجزئة المحلية لكلمة سر إعدادات API
+  /// Read the local API-settings password hash.
+  Future<String?> getApiPasswordHash() async {
+    return await _storage.read(key: _apiPasswordHashKey);
+  }
+
+  /// حذف التجزئة المحلية لكلمة سر إعدادات API
+  /// Delete the local API-settings password hash.
+  Future<void> deleteApiPasswordHash() async {
+    await _storage.delete(key: _apiPasswordHashKey);
   }
 }
 

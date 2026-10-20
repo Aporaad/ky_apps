@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (93 كوداً في 17 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (97 كوداً في 18 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -136,6 +136,14 @@ class Perm {
   static const String settingsUpdate = 'settings.update';
   static const String settingsSecurityManage = 'settings.security_manage';
 
+  // ── إعدادات التطبيق / app_config ─────────────────────────
+  /// هوية الشركة والمظهر وإعدادات اتصال API
+  /// Company identity, theming, and API connection settings.
+  static const String appConfigWildcard = 'app_config.*';
+  static const String appConfigView = 'app_config.view';
+  static const String appConfigUpdate = 'app_config.update';
+  static const String appConfigApiManage = 'app_config.api_manage';
+
   // ── النظام / system ──────────────────────────────────────
   /// منح شامل: من يملك `system.*` يملك كل شيء (نفس قاعدة `PermissionResolver::can`)
   /// The all-encompassing grant: `system.*` covers every code (same rule as the server resolver).
@@ -237,6 +245,10 @@ const List<String> allPermissionCodes = [
   Perm.settingsView,
   Perm.settingsUpdate,
   Perm.settingsSecurityManage,
+  Perm.appConfigWildcard,
+  Perm.appConfigView,
+  Perm.appConfigUpdate,
+  Perm.appConfigApiManage,
   Perm.systemWildcard,
 ];
 
@@ -259,6 +271,7 @@ const List<String> permModuleOrder = [
   'users',
   'sessions',
   'settings',
+  'app_config',
   'system',
 ];
 
@@ -281,6 +294,7 @@ const Map<String, String> permModuleLabels = {
   'users': 'إدارة المستخدمين',
   'sessions': 'الجلسات النشطة',
   'settings': 'إعدادات الأمان',
+  'app_config': 'إعدادات التطبيق',
   'system': 'النظام',
 };
 
@@ -306,6 +320,7 @@ const Map<String, String> permActionLabels = {
   'admin_flag_manage': 'صفة المدير',
   'terminate': 'إنهاء الجلسة',
   'security_manage': 'إدارة حساسة',
+  'api_manage': 'إدارة اتصال API',
 };
 
 /// اسم القسم المستخرج من الكود (`customers.view` ⇒ `customers`)

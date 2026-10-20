@@ -192,7 +192,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                           // عنوان البطاقة
                           Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.dns_rounded,
                                 color: AppColors.primary,
                                 size: 20,
@@ -230,7 +230,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                                   fontSize: textScaler.scale(12.5).clamp(10.0, 16.0),
                                   color: AppColors.textMuted,
                                 ),
-                                prefixIcon: const Icon(
+                                prefixIcon: Icon(
                                   Icons.link_rounded,
                                   color: AppColors.primary,
                                 ),
@@ -248,7 +248,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
+                                  borderSide: BorderSide(
                                     color: AppColors.primary,
                                     width: 1.5,
                                   ),
@@ -306,14 +306,14 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                           OutlinedButton.icon(
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 13),
-                              side: const BorderSide(color: AppColors.primary),
+                              side: BorderSide(color: AppColors.primary),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(10),
                               ),
                             ),
                             onPressed: state.isTesting ? null : _handleTestConnection,
                             icon: state.isTesting
-                                ? const SizedBox(
+                                ? SizedBox(
                                     width: 16,
                                     height: 16,
                                     child: CircularProgressIndicator(
@@ -405,11 +405,10 @@ class _InfoCard extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 22),
+          Icon(Icons.info_outline_rounded, color: AppColors.primary, size: 22),
           const SizedBox(width: 12),
           Expanded(
-            child: Text(
-              'من هنا يمكنك تغيير عنوان خادم الـ API وفحص الاتصال به قبل الحفظ.\n'
+            child: Text(              
               'اكتب الرابط بالصيغة: http://ip:port/api\nمثال: http://192.168.1.1:8000/api',
               style: TextStyle(
                 fontSize: scaledText,
@@ -511,7 +510,7 @@ class _TestResultCard extends StatelessWidget {
           const SizedBox(height: 6),
           Text(
             result.message as String,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               height: 1.4,
               color: AppColors.textPrimary,
@@ -519,7 +518,7 @@ class _TestResultCard extends StatelessWidget {
           ),
           if (!isSuccess) ...[
             const SizedBox(height: 6),
-            const Text(
+            Text(
               'تأكد من تشغيل الخادم واتصال الشبكة.',
               style: TextStyle(
                 fontSize: 11,
@@ -555,7 +554,7 @@ class _ActiveUrlCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
               Icon(Icons.check_circle_outline_rounded,
                   color: AppColors.success, size: 16),
@@ -648,7 +647,7 @@ class _ConfirmChangeDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'تغيير رابط الـ API سيؤثر على جميع عمليات التطبيق فوراً.\n'
               'في حال كان الرابط غير صحيح، لن تتمكن من تسجيل الدخول.',
               style: TextStyle(
@@ -667,13 +666,13 @@ class _ConfirmChangeDialog extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.link_rounded,
+                  Icon(Icons.link_rounded,
                       size: 15, color: AppColors.primary),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
                       targetUrl,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w600,
                         color: AppColors.primary,
@@ -691,7 +690,7 @@ class _ConfirmChangeDialog extends StatelessWidget {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(false),
-          child: const Text('إلغاء',
+          child: Text('إلغاء',
               style: TextStyle(color: AppColors.textSecondary)),
         ),
         ElevatedButton(

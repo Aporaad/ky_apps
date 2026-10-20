@@ -221,7 +221,7 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                     ),
                   ),
                   child: Row(
-                    children: const [
+                    children: [
                       Icon(Icons.info_outline, size: 14, color: AppColors.primary),
                       SizedBox(width: 6),
                       Expanded(
@@ -453,7 +453,7 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                               Flexible(
                                 child: Text(
                                   node.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     fontSize: 13,
                                     color: AppColors.textPrimary,
@@ -554,7 +554,7 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
                             color: AppColors.primary.withValues(alpha: 0.08),
                             borderRadius: BorderRadius.circular(6),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.edit_outlined,
                             size: 15,
                             color: AppColors.primary,

@@ -85,7 +85,7 @@ class _AddCustomerScreenState extends ConsumerState<AddCustomerScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.person_add_rounded, color: AppColors.primary, size: 22),
             SizedBox(width: 10),

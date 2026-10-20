@@ -218,7 +218,7 @@ class _Header extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
+            gradient: LinearGradient(
               colors: [AppColors.primary, AppColors.accent],
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -248,7 +248,7 @@ class _Header extends StatelessWidget {
                 compact
                     ? 'الصلاحيات والجلسات وأمان النظام'
                     : 'صلاحيات المستخدمين، الجلسات النشطة، وإعدادات الأمان',
-                style: const TextStyle(color: AppColors.textSecondary),
+                style: TextStyle(color: AppColors.textSecondary),
               ),
             ],
           ),
@@ -299,7 +299,7 @@ class _CardTile extends StatelessWidget {
                       card.title,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
                         color: AppColors.textPrimary,
@@ -310,7 +310,7 @@ class _CardTile extends StatelessWidget {
                       card.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 12.5,
                         color: AppColors.textSecondary,
                         height: 1.35,
@@ -347,7 +347,7 @@ class _NoAccessNote extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.border),
       ),
-      child: const Column(
+      child: Column(
         children: [
           Icon(Icons.lock_outline, size: 34, color: AppColors.textMuted),
           SizedBox(height: 10),
