@@ -3,6 +3,8 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/biometric_service.dart';
 import '../../../../core/utils/device_id_helper.dart';
+import '../../../../core/utils/permission_check.dart';
+import '../../data/models/permission_snapshot_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
 
@@ -30,6 +32,11 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
 });
 
 /// حالة المصادقة
+///
+/// تحمل أيضاً حالة IBAC (المنح وصفة المدير وموعد انتهاء الجلسة) لأن كل قرار حجب في الواجهة
+/// يُبنى عليها؛ والخادم يرفض افتراضياً، فالغياب هنا يعني «لا وصول» لا «اسأل لاحقاً».
+/// Auth state, extended with the IBAC facts every gating decision reads: grants, the admin flag,
+/// and the session deadline. The server denies by default, so absence here means no access.
 class AuthState {
   final bool isAuthenticated;
   final bool isLoading;
@@ -40,6 +47,18 @@ class AuthState {
   final bool isBiometricEnabled;
   final bool isBiometricLoading;
 
+  /// الأكواد الممنوحة فعلاً للمستخدم الحالي (فارغة قبل الدخول وبعد أي فشل)
+  /// The codes actually granted to the current user (empty before sign-in and after any failure).
+  final Set<String> permissions;
+
+  /// صفة مدير النظام — تتجاوز جدول المنح في الخادم والواجهة معاً (قرار D1)
+  /// System-admin flag: bypasses the grant table on both sides (decision D1).
+  final bool isAdmin;
+
+  /// نهاية الجلسة الحالية؛ null = بلا موعد معلوم (جلسة قديمة أو تركات غير محدّدة)
+  /// Current session deadline; null means nothing was asserted about expiry.
+  final DateTime? sessionExpiresAt;
+
   const AuthState({
     this.isAuthenticated = false,
     this.isLoading = false,
@@ -49,17 +68,46 @@ class AuthState {
     this.biometricCapability = BiometricCapability.notSupported,
     this.isBiometricEnabled = false,
     this.isBiometricLoading = false,
+    this.permissions = const {},
+    this.isAdmin = false,
+    this.sessionExpiresAt,
   });
+
+  /// هل يملك المستخدم هذه الصلاحية؟ — نفس قواعد `PermissionResolver::can` حرفياً
+  /// Does the user hold this permission? The same rules as the server resolver, literally.
+  bool can(String code) =>
+      canCode(granted: permissions, isAdmin: isAdmin, code: code);
+
+  /// يملك واحدة على الأقل من الأكواد (القائمة الفارغة ترفض اتباعاً للرفض الافتراضي)
+  /// Holds at least one code; an empty list denies, matching deny-by-default.
+  bool canAny(Iterable<String> codes) =>
+      canAnyCode(granted: permissions, isAdmin: isAdmin, codes: codes);
+
+  /// يملك كل الأكواد — للعمليات التي تحتاج صلاحيتين معاً (عرض + تصدير مثلاً)
+  /// Holds every code, for actions that need two grants at once (view + export, say).
+  bool canAll(Iterable<String> codes) =>
+      canAllCode(granted: permissions, isAdmin: isAdmin, codes: codes);
+
+  /// هل القسم ظاهر؟ الأقسام بلا صلاحية قسم (كالإعدادات المحلية) تظهر دائماً
+  /// Is this section visible? Sections without a section-level permission (local settings) always are.
+  bool canSeeSection(String? code) => code == null || can(code);
 
   AuthState copyWith({
     bool? isAuthenticated,
     bool? isLoading,
     UserModel? user,
     String? selectedUserType,
+    // تبقى الدلالة القديمة: كل تحديث للحالة يمسح الخطأ ما لم يُرسل خطأ جديد صراحة
+    // Kept as before: any state change clears the error unless a new one is supplied.
     String? errorMessage,
     BiometricCapability? biometricCapability,
     bool? isBiometricEnabled,
     bool? isBiometricLoading,
+    Set<String>? permissions,
+    bool? isAdmin,
+    // الحقل الجديد وحده يحتاج خدعة الإغلاق: تمرير null معناه «امسح الموعد» لا «أبقِ القديم»
+    // Only the new field needs the closure trick: passing null must clear it, not keep the old one.
+    DateTime? Function()? sessionExpiresAt,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -70,8 +118,36 @@ class AuthState {
       biometricCapability: biometricCapability ?? this.biometricCapability,
       isBiometricEnabled: isBiometricEnabled ?? this.isBiometricEnabled,
       isBiometricLoading: isBiometricLoading ?? this.isBiometricLoading,
+      permissions: permissions ?? this.permissions,
+      isAdmin: isAdmin ?? this.isAdmin,
+      sessionExpiresAt:
+          sessionExpiresAt != null ? sessionExpiresAt() : this.sessionExpiresAt,
     );
   }
+
+  /// تطبيق لقطة صلاحيات على الحالة — المسار الوحيد الذي يكتب هذا الثالوث
+  /// Apply an IBAC snapshot to the state — the only path that writes this trio of fields.
+  AuthState withPermissions(PermissionSnapshot snapshot) {
+    return copyWith(
+      permissions: snapshot.permissions.toSet(),
+      isAdmin: snapshot.isAdmin,
+      sessionExpiresAt: () => _parseServerDate(snapshot.sessionExpiresAt),
+    );
+  }
+}
+
+/// تحويل نص تاريخ الخادم `YYYY-MM-DD HH:MM:SS` إلى وقت محلي آمن
+/// Parse the server's `YYYY-MM-DD HH:MM:SS` text into a local time, or null if unreadable.
+///
+/// الخادم يرسل التوقيت بتوقيت أوراكل المحلي بلا معلومات منطقة، فلا خيار سوى معاملته كوقت محلي
+/// حتى تُقارن الدقائق المتبقية بوقت الجهاز نفسه.
+/// The server sends Oracle-local time with no zone marker, so it must be compared as local time
+/// for the "minutes left" figure to mean anything on this device.
+DateTime? _parseServerDate(String? raw) {
+  final text = raw?.trim();
+  if (text == null || text.isEmpty) return null;
+
+  return DateTime.tryParse(text.replaceFirst(' ', 'T'));
 }
 
 /// إدارة حالة المصادقة عبر Riverpod Notifier الحديث
@@ -98,6 +174,12 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   /// التحقق من حالة تسجيل الدخول عند بدء التطبيق
+  /// Check the sign-in state on app start.
+  ///
+  /// الصلاحيات تُستعاد من التخزين الآمن فوراً حتى تُرسم الأقسام بلا انتظار الشبكة، ثم يتكفّل
+  /// `PermissionsNotifier` بتحديثها من الخادم حالما يُستهلك أول مرة.
+  /// Grants come back from secure storage immediately so sections render without waiting on the
+  /// network; `PermissionsNotifier` then refreshes them from the server on first use.
   Future<void> checkAuthStatus() async {
     // تحميل وتهيئة رابط الـ API المخصص من الذاكرة المشفرة
     final client = ref.read(dioClientProvider);
@@ -108,17 +190,45 @@ class AuthNotifier extends Notifier<AuthState> {
     final loggedIn = await _repository.isLoggedIn();
     if (loggedIn) {
       final cachedUser = await _repository.getCachedUser();
-      state = state.copyWith(
+      final snapshot = await _repository.restorePermissions();
+
+      state = AuthState(
         isAuthenticated: true,
         isLoading: false,
         user: cachedUser,
-      );
+        // اختيار نوع المستخدم على شاشة الدخول يبقى كما هو: إعادة البناء من الصفر كانت
+        // تعيده إلى «موظف» وتمسح ما اختاره المستخدم قبل اكتمال الفحص
+        // The login screen's user-type choice survives: rebuilding from scratch reset it to
+        // 'employee' and discarded whatever was picked before this check finished.
+        selectedUserType: state.selectedUserType,
+        biometricCapability: state.biometricCapability,
+        isBiometricEnabled: state.isBiometricEnabled,
+      ).withPermissions(snapshot);
     } else {
       state = state.copyWith(
         isAuthenticated: false,
         isLoading: false,
+        permissions: const {},
+        isAdmin: false,
+        sessionExpiresAt: () => null,
       );
     }
+  }
+
+  /// تطبيق حالة IBAC القادمة من الخادم على حالة المصادقة — الكاتب الوحيد لهذا الثالوث
+  /// Apply a server-side IBAC snapshot to the auth state; the only writer of those three fields.
+  void applyPermissions(PermissionSnapshot snapshot) {
+    state = state.withPermissions(snapshot);
+  }
+
+  /// إسقاط الصلاحيات محلياً (خروج، 401، أو فشل تحديث مؤكد)
+  /// Drop the local grants: logout, a 401, or a refresh that reported nothing.
+  void clearPermissions() {
+    state = state.copyWith(
+      permissions: const {},
+      isAdmin: false,
+      sessionExpiresAt: () => null,
+    );
   }
 
   /// تغيير نوع المستخدم المختار (موظف / عميل)
@@ -146,7 +256,7 @@ class AuthNotifier extends Notifier<AuthState> {
         isLoading: false,
         user: response.user,
         errorMessage: null,
-      );
+      ).withPermissions(_snapshotFrom(response.user!));
       return true;
     } else {
       state = state.copyWith(
@@ -208,7 +318,7 @@ class AuthNotifier extends Notifier<AuthState> {
         isBiometricLoading: false,
         user: response.user,
         errorMessage: null,
-      );
+      ).withPermissions(_snapshotFrom(response.user!));
       return true;
     } else {
       state = state.copyWith(
@@ -222,19 +332,43 @@ class AuthNotifier extends Notifier<AuthState> {
   }
 
   /// تسجيل الخروج
+  /// Log out: the session ends, and so does every cached grant with it.
   Future<void> logout() async {
     state = state.copyWith(isLoading: true);
     await _repository.logout();
     await refreshBiometricStatus();
-    state = state.copyWith(isAuthenticated: false, isLoading: false);
+    state = AuthState(
+      selectedUserType: state.selectedUserType,
+      biometricCapability: state.biometricCapability,
+      isBiometricEnabled: state.isBiometricEnabled,
+    );
   }
 
   /// تسجيل الخروج الإجباري (عند 401)
+  /// Forced logout on 401 — grants are cleared too, so no screen stays drawn on a dead session.
   void forceLogout() {
-    state = state.copyWith(
-      isAuthenticated: false,
-      isLoading: false,
+    state = AuthState(
+      selectedUserType: state.selectedUserType,
+      biometricCapability: state.biometricCapability,
+      isBiometricEnabled: state.isBiometricEnabled,
       errorMessage: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً',
+    );
+  }
+
+  /// لقطة أولية من حمولة المستخدم في استجابة الدخول
+  /// Seed snapshot from the user payload of a sign-in response.
+  ///
+  /// استجابات `login` و`biometricLogin` تحمل المنح نفسها التي يحملها `GET /auth/permissions`
+  /// (منذ المرحلة 2)، فلا تبرُر الواجهة بقسم قبل أن تصل اللقطة. موعد انتهاء الجلسة يبقى مجهولاً
+  /// حتى التحديث الأول لأنّه يخصّ التوكن لا الحساب.
+  /// Sign-in responses already embed the same grants as the permissions endpoint, so the UI is
+  /// never naked before the first refresh. The session deadline stays unknown until that refresh,
+  /// since it belongs to the token rather than the account.
+  PermissionSnapshot _snapshotFrom(UserModel user) {
+    return PermissionSnapshot(
+      userId: user.id,
+      isAdmin: user.isAdmin,
+      permissions: user.permissions,
     );
   }
 }

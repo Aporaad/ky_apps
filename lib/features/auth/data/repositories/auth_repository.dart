@@ -4,6 +4,7 @@ import '../../../../core/constants/api_constants.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../models/auth_response.dart';
+import '../models/permission_snapshot_model.dart';
 import '../models/user_model.dart';
 
 /// مستودع إدارة عمليات المصادقة
@@ -174,5 +175,98 @@ class AuthRepository {
       await _storage.saveBiometricEnabled(false);
       return false;
     }
+  }
+
+  // ── حالة الصلاحيات (IBAC) ─────────────────────────────────
+
+  /// جلب الصلاحيات الفعّالية للمستخدم الحالي (GET /auth/permissions)
+  /// Fetch the effective IBAC state for the signed-in user.
+  ///
+  /// التفرقة الحساسة هنا: إن **أجابت** الخادم بخطأ (401/403/500) فالمنح تُسقط ويُرجع رفض شامل،
+  /// لأن الخادم أعلمنا أن الحالة لم تعد صحيحة. أما إن تعذّر الوصول أصلاً (شبكة، مهلة، خادم موصول
+  /// حديثاً) فتبقى آخر لقطة معروفة بلا إبادة: القرار الأمني ينفّذه الخادم في كل طلب على أي حال،
+  /// وإلا تحوّل انقطاع الواي فاي في المحل إلى تطبيق مقفل بلا أقسام حتى إعادة التشغيل.
+  /// The split that matters: if the server *answered* with an error the grants are dropped — the
+  /// server told us the state is no longer valid. If it was unreachable at all (network, timeout,
+  /// a server still starting) the last known snapshot survives, because the server still enforces
+  /// every call and a Wi-Fi hiccup would otherwise lock the app until a restart.
+  /// Cancelling a request on dispose is neither of those: it simply returns what is stored.
+  Future<PermissionSnapshot> fetchPermissions({CancelToken? cancelToken}) async {
+    try {
+      final response = await _client.dio.get(
+        ApiConstants.permissions,
+        cancelToken: cancelToken,
+      );
+
+      final body = response.data;
+      if (body is! Map<String, dynamic> || body['success'] != true) {
+        await _storage.clearPermissions();
+        return PermissionSnapshot.denied;
+      }
+
+      final data = body['data'];
+      final snapshot = data is Map<String, dynamic>
+          ? PermissionSnapshot.fromJson(data)
+          : PermissionSnapshot.denied;
+
+      await _persistPermissions(snapshot);
+
+      return snapshot;
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) {
+        return restorePermissions();
+      }
+
+      if (e.response != null) {
+        await _storage.clearPermissions();
+        return PermissionSnapshot.denied;
+      }
+
+      // بلا إجابة من الخادم: النسخة المخزّنة هي أفضل معلومة متوفرة، والمهلة تُعلَم في المتحكّم
+      // No answer from the server: the cached copy is the best known truth; staleness is flagged
+      // by the notifier, not by wiping access.
+      return restorePermissions();
+    } catch (_) {
+      await _storage.clearPermissions();
+      return PermissionSnapshot.denied;
+    }
+  }
+
+  /// قراءة الحالة المخزّنة بعد إعادة تشغيل التطبيق (بلا شبكة)
+  /// Read the stored state after a cold start, without touching the network.
+  Future<PermissionSnapshot> restorePermissions() async {
+    final codes = await _storage.getPermissions();
+    final isAdmin = await _storage.getIsAdmin();
+    final expiresAt = await _storage.getSessionExpiresAt();
+    final cachedUser = await getCachedUser();
+
+    return PermissionSnapshot(
+      userId: cachedUser?.id ?? 0,
+      isAdmin: isAdmin,
+      permissions: codes,
+      modules: _deriveModules(codes),
+      sessionExpiresAt: expiresAt,
+    );
+  }
+
+  /// كتابة الحالة إلى المفاتيح المخصصة — يفرضها مسار واحد فقط حتى لا تتباعد النسخ
+  /// Persist the state to its dedicated keys; one write path keeps the copies from diverging.
+  Future<void> _persistPermissions(PermissionSnapshot snapshot) async {
+    await _storage.savePermissions(snapshot.permissions);
+    await _storage.saveIsAdmin(snapshot.isAdmin);
+    await _storage.saveSessionExpiresAt(snapshot.sessionExpiresAt);
+  }
+
+  /// الأقسام المشتقة من الأكواد — نفس اشتقاق `payloadFor` في الخادم
+  /// Modules derived from codes, mirroring the server's `payloadFor` derivation.
+  static List<String> _deriveModules(List<String> codes) {
+    final modules = <String>{};
+
+    for (final code in codes) {
+      final dot = code.indexOf('.');
+      modules.add(dot < 0 ? code : code.substring(0, dot));
+    }
+
+    return modules.toList(growable: false);
   }
 }

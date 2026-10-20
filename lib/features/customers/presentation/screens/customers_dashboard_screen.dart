@@ -349,19 +349,27 @@ class _CustomerActionCardState extends State<_CustomerActionCard>
                     ),
                   ],
                 ),
+                // شريط الوصف مرّن بطبيعته: عرض البطاقة يتغيّر بين أعمدة الشبكة، والنص قد يطول
+                // عن دائرته — فكان يتجاوز حدود البطاقة (42 بكسل على المكتب في اختبار الانحدار)
+                // The subtitle pill is inherently stretchy: card width varies across grid columns and
+                // the text can be longer than the pill, so it overflowed its card (42 px on desktop).
                 Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        widget.subtitle,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          fontSize: 12,
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          widget.subtitle,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 12,
+                          ),
                         ),
                       ),
                     ),

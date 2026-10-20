@@ -83,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         surfaceTintColor: Colors.transparent,
         actions: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8),
             child: IconButton(
               icon: const Icon(Icons.settings_outlined, color: AppColors.textSecondary),
               tooltip: 'إعدادات خادم الـ API',
@@ -94,17 +94,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          // dragStartBehavior:  DragStartBehavior.down,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440),
+            constraints: const BoxConstraints(maxWidth: 440,minHeight: 600,maxHeight: 700),
             child: Card(
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-                side: const BorderSide(color: AppColors.border),
+                borderRadius: BorderRadius.circular(10)
+                // side: const BorderSide(color: AppColors.border),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(10),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -112,15 +113,15 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     children: [
                       Center(
                         child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: const Icon(
-                            Icons.lock_person_rounded,
-                            size: 40,
-                            color: AppColors.primary,
+                          padding: const EdgeInsets.all(0),
+                          // decoration: BoxDecoration(
+                          //   color: AppColors.primary.withValues(alpha: 0.00),
+                          //   borderRadius: BorderRadius.circular(0),
+                          // ),
+                          child: Image.asset(
+                            'assets/logo3.jpg',
+                            width: 250,
+                            height:170
                           ),
                         ),
                       ),

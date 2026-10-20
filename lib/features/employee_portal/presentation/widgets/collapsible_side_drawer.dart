@@ -1,9 +1,16 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/portal_sections.dart';
 
 /// قائمة جانبية تفاعلية قابلة للتوسيع والطي (Expand / Collapse)
 /// Collapsible Side Navigation Drawer with Arabic RTL support
+///
+/// القائمة تأتي من الخارج (`sections`) ولا يعلن هذا الودجت أي عنوان أو أيقونة بنفسه: السجل
+/// المركزي هو صاحب القرار، وهو من يُصفّى حسب الصلاحيات قبل أن يصل إلى هنا.
+/// The list arrives from outside: this widget declares no titles or icons of its own. The central
+/// registry owns them and is already filtered by permission before it gets here.
 class CollapsibleSideDrawer extends StatelessWidget {
+  final List<PortalSection> sections;
   final int selectedIndex;
   final ValueChanged<int> onIndexChanged;
   final bool isCollapsed;
@@ -15,6 +22,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
 
   const CollapsibleSideDrawer({
     super.key,
+    required this.sections,
     required this.selectedIndex,
     required this.onIndexChanged,
     required this.isCollapsed,
@@ -23,18 +31,6 @@ class CollapsibleSideDrawer extends StatelessWidget {
     required this.employeeName,
     this.isDrawerMode = false,
   });
-
-  static const List<({String title, IconData icon})> _menuItems = [
-    (title: 'الرئيسية', icon: Icons.dashboard_outlined),
-    (title: 'المبيعات', icon: Icons.point_of_sale_outlined),
-    (title: 'التفصيل', icon: Icons.content_cut_outlined),
-    (title: 'العملاء', icon: Icons.people_outline_rounded),
-    (title: 'جاري العاملين', icon: Icons.groups_2_rounded),
-    (title: 'الحسابات', icon: Icons.account_balance_outlined),
-    (title: 'المخازن', icon: Icons.inventory_2_outlined),
-    (title: 'الإدارة', icon: Icons.admin_panel_settings_outlined),
-    (title: 'الإعدادات', icon: Icons.settings_outlined),
-  ];
 
   @override
   Widget build(BuildContext context) {
@@ -108,9 +104,9 @@ class CollapsibleSideDrawer extends StatelessWidget {
           Expanded(
             child: ListView.builder(
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              itemCount: _menuItems.length,
+              itemCount: sections.length,
               itemBuilder: (context, index) {
-                final item = _menuItems[index];
+                final item = sections[index];
                 final isSelected = selectedIndex == index;
 
                 return Padding(

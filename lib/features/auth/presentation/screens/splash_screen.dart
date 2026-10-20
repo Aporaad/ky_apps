@@ -40,24 +40,12 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryLight.withValues(alpha: 0.3),
-                    blurRadius: 20,
-                    offset: const Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: const Icon(
-                Icons.account_balance_wallet_rounded,
-                size: 56,
-                color: Colors.white,
-              ),
+            // الشعار بحجمه المباشر: الغلاف الذي كان يلفّه لم يكن يضيف شيئاً
+            // The logo is sized directly — the wrapper that used to hold it added nothing
+            Image.asset(
+              'assets/logo3.jpg',
+              width: 370,
+              height: 300,
             ),
             const SizedBox(height: 24),
             const Text(

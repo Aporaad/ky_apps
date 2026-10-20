@@ -4,19 +4,19 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
+import '../../domain/portal_sections.dart';
 import '../widgets/collapsible_side_drawer.dart';
-import 'sections/home_dashboard_section.dart';
-import 'sections/sales_section.dart';
-import 'sections/tailoring_section.dart';
-import 'sections/accounts_section.dart';
-import 'sections/customers_section.dart';
-import 'sections/stores_section.dart';
-import 'sections/management_section.dart';
-import 'sections/settings_section.dart';
-import 'sections/workers_section.dart';
 
 /// الهيكل الرئيسي لبوابة الموظف المتجاوب بالكامل مع مختلف أحجام الشاشات
 /// Main Employee Portal Layout with Responsive Sidebar / Drawer and Top Bar
+///
+/// هذا الملف لم يعد يعرف أسماء الأقسام: يستورد السجل، يصفّيه بمنح المستخدم الحالية، ثم يرسم
+/// ما تبقى. المخزّن هو معرّف القسم لا موضعه، لأن الموضع يتغيّر إذا سحب مديرٌ صلاحية أثناء
+/// الجلسة — والمخاطرة بمؤشر رقمي كانت تُبقي المستخدم على قسم آخر بعد كل تحديث صلاحيات.
+/// The layout no longer knows section names: it reads the registry, filters it by the current
+/// grants, and renders what survives. The stored selection is a section id, not an index, because
+/// indexes shift when a manager revokes a permission mid-session — and a stale index used to drop
+/// the user onto a different section after every permissions refresh.
 class EmployeeMainLayout extends ConsumerStatefulWidget {
   const EmployeeMainLayout({super.key});
 
@@ -25,21 +25,11 @@ class EmployeeMainLayout extends ConsumerStatefulWidget {
 }
 
 class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
-  int _currentIndex = 0;
+  /// المعرّف المختار حالياً — من السجل، وليس فهرساً
+  /// The selected section id, taken from the registry rather than a numeric position.
+  String _currentSectionId = portalSections.first.id;
   bool _isCollapsed = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  final List<Widget> _sections = const [
-    HomeDashboardSection(),
-    SalesSection(),
-    TailoringSection(),
-    CustomersSection(),
-    AccountsSection(),
-    WorkersSection(),
-    StoresSection(),
-    ManagementSection(),
-    SettingsSection(),
-  ];
 
   Future<void> _handleLogout() async {
     final confirm = await showDialog<bool>(
@@ -70,6 +60,21 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     }
   }
 
+  /// موضع معرّف داخل القائمة المرئية، وأول القائمة إن لم يعد المعرّف مرئياً
+  /// Position of an id inside the visible list, falling back to the first visible section.
+  ///
+  /// السقوط على الأول مقصود: إن سحب مديرٌ صلاحية القسم الحالي أثناء الجلسة فالأفضل قسمٌ ظاهر
+  /// بلا بيانات خاطئة، لا شاشة مرسومة لقسمٍ لم يعد للمستخدم حق دخوله.
+  /// Falling back to the first section is deliberate: when a manager revokes the current section
+  /// mid-session, a visible section beats a screen the user no longer has any right to see.
+  int _indexOfVisible(List<PortalSection> visible, String id) {
+    for (var i = 0; i < visible.length; i++) {
+      if (visible[i].id == id) return i;
+    }
+
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
@@ -77,12 +82,37 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     final displayName = user?.displayName ?? 'الموظف';
     final isMobile = Responsive.isMobile(context);
 
+    // القائمة المرئية مشتقّة في كل بناء: تحديث المنح يغيّرها دون أي إعادة ترتيب يدوية
+    // The visible list is derived on every build, so a grants refresh needs no manual rewiring.
+    final visible = visiblePortalSections(
+      granted: authState.permissions,
+      isAdmin: authState.isAdmin,
+    );
+
+    if (visible.isEmpty) {
+      return NoSectionAvailable(onLogout: _handleLogout);
+    }
+
+    final currentIndex = _indexOfVisible(visible, _currentSectionId);
+
+    // شريط الجوال يحمل ما وُسم منه فقط — القائمة الجانبية ترى التسعة كلها
+    // The mobile bar carries only the sections flagged for it; the drawer sees the full list.
+    final barSections = visible
+        .where((section) => section.showInBottomBar)
+        .toList(growable: false);
+    final barSelectedIndex = barSections.indexWhere(
+      (section) => section.id == visible[currentIndex].id,
+    );
+
     // واجهة القائمة الجانبية المشتركة
     final sideDrawer = CollapsibleSideDrawer(
-      selectedIndex: _currentIndex,
+      sections: visible,
+      selectedIndex: currentIndex,
       onIndexChanged: (index) {
+        // التخزين بالمعرّف لا بالفهرس: الفهرس ملك هذه القائمة المصفّاة لا السجل الكامل
+        // Store the id, not the index — an index belongs to this filtered list, not the registry.
         setState(() {
-          _currentIndex = index;
+          _currentSectionId = visible[index].id;
         });
       },
       isCollapsed: isMobile ? false : _isCollapsed,
@@ -184,43 +214,37 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
             ),
           ],
         ),
-        body: IndexedStack(index: _currentIndex, children: _sections),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex:
-              (_currentIndex >= 0 && _currentIndex < 5) ? _currentIndex : 0,
-          onDestinationSelected: (idx) {
-            setState(() {
-              _currentIndex = idx;
-            });
-          },
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.dashboard_outlined),
-              selectedIcon: Icon(Icons.dashboard_rounded),
-              label: 'الرئيسية',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.point_of_sale_outlined),
-              selectedIcon: Icon(Icons.point_of_sale_rounded),
-              label: 'المبيعات',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.content_cut_outlined),
-              selectedIcon: Icon(Icons.content_cut_rounded),
-              label: 'التفصيل',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.person_outline),
-              selectedIcon: Icon(Icons.person_rounded),
-              label: 'العملاء',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.account_balance_outlined),
-              selectedIcon: Icon(Icons.account_balance_rounded),
-              label: 'الحسابات',
-            ),
-          ],
+        body: IndexedStack(
+          index: currentIndex,
+          children: [for (final section in visible) section.builder(context)],
         ),
+        // الشريط يعرض الأقسام المسموح بها والموسومة له فقط: كانت الوجهة الخامسة فيه تقابل
+        // الفهرس 4 من تسعة، فكان اختيار «الحسابات» يفتح «جاري العاملين»
+        // The bar lists only the sections that are both allowed and flagged for it. Previously its
+        // fifth destination indexed the fourth of nine children, so «الحسابات» opened «جاري العاملين».
+        //
+        // ويغيب تحت وجهتين: `NavigationBar` نفسها تصرخ على أقل من اثنتين، وموظفٌ بمنح قسم واحد
+        // في الشريط لا يحتاج شريطاً — الواجهة التي تنهار أسوأ من الواجهة الفارغة.
+        // It also disappears below two destinations: `NavigationBar` asserts on fewer than two, and
+        // a worker whose grants open one bar section gains nothing from a bar anyway.
+        bottomNavigationBar: barSections.length < 2
+            ? null
+            : NavigationBar(
+                selectedIndex: barSelectedIndex < 0 ? 0 : barSelectedIndex,
+                onDestinationSelected: (idx) {
+                  setState(() {
+                    _currentSectionId = barSections[idx].id;
+                  });
+                },
+                destinations: [
+                  for (final section in barSections)
+                    NavigationDestination(
+                      icon: Icon(section.icon),
+                      selectedIcon: Icon(section.selectedIcon ?? section.icon),
+                      label: section.title,
+                    ),
+                ],
+              ),
       );
     }
 
@@ -324,14 +348,88 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
 
                 Expanded(
                   child: IndexedStack(
-                    index: _currentIndex,
-                    children: _sections,
+                    index: currentIndex,
+                    children: [
+                      for (final section in visible) section.builder(context),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// شاشة «لا قسم متاح» — تصلها حالة واحدة فقط: مستخدم بلا أي صلاحية قسم
+/// The "no section available" screen — reached in exactly one case: a user with no section rights.
+///
+/// وجودها ليس ترفيقاً: الحجب الافتراضي يعني أن موظفاً جديداً لم يُمنح بعد يصل إلى بوابة بلا أي
+/// قسم، ولو مُرّر فهرسٌ إلى `IndexedStack` فارغ لانهارت الشاشة بدل أن تشرح للمستخدم ما الناقص.
+/// مخرجها الوحيد تسجيل الخروج — فلا شيء هنا يمكن أن يفعله بلا منح، ولا معنى لإبقاء واجهة ميتة.
+/// This isn't decoration: deny-by-default means a freshly created, not-yet-granted worker arrives
+/// at a portal with no sections, and an index into an empty `IndexedStack` would crash the screen
+/// instead of explaining what is missing. Its only exit is logging out — there is nothing here a
+/// user without grants could act on.
+class NoSectionAvailable extends StatelessWidget {
+  const NoSectionAvailable({super.key, this.onLogout});
+
+  final VoidCallback? onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.lock_outline_rounded,
+                  size: 56,
+                  color: AppColors.textMuted,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'لم تُمنح بعد أي صلاحية دخول',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'يرجى مراجعة مدير النظام لتفعيل صلاحياتك، ثم تسجيل الخروج والدخول مجدداً',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textMuted,
+                    height: 1.6,
+                  ),
+                ),
+                if (onLogout != null) ...[
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: onLogout,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.error,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: const Text('تسجيل الخروج'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

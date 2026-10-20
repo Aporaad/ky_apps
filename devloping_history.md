@@ -189,22 +189,22 @@
      - اجتياز اختبار `flutter analyze lib` بنجاح تام: `No issues found!`.
 
 
-## [2026-10-04 06:14:00] - ����� DioException ������ RenderFlex �� ��� ��������
-- ����� CancelToken �� WorkerRepository ��� _listCancelToken � _statementCancelToken
-- ����� Overflow �� pagination bar �� Expanded � TextOverflow.ellipsis
-- ����� Overflow �� workers_list_screen.dart �� Flexible ��� ����� Row ������� ������
-- �������: worker_repository.dart - worker_statement_screen.dart - workers_list_screen.dart
+## [2026-10-04 06:14:00] - ����� DioException ������ RenderFlex �� ��� ��������
+- ����� CancelToken �� WorkerRepository ��� _listCancelToken � _statementCancelToken
+- ����� Overflow �� pagination bar �� Expanded � TextOverflow.ellipsis
+- ����� Overflow �� workers_list_screen.dart �� Flexible ��� ����� Row ������� ������
+- �������: worker_repository.dart - worker_statement_screen.dart - workers_list_screen.dart
 
 ---
-## [2026-10-04 23:41:00] - ����� ������� Biometric Authentication - Claude Sonnet 4.6 (Thinking)
-- **������:** ����� ������� ������ �������� ���� ��� ����� ���� ����� ������ ��������� �������
-- **������� ������:**
-  - ������ AuthController.php, User.php Model, routes/api.php
-  - ������ auth_repository.dart, auth_notifier.dart, login_screen.dart, secure_storage_service.dart
-  - ������� Oracle DB: NEW_USERS table ����� 15 ���� (�� ���� ���� biometric)
-  - ������� ����� Oracle ������� (USER_BIOMETRIC_DEVICES ��� �����)
-- **������ ��������:** ����� device_token ����� �� ���� ���� USER_BIOMETRIC_DEVICES + �������� ������� ������ ��� local_auth
-- **�������:** ��� ����� ����� ���� 16 ���� � 16 ��� (5 ���� + 11 ����� + ���� DB ����)
+## [2026-10-04 23:41:00] - ����� ������� Biometric Authentication - Claude Sonnet 4.6 (Thinking)
+- **������:** ����� ������� ������ �������� ���� ��� ����� ���� ����� ������ ��������� �������
+- **������� ������:**
+  - ������ AuthController.php, User.php Model, routes/api.php
+  - ������ auth_repository.dart, auth_notifier.dart, login_screen.dart, secure_storage_service.dart
+  - ������� Oracle DB: NEW_USERS table ����� 15 ���� (�� ���� ���� biometric)
+  - ������� ����� Oracle ������� (USER_BIOMETRIC_DEVICES ��� �����)
+- **������ ��������:** ����� device_token ����� �� ���� ���� USER_BIOMETRIC_DEVICES + �������� ������� ������ ��� local_auth
+- **�������:** ��� ����� ����� ���� 16 ���� � 16 ��� (5 ���� + 11 ����� + ���� DB ����)
 
 
 ---
@@ -221,3 +221,586 @@
     - إضافة وسوم توضيحية (Badges) وأيقونات ملونة بألوان هادئة ومتناسقة مع هوية التطبيق.
     - تحسين مربع حوار اختيار الحسابات للتعديل وعرض الكشوفات المباشرة.
 - **الفحص والتحقق**: تشغيل lutter analyze والتأكد من خلو المشروع تماماً من أي أخطاء أو تحذيرات (No issues found!).
+
+---
+## [2026-10-17 05:25:00] - تنفيذ مرحلة 0 و1 من نظام الصلاحيات IBAC — Qoder Agent
+- **الخطة المرجعية**: `ibac_permissions_plan.md` (v2) — القرارات D1–D9، كتالوج 17 وحدة / 93 صلاحية، الجلسات الانزلاقية الصامتة، واجهات الإدارة المطلوبة.
+- **الملفات المضافة (خلفية Laravel فقط — لم يُمسّ أي كود Flutter بعد)**:
+  - [PermissionCatalog.php](file:///c:/Users/Mujeeb/Desktop/arslan/ky_apps/kyApp_API/app/Support/PermissionCatalog.php):
+    - المصدر الوحيد الصحيح لكتالوج الصلاحيات: الوحدات السبع عشرة بأسمائها العربية، والأفعال الأساسية الأربعة
+      (`view · create · update · delete`) لكل وحدة ثم الصلاحيات الإضافية من بعدها، تماماً كما طلب المستخدم.
+    - يولّد `rows()` الجاهزة للإدراج، و`grouped()` لواجهات اختيار الصلاحيات، و`codes()` و`knows()`
+      و`isValidCode()` للتحقق، و`wildcardFor()` لصيغة المنح العام `module.*` و`system.*`.
+    - `SORT_ORDER = رقم الوحدة × 100 + رقم الفعل` فيظهر الأساسي قبل الإضافي في أي عرض بلا منطق ترتيب.
+  - [01_ibac_schema.sql](file:///c:/Users/Mujeeb/Desktop/arslan/ky_apps/kyApp_API/database/oracle/01_ibac_schema.sql):
+    نص DDL الكامل قابل لإعادة التشغيل، مع تعليق موثّق يمنع تكرار خطأ أسماء التسلسلات المسبوقة.
+  - [02_ibac_seed.php](file:///c:/Users/Mujeeb/Desktop/arslan/ky_apps/kyApp_API/database/oracle/02_ibac_seed.php):
+    بذر 93 صلاحية و10 إعدادات أمان مشتقة من `PermissionCatalog` نفسه (لا تباعد بين الخادم والقاعدة)، idempotent،
+    واستعلامات مربوطة حصراً، والقيم المحرَّرة من المشغّل لا تُستبدل عند إعادة التشغيل.
+  - [03_ibac_bootstrap.php](file:///c:/Users/Mujeeb/Desktop/arslan/ky_apps/kyApp_API/database/oracle/03_ibac_bootstrap.php):
+    49 تعليق قاموس بيانات ثنائي اللغة + ترقية أول مدير نظام بحماية من فقدان الوصول (لا ترقية ثانية إذا وُجد مدير)
+    + منح `system.*` + صفحة تدقيق واحدة.
+  - [04_ibac_rollback.sql](file:///c:/Users/Mujeeb/Desktop/arslan/ky_apps/kyApp_API/database/oracle/04_ibac_rollback.sql): تراجع كامل مرتّب بعكس الاعتماديات.
+- **قرار تنفيذي مهم**: لم تُستخدم Laravel migrations لمخطط الأعمال — لأن `AGENTS.md` يمنع ترحيل مخطط `ACCOUNTS`
+  الإرثي من هذا المستودع؛ بدلاً منها سكربتات `database/oracle/*` تُنفَّذ عبر موصل Oracle وتُوثَّق في `db_commends.md`.
+- **البذر بـ PHP لا SQL**: موصل Oracle عميل `AL32UTF8` وقاعدة البيانات `WE8MSWIN1252`، فتمرير بايتات CP1256
+  من ملف `.sql` يُنتج `0xBF`. المسار الصحيح للكتابة هو `ArabicEncoding::toOracleSearchChars()`.
+- **مشكلتان تم إصلاحهما أثناء العمل**:
+  1. `ORA-04098 / PLS-00302` على المحفِّزات الأربعة: السبب وجود `VIEW` اسمه `ACCOUNTS` داخل المخطط، فـ
+     `ACCOUNTS.SEQ_X.NEXTVAL` يُقرأ كعمود عرض. أُعيد إنشاء المحفِّزات بأسماء تسلسلات غير مسبوقة (كما تفعل
+     محفِّزات النظام القديمة) فصارت `VALID`، وتحقّق البذر أن المحفِّز يملأ `ID` و`PERMISSION_ID`.
+  2. `ORA-01745` عند إدراج سجل التدقيق: اسم الربط `:desc` يحجز كلمة `DESC`؛ استُبدل بـ `:descr`.
+- **مكتشف يجب علاجه في جولة قادمة**: كل مسارات الكتابة العربية في `CustomerController` و`CurrencyController`
+  و`AccountController` تستخدم `encodeForOracle()` أي بايتات خام تُستبدل بـ `0xBF` عند الحفظ عبر اتصال AL32UTF8.
+- **الفحص والتحقق**: جداول جديدة 4 + `APP_USERS_BAK_IBAC`، تسلسلات 5، محفِّزات 4 بحالة `ENABLED/VALID`،
+  فهارس 13، تعليقات 4 جداول + 45 عموداً، `APP_PERMISSIONS=93` (47 أساسية + 17 منحاً عاماً)، `APP_SETTINGS=10`،
+  صفر كائن `INVALID`، وتحقّق `DUMP(NAME_AR)` أن العربية مخزّنة بايتات CP1256 سليمة، وإعادة تشغيل السكربتات
+  أثبتت idempotency (`ADMIN skipped (admins=1)` و`GRANT already granted`).
+
+
+---
+## [2026-10-17 07:17:24] - المرحلة 2: طبقة IBAC في الخلفية (النواة البرمجية)
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **الهدف / Goal:** بناء نواة الصلاحيات والجلسات والإعدادات وسجل النشاط في `kyApp_API` قبل أي واجهة،
+  بحيث تُقرأ الصلاحيات من `APP_USERS_PERMISSIONS` ويُدار عمر الجلسة عبر `PERSONAL_ACCESS_TOKENS.EXPIRES_AT`
+  دون أي تعديل مخطط على جدول التوكنات.
+- **الملفات الجديدة:**
+  1. `app/Http/Middleware/EnsurePermission.php` — حارس صلاحية واحد للمعرّف، يعيد 401 بلا مستخدم و403
+     مع اسم الصلاحية العربي عند الرفض، وتمرير للمطلب عند المنح. وهو أول ملف في مجلد
+      `app/Http/Middleware` (مسموح به في الخطة D9).
+  2. `tests/Feature/IbacCoreTest.php` — 12 اختباراً / 60 تحققاً يغطي القاموس والحل وسياسة الجلسات والحارس.
+- **الملفات المعدّلة:**
+  1. `app/Support/PermissionCatalog.php` — أُضيف `arabicName(string $code)` لرسالة الرفض ثنائية اللغة.
+  2. `bootstrap/app.php` — أول محتوى لـ `withMiddleware()`: الاختصار `permission` → `EnsurePermission::class`
+     (يُستخدم بصيغة `permission:customers.view`).
+  3. `app/Providers/AppServiceProvider.php` — تسجيل `SettingsStore` و`PermissionResolver` و`ActivityLogger`
+     و`SessionPolicy` كـ singleton في `register()`، وتركيب `Sanctum::$accessTokenAuthenticationCallback`
+     في `boot()` يستدعي `SessionPolicy::validate()` مع fallback آمن (`return $isValid`) عند أي استثناء.
+  4. `config/sanctum.php` — إبقاء `expiration => null` مع تحذير موثّق (عربي/إنجليزي) أن تغييره يكسر
+     التجديد الانزلاقي لأن `Guard::isValidAccessToken()` يقيس العمر المطلق من `created_at`،
+     وإضافة `last_used_at => true` لأن شاشة الجلسات النشطة تعتمد على `LAST_USED_AT`.
+  5. `app/Models/User.php` — `IS_ADMIN` إلى `$fillable` وحذف `USER_NO` الوهمي، ودالة `casts()` (رقمنة
+     `user_id/is_activated/is_admin/user_type/branch_no/biometric_enabled`) ودالة `isAdmin()`.
+  6. `app/Support/SessionPolicy.php` — إضافة `prime()` لمنح التوكن الجديد مهلة `session_idle_minutes`
+     كاملة لحظة إصداره، وحذف تعليق `@param PermissionResolver` الخاطئ.
+  7. `app/Support/SettingsStore.php` — إعادة تصميم الكاش بعد حادث `ORA-01461`: `MAX_CACHE_BYTES = 3000`
+     و`CACHED_FIELDS` رقمية فقط، و`definitions()` تقرأ العربية من القاعدة مباشرة بلا كاش.
+  8. `app/Support/PermissionResolver.php` — نفس سقف الـ 3000 بايت على كاش رموز الصلاحيات.
+  9. `app/Http/Controllers/AuthController.php` — إعادة كتابة: حقن `PermissionResolver` و`SessionPolicy`
+     و`ActivityLogger` عبر المنفذ، وكل من `login` و`biometricLogin` يجهّز التوكن الصادر بـ
+     `sessions->prime($accessToken->accessToken)` فور إنشائه، وحملة `user` في الرد تُبنى من
+     `userPayload()` (دالة خاصة جديدة) الذي يدمج
+     الهوية + `is_admin` + `payloadFor()` (قائمة الصلاحيات و`can_*`)، و`me` يعيد نفس الحزمة، و`logout`
+     يسجّل نشاطاً، وكل محاولة دخول فاشلة تُسجَّل في `APP_USER_ACTIVITY` عبر `ActivityLogger`.
+- **قرار مؤجَّل ومدروس:** لم تُنشأ نماذج Eloquent (`AppPermission`/`AppPermissionGrant`/`AppSetting`/`UserActivity`)
+  لأن كل طبقات IBAC تكتب وتقرأ بـ SQL مربوط مباشر على اتصال `oracle`، فإضافة نماذج بلا مستخدم تعارض
+  «لا كود ميت». تُضاف عند الحاجة في مرحلة لاحقة.
+- **التحقق نهاية-to-نهاية (قاعدة حيّة):** انظر `db_commends.md` بنفس الطابع الزمني — توكن فحص حصل على
+  `EXPIRES_AT = created_at + 240 دقيقة`، وبانقضاء المهلة رفضت `SessionPolicy` الجلسة، وسطر نشاط عربي
+  تحقّق بـ `DUMP(...,1016)` أنه بايتات CP1256 سليمة ثم قرئ بـ `fixMojibake()` عربياً صحيحاً.
+- **حادث مكتشف وعولج:** `ORA-01461` في `merge into "CACHE"` — عمود `VALUE` من نوع CLOB لكن Laravel
+  يمرّره عبر `SELECT :value FROM dual` فترفض أوراكل ربطاً يتجاوز 4000 بايت. لولاه لانهار كل طلب مصادَق
+  عليه عند أول قراءة للإعدادات. العالج: كاش صغير ومجرد من العربية (تفصيل في `DBdevloping_history.md`).
+- **أثر اختباري باقٍ:** سطر `login_failed` في `APP_USER_ACTIVITY` من `AuthTest` لم يُحذف لأن سياسة
+  الموافقات منعت الحذف المباشر على قاعدة إنتاجية؛ وهو أول سجل تدقيقي فعلي لمحاولة دخول فاشلة.
+- **بوابات الجودة:** `php -l` (11 ملفاً) بلا أخطاء · `vendor/bin/pint --dirty --format agent` passed ·
+  `vendor/bin/pest` = 21 اختباراً ناجحاً (83 تحققاً) · 55 مساراً لم يتغير عددها.
+
+---
+## [2026-10-18 00:03:42] - المرحلة 3: إدارة المستخدمين ومنح الصلاحيات (الخلفية) — Qoder Agent
+- **ملفات جديدة:**
+  - `kyApp_API/app/Support/PermissionGrantSync.php` — الطريق الوحيد لكتابة المنح. ثلاث دوال:
+    `currentFor(int $userId)` (يُعيد `{ids, codes}` بعد JOIN مع `APP_PERMISSIONS`)، `resolve(array $codes)`
+    (يفصل الصالح عن `unknown` و`inactive` بربط كل كود كـ bind)، و`replace()` داخل
+    `DB::connection('oracle')->transaction()` تحذف منح المستخدم ثم تُدرج المقبول وتُنهي كاش الحلّ بـ
+    `forget()`. وجود الكتابة في مكان واحد يمنع تباعد «الحذف ثم الإدراج» بين controllerين.
+  - `kyApp_API/app/Http/Controllers/UserAdminController.php` — `index`/`show`/`store`/`update`/`toggle`/
+    `destroy`/`activity`. ترقيم أوراكل 11g عبر `ROW_NUMBER() OVER (ORDER BY …)` مع كسر تسلسل ثابت
+    `x.USER_ID ASC`، وعدّاد المنح بـ `LEFT JOIN (SELECT USER_ID, COUNT(*) … GROUP BY USER_ID)`، وقائمة
+    بيضاء `SORTABLE` للفرز، و`conditions()` تبني البحث بالعربية واللاتينية معاً، و`shape()` لا تُمرّر أي
+    عمود حساس (لا كلمة مرور ولا `DEVICE_TOKEN`). الحراس: 409 تكرار الاسم، 422 التحقق (طول كلمة المرور من
+    `SettingsStore`)، 422 حذف/تعطيل الذات، 403 «آخر مدير»، 403 منع التصعيد في المنح، `SEQ_APP_USERS_ID.NEXTVAL`
+    للمعرّف، و`terminateSessions()` تدفع `EXPIRES_AT` إلى الماضي عند التعطيل والحذف.
+  - `kyApp_API/app/Http/Controllers/PermissionController.php` — `index` (الكتالوج مقسّم 17 وحدة × 93 كوداً
+    مع `permission_id` من القاعدة)، `forUser` (`is_admin` + المنح الحالية + الفعّالة)، `syncUser`
+    (يتحقق، يمنع التصعيد، يستدعي `replace()`، يُنهي الجلسات إلا بـ `logout_others=false`، ويسجّل النشاط).
+  - `kyApp_API/tests/Feature/UsersAdminTest.php` (15 اختباراً) و`kyApp_API/tests/Feature/PermissionSyncTest.php`
+    (11 اختباراً) — كلها للقراءة وفروع الرفض: لا تنشئ مستخدماً ولا تعدّل منحاً على قاعدة حيّة.
+- **ملفات مُعدَّلة:**
+  - `AuthController.php` — طريقة `myPermissions()` جديدة على `GET /api/auth/permissions` (تتجاهل كاش الحلّ
+    بـ `forget()` لتعكس جدول المنح لحظياً + `session_expires_at`)، وإضافة `use Laravel\Sanctum\PersonalAccessToken`.
+  - `AppServiceProvider.php` — تسجيل `PermissionGrantSync` كـ singleton.
+  - `routes/api.php` — مجموعة IBAC ثانية: 11 مساراً، كلٌّ خلف `auth:sanctum` ثم `permission:<code>` مع
+    `->where('userId','[0-9]+')`. الإجمالي 66 مساراً (كان 55).
+  - `app/Support/SessionPolicy.php` — إضافة `public static toDate(mixed): ?Carbon` وتمرير قراءات
+    `expires_at` و`created_at` الثلاث منها.
+- **علاج علل مكتشفة أثناء الاختبار:**
+  1. `ORA-00904: "PERMISSION_CODE": invalid identifier` — `currentFor()` كان يقرأ العمود من
+     `APP_USERS_PERMISSIONS`؛ الصحيح JOIN مع `APP_PERMISSIONS` على `PERMISSION_ID`.
+  2. **«Call to a member function isPast()/toDateTimeString() on bool»** — أوراكل تُعيد العمود التاريخي
+     الفارغ كـ `false` أو `''` لا كـ `null`، فالسلسلة الاختيارية تنهار. الأخطر كان في `SessionPolicy`:
+     لو حدث الاستثناء هناك لالتقطه `AppServiceProvider` وأعاد قرار Sanctum الأصلي بصمت، فتُقبل الجلسات
+     القديمة بلا انتهاء ولا تجديد. العالج: `SessionPolicy::toDate()` توحّد الأشكال الأربعة.
+  3. صياغة تحقق في الاختبارات: `assertJsonPath('errors.field[0]', …)` تُعيد دائماً `null` لأن
+     `data_get()` لا تفهم الأقواس — الصحيح `errors.field.0`. الأخطاء الثلاثة عولجت، والحمولات كانت سليمة.
+- **قرارات وانحرافات:** `PermissionGrantSync` طبقة غير مذكورة في §7.1 من الخطة (مبررة بأمن الكتابة)؛
+  11 مساراً بدل 9؛ كتابة العربية في `store()` عبر `toOracleSearchChars()` وليس `encodeForOracle()`؛
+  نماذج Eloquent ما زالت مؤجلة (لا كود ميت)؛ عدد المسارات في الخطة كان تقديرياً.
+- **أثر جانبي نظيف:** أُثناء التشخيص أُنشئ `tests/Feature/TmpProbeTest.php` مؤقتاً لطباعة حمولات 422،
+  وحُذف بعد تأكيد أن الاستجابات صحيحة.
+- **بوابات الجودة:** `vendor/bin/pint --dirty --format agent` (ملف تحكم + مسار + اختبار) ·
+  `vendor/bin/pest` = **47 اختباراً / 199 تحققاً ناجحة** · `php artisan route:list --path=api` = 66 ·
+  لا DDL ولا كتابة على القاعدة في هذه المرحلة.
+
+---
+## [2026-10-18 02:52:11] - المرحلة 4: الجلسات النشطة وإعدادات الأمان (الخلفية) — Qoder Agent
+- **النطاق:** قسمان إداريان جديدان في الخلفية: قائمة الجلسات الحقيقية مع إنهائها فوراً، وشاشة
+  إعدادات الأمان التي تقرأ وتكتب `APP_SETTINGS` بقيودها ونوعها.
+- **`app/Http/Controllers/SessionAdminController.php` (جديد):**
+  - `index()` — قائمة صفحاتها بـ `ROW_NUMBER()` داخل غلافين (لا `OFFSET/FETCH` في أوراكل 11g) مرتّبة
+    بـ `NVL(LAST_USED_AT, CREATED_AT)` تنازلياً. الأعمدة في ثابت `SELECT_COLUMNS` مشروحة:
+    `DBMS_LOB.SUBSTR(t.NAME, 60, 1)` لأن `NAME` عمود CLOB لا يُربط في سياق `MERGE/SELECT` كبير،
+    و`TO_CHAR` لكل تواريخ حتى لا يصل تاريخ فارغ كـ `false` إلى PHP، و`CASE` يشتق الحالة
+    (`disabled` لو `IS_ACTIVATED <> 1`، `expired` لو `EXPIRES_AT <= SYSDATE`، وإلا `active`).
+  - `terminate(int $tokenId)` و`terminateUser(int $userId)` — 404 أولاً عبر `findSession()` ثم
+    `expireTokens()` التي تنفّذ `UPDATE ACCOUNTS.PERSONAL_ACCESS_TOKENS SET EXPIRES_AT = SYSDATE - 1,
+    UPDATED_AT = SYSDATE` (بلا بدائل جدول: أوراكل لا تقبل `UPDATE … t` )، وكلاهما يسجّل
+    `sessions.terminate`. الأثر: الطلب التالي للمستخدم يرجع 401 فيأخذه `ErrorInterceptor` إلى
+    `clearAll()` ثم `forceLogout()` — أي خروج فوري بلا أي كود عميل جديد.
+  - `conditions()` تبني المرشّحات (نوع حامل التوكن، `user_id`، الحالة، والبحث بالعربية واللاتينية على
+    `USER_NAME_EN/AR` و`DEVICE_NAME`)، و`countMatching()` تربط ما تستخدمه العبارة فقط
+    (`array_diff_key` عن `rn_from/rn_to`) تفادياً لـ `ORA-01008`.
+  - `shape()` لا تُخرج أبداً قيمة التوكن ولا `ABILITIES`؛ تعطي `minutes_left` والتسمية العربية للحالة
+    و`is_current` من `currentTokenId()`.
+- **`app/Http/Controllers/SettingController.php` (جديد):**
+  - `index()` — `SettingsStore::definitions()` (قراءة مباشرة من القاعدة: الحمل فيه عربية وسقف كاش
+    أوراكل 4000 بايت) مع `value` محوَّلاً لنوعه و`raw_value` والحدود و`is_lockable` و`sort_order`.
+  - `update()` — تحقّق `present|array|min:1` على `items` و`items.*.key` مطلوب ≤ 60 و`value` nullable؛
+    ثم المفتاح المقفل يحتاج `settings.security_manage` وإلا 403 بـ `errors.locked_keys`؛ ثم معاملة
+    واحدة على اتصال `oracle` تمرّ كل عنصر عبر `SettingsStore::set()` الذي يفرض النوع والحدود.
+    `null` يعني «لم يُرسل» فيُتخطّى، والنص الفارغ مسحٌ مقصود (`maintenance_message`).
+    `InvalidArgumentException` ⇒ 422 بـ `errors.setting` و`flush()`؛ والنجاح يكتب وصفاً تدقيقياً
+    «اسم الإعداد من «…» إلى «…»» ويرجع المتغيّرات فقط مع `meta.changed`.
+- **`app/Support/SettingsStore.php`:** أُضيفت `flush()` علنية. أصلان جوهريان:
+  - `normalize()` كانت `filter_var($value, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_UNSET)` — والثابت
+    الأخير غير موجود أصلاً، وفي نطاق `App\Support` اشتُغل كمُعرِّف غير معرّف فأعطى 500 عند حفظ أي
+    إعداد `bool`. صارت قائمة صريحة (`match` على النوع ثم `in_array` صارم) ترفض الغريب بدل أن تفسّره
+    false بصمت.
+  - `set()` كانت تربط `UPDATED_BY = :by` — و`BY` كلمة محجوزة في أوراكل ⇒ `ORA-01745` عند الحفظ.
+    أعيدت التسمية إلى `:setting_value` / `:updated_by` / `:setting_key` مع تعليق يمنع تكرار الخطأ.
+- **`app/Http/Controllers/UserAdminController.php`:** نفس المسح الشامل لأسماء المربَطات كشف أن
+  `toggle()` كانت تستخدم `:by` و`:next` ⇒ كانت ستموت عند أول تعطيل مستخدم من الواجهة. صارت
+  `:activated` و`:updated_by`.
+- **`routes/api.php` (تعديل):** 5 مسارات جديدة داخل مجموعة `auth:sanctum` ثانية:
+  `GET /sessions` (`sessions.view`) · `DELETE /sessions/user/{userId}` و`DELETE /sessions/{tokenId}`
+  (`sessions.terminate`، مع `{id}` مقيّد بـ `[0-9]+`) · `GET /settings` (`settings.view`) ·
+  `PUT /settings` (`settings.update`). المسار `/sessions/user/…` مُعلَن قبل `/sessions/{tokenId}` حتى
+  لا يبتلعه المعرّف العام.
+- **الاختبارات:** `ActiveSessionsTest` (401 ×3، 403 ×3 بالاسم، شكل المظروف وعدم تسرّب التوكن،
+  مقيّد الحالة والمستخدم، سقف 200، العربية السليمة، 404 على معرّف مجهول، عبارة الإنهاء لا تمسّ صفوفاً
+  في الاختبار، و`SessionPolicy::validate()`/`toDate()`) — 12 اختباراً / 152 تحقّقاً.
+  `SecuritySettingsTest` (401 ×2، 403 للقراءة والكتابة، شكل التعريفات وأنواعها وحدودها، رفض مفتاح
+  مجهول مع بقاء عدد الصفوف 10، رفض قيمة خارج الحدود أو بنوع خاطئ، وأن الدفعة المرفوضة لا تُفسد نسخة
+  الكاش) — 10 اختبارات / 98 تحقّقاً.
+- **سلامة الاختبارات على قاعدة حيّة:** العنصر المرفوض وُضع أولاً في اختبار «الدفعة المرفوضة» حتى
+  يسقط داخل `normalize()` قبل أي عبارة `UPDATE` — لا نكتب ثم نتراجع على قاعدة إرث، بل لا نكتب أصلاً.
+- **بوابات الجودة:** `vendor/bin/pest` = **69 اختباراً / 449 تحقّقاً ناجحة** ·
+  `vendor/bin/pint --dirty --format agent` = passed · `php artisan route:list --path=api` = **71** ·
+  تأكيد قراءة: `APP_SETTINGS` بعشرة صفوف و`UPDATED_BY` فارغ و`password_min_length=4` و
+  `session_idle_minutes=240` — لم تتغيّر.
+- **التالي (لم يبدأ):** المرحلة 5+6 في Flutter — نواة الصلاحيات، `PermissionGate`، وتوحيد الأقسام.
+
+## [2026-10-19 01:47:33] - المرحلة 5+6: نواة الصلاحيات في Flutter وتوحيد أقسام البوابة — Qoder Agent
+**الوقت:** 01:47:33 · **النموذج:** Qoder Agent · **النطاق:** العميل فقط (لا مسار API جديداً، لا DDL)
+
+### الملفات الجديدة
+- **`lib/core/constants/permission_codes.dart`** — `class Perm { Perm._(); … }`: 93 ثابتاً موزّعة على
+  17 وحدة، كل وحدة تبدأ بـ `xxxWildcard = 'module.*'` ثم `view/create/update/delete` وأفعالها الخاصة
+  (`customers.edit_limit`، `accounts.structure_manage`، `currencies.prices_view|prices_manage`،
+  `users.permissions_manage|activity_view|admin_flag_manage`، `sessions.terminate`،
+  `settings.security_manage`). `allPermissionCodes` بترتيب الكتالوج، و`permModuleOrder`/`permModuleLabels`/
+  `permActionLabels` للترويسات، و`permModuleOf/permActionOf/permModuleTitle`، و`permWildcardOf(module)` أُضيفت في نفس الجلسة لتوليد `module.*` من موضع واحد بدل تكرار النص في ثلاث نقاط.
+- **`lib/core/utils/permission_check.dart`** — ثلاث دوال مجرّدة بمعاملات مسماة
+  (`granted/isAdmin/code|codes`) تعيد نفس قرار `PermissionResolver::can` بالترتيب: مدير ⇒ نعم،
+  كود فارغ ⇒ لا، `system.*` ⇒ نعم، الكود الحرفي ⇒ نعم، `module.*` ⇒ نعم، وإلا لا.
+  `canAnyCode([])=false` (رفض افتراضي) و`canAllCode([])=true` (لا شيء مطلوب).
+- **`lib/features/auth/data/models/permission_snapshot_model.dart`** — الحِمل الواحد الذي يمنعه
+  تمرير ثلاث قيم متفرقة من ضياع حقل في مسار. `isEmpty` تتجاهل المنح الفارغة، و`_parseNullableString`
+  تعتبر `false` (وهكذا يعود عمود `DATE` الفارغ عبر بعض مسارات القراءة في أوراكل) غياباً لا نصّاً.
+- **`lib/features/auth/presentation/providers/permissions_notifier.dart`** — `PermissionsState`
+  (حالة المزامنة فقط) + `PermissionsNotifier with WidgetsBindingObserver`: أرضية 15 ثانية بين
+  الاستدعاءات، `didChangeAppLifecycleState` يقرأ الحالة الجديدة عند `resumed` فقط، `refresh()` يلغي
+  الاستدعاء الأقدم بـ `CancelToken` ولا يكتب شيئاً إن كان الملغي هو صاحبه، ويكتب عبر
+  `authNotifierProvider.notifier.applyPermissions(snapshot)` وحده.
+- **`lib/core/widgets/permission_gate.dart`** — `PermissionGate` يراقب بـ `select` قرار كود واحد فلا
+  يعيد الرسم عند كل تحديث حالة؛ والإخفاء هو الافتراضي لأن الزر المعطّل يعلن وجود ما حُجب. امتداد
+  `WidgetRef` (`can/canAny/canAll/isSystemAdmin`) يستخدم `read` لأنه يجيب شرطاً واحداً داخل `build`؛
+  القرارات التي يجب أن تُعاد رسمتها عند تغيّر المنح توضع داخل `PermissionGate`.
+- **`lib/features/employee_portal/domain/portal_sections.dart`** — السجل الوحيد للأقسام التسعة
+  (انظر التفاصيل أدناه).
+
+### الملفات المعدّلة
+- **`lib/features/auth/data/models/user_model.dart`** — حقلا `isAdmin`/`permissions` + `permissionSet`
+  + `userTypeLabel`؛ `fromJson` يقرأ `is_admin` دفاعياً (bool أو 1/0) و`permissions` كقائمة نصوص،
+  و`toJson` يعيدهما حتى لا تُفقد المنح عند تخزين نسخة المستخدم.
+- **`lib/core/storage/secure_storage_service.dart`** — ثلاثة مفاتيح جديدة
+  (`ky_user_permissions`، `ky_is_admin`، `ky_session_expires_at`) مع قارئات/كاتبات دفاعية،
+  `clearPermissions()`، و`clearAll()` صارت تحذف الثلاثة: منح مخزّونة بعد الخروج تُبقي واجهة مرسومة
+  على جلسة ميتة. `purgeEverything()` كما هي (`deleteAll`).
+- **`lib/core/constants/api_constants.dart`** — `permissions = '/auth/permissions'`.
+- **`lib/features/auth/data/repositories/auth_repository.dart`** — `fetchPermissions({cancelToken})`
+  بأربعة مسارات مميّزة: نجاح ⇒ تثبيت + حمولة، إلغاء ⇒ استعادة من الكاش بلا توسيم، **الخادم ردّ خطأ**
+  ⇒ `clearPermissions()` + `PermissionSnapshot.denied`، تعذّر الوصول ⇒ إبقاء الكاش (الخادم ما زال
+  صاحب القرار في كل طلب). `_deriveModules()` تعيد بناء `modules` من الأكواد كما يفعل `payloadFor()`.
+- **`lib/features/auth/presentation/providers/auth_notifier.dart`** — حالة IBAC في `AuthState`،
+  `applyPermissions()`/`clearPermissions()`، ربط `login` و`loginWithBiometric` بـ
+  `withPermissions(_snapshotFrom(response.user!))`، و`logout`/`forceLogout` يبنيان حالة نظيفة مع
+  الحفاظ على `selectedUserType` وحقول البصمة. **إصلاح انحدار:** `checkAuthStatus()` كانت تعيد بناء
+  `AuthState` من الصفر فتمسح نوع المستخدم المختار على شاشة الدخول؛ صار يُمرَّر
+  `selectedUserType: state.selectedUserType`. `copyWith` أبقت دلالة `errorMessage` القديمة (تمسح عند
+  كل تحديث) لأن تحويلها إلى خدعة الإغلاق كان يكسر كل مواضع الاستدعاء الموجودة.
+- **`lib/features/employee_portal/presentation/screens/employee_main_layout.dart`** — حذف استيراد
+  الأقسام التسعة وقائمة `_sections`؛ المخزّن `_currentSectionId`؛ في كل بناء:
+  `visiblePortalSections(granted: auth.permissions, isAdmin: auth.isAdmin)` ← `_indexOfVisible` (يسقط
+  على الفهرس 0 إن لم يعد المعرّف مرئياً) ← `barSections = visible.where(showInBottomBar)` ←
+  `IndexedStack(index: currentIndex, children: [for (s in visible) s.builder(context)])`.
+  شريط الجوال يختفي تحت وجهتين، و`NoSectionAvailable` تستقبل صفر أقسام.
+- **`lib/features/employee_portal/presentation/widgets/collapsible_side_drawer.dart`** — لا `_menuItems`
+  داخلية بعد الآن؛ تستقبل `List<PortalSection> sections` وترسم منها.
+- **`lib/features/customers/presentation/screens/customers_dashboard_screen.dart:352`** — حبة النص
+  الفرعي صارت داخل `Flexible` مع `maxLines: 1` و`TextOverflow.ellipsis` (كانت تتجاوز البطاقة).
+
+### الاختبارات
+- **`test/ibac_test.dart` (جديد)** — 5 مجموعات: تطابق الكتالوج (93 كوداً، بلا تكرار، كل كود
+  `module.action` بوحدة مُسمّى، كل وحدة لها wildcard، كل فعل مُسمّى)، قواعد الحلّ (رفض بلا منح، تجاوز
+  المدير، `system.*`، الكود الحرفي، `module.*` على وحدته فقط، الكود الفارغ، `canAny([])`/`canAll([])`),
+  تحليل `PermissionSnapshot` (snake/أحرف كبيرة/`false` كتاريخ فارغ/`denied`/`mergeWith`)، ربط
+  `AuthState` (`withPermissions`، `canSeeSection(null)`، مسح الموعد بخدعة الإغلاق فقط)، حقول `UserModel`،
+  وسجل الأقسام (معرّفات فريدة، الشريط ≤ 5، كل قسم يفتح بوحدته، بلا منح ⇒ `settings` فقط، المدير ⇒
+  التسعة، «جاري العاملين» بثلاثة سجلات، الترتيب من السجل لا من المنح، ولا فهرس عفا عليه الزمن).
+- **`test/responsive_layout_test.dart`** — مجموعة `Portal sections follow the grants` (6 اختبارات)
+  عبر `_StubAuthNotifier extends AuthNotifier` يعيد `build()` الحالة مباشرة فلا شبكة ولا لمس
+  للتخزين الآمن: مدير على المكتب يرى التسعة ولا شريط، مدير على الجوال ⇒ خمس وجهات، منح مقيّدة
+  تخفي الأقسام المحجوبة، وقسم واحد في الشريط ⇒ لا شريط (كان انهياراً حقيقياً).
+- **مطابقة الخادم–العميل آلياً:** قارن سكربت مؤقت `PermissionCatalog::codes()` بـ `allPermissionCodes`
+  ⇒ 93/93، بلا فرق في المحتوى ولا في الترتيب. حُذف الملف المؤقت بعد التحقق.
+- **بوابات:** `flutter analyze` = No issues found! · `flutter test` = 44 ناجحة.
+- **قراءة Oracle (لا كتابة):** 93 صلاحية منشّطة، منح منشّطة واحدة، `APP_USERS.IS_ADMIN` موجود.
+- **التالي:** المرحلة 7 (D3) ثم المرحلة 8 (واجهات الإدارة).
+
+---
+
+## [2026-10-19 02:59:38] المرحلة 7 — ختم مسارات الأعمال بالصلاحيات (الخلفية فقط) · Qoder Agent
+
+**النطاق:** تعديل في `kyApp_API/` دون أي ملف Dart. العميل لم يتغير لأن `AuthInterceptor` يرسل
+`Authorization: Bearer` على كل طلب سلفاً، فمساراً مقفلاً يجد جلسته موجودة أصلاً.
+**Scope:** backend-only. The Dart side needed no change because `AuthInterceptor` already attaches the
+bearer token to every request, so a sealed route always finds a session present.
+
+### الملفات المعدّلة
+
+- **`kyApp_API/routes/api.php`** — إعادة كتابة مقطع الأعمال بالكامل إلى مجموعات
+  `Route::middleware('auth:sanctum')` مع `->middleware('permission:<code>')` على كل فعل:
+  - `/customers/**`: `view` للقائمة والتفصيل، `create`/`update`/`delete` للكتابة، و
+    `statement` منفصل للكشف — لأن من يرى الأسماء لا يرى أرصدتهم بالضرورة. ترتيب المسارات قدّم
+    `{custNo}/statement` على `{custNo}` حتى لا تبتلعه النمط العام.
+  - `/workers/{employees,cutters,tailors}/**`: ثلاث وحدات صلاحيات مستقلة فعلياً
+    (`employees.*`, `cutters.*`, `tailors.*`) لأن صلاحية إدارة خيّاط لا يجب أن تعني صلاحية إدارة
+    قصّاب. الأفعال: `view`/`create`/`update`/`delete`/`toggle`/`statement`.
+  - `/accounts/**`: التقسيم على وزن الخطر — قراءة الشجرة `accounts.view`، بنود `CHART_ACC`
+    بـ `create`/`update`، تعديل الهيكل نفسه (مجموعات جزئية) بـ `accounts.structure_manage`،
+    والكشوف بـ `accounts.statement`.
+  - `/currencies/**`: دليل العملات `currencies.view/create/update/delete` وأسعار الصرف
+    `currencies.prices_view` و`currencies.prices_manage` — إضافة عملة قوةٌ مغايرةٌ لتغيير سعر
+    اليوم الذي تُقيَّم به كل الحركات.
+  - `/invoices/**` (2) → `invoices.view`.
+  - `/selectFromTable` → `permission:system.*` (أعلى منحنى في الكتالوج) بدل أن يبقى عاماً.
+- **`kyApp_API/app/Http/Controllers/TableQueryController.php`** — طبقتا حجب جديدتان:
+  `DENIED_TABLES` (11 جدولاً) تُطبَّق قبل استعلام الوجود وترجع 403 مع
+  `errors.table_name = ['restricted_table']`، و`DENIED_COLUMNS` (`PASSWORD`, `DEVICE_TOKEN`, `TOKEN`,
+  `SECRET`, `KEY`) تُنقّح من صفوف أي جدول مسموح، والرد يصرّح `redacted_columns` كي لا يكون الحذف
+  صامتاً. الدالة الخاصة `redactSensitiveColumns(iterable): array` تعيد `[الصفوف, الأسماء المحذوفة]`
+  لأن أوراكل يردّ الصفوف `stdClass` فيُحوَّل كل صفّ إلى مصفوفة بلا تغيير ترتيب الأعمدة الباقي.
+- **`kyApp_API/app/Http/Controllers/InvoiceController.php`** — العلة **C5** من `AGENTS.md` أُغلقت:
+  غلاف موحّد بدل `response()->json($collection)` العاري، و`ArabicEncoding::cleanData()` على البيانات
+  (كان اسم العميل يصل مكسور الترميز)، وبحث يدوي (`BILL_NO` رقمياً أو `CUST_NAME` بكلتا الصيغتين عبر
+  `toOracleSearchChars`)، وتصفح `page`/`limit` بنفس `meta` الذي يستخدمه `CustomerController`
+  (`{total, page, limit, pages}`)، و`show` صار 404 مغلّفاً بدل `null` مجرّد، وأعمدة الاستعلام
+  أصبحت ثابت `COLUMNS` مشتركاً بين المسارين بعد أن كان تكرارها حرفياً أول سبب انحرافهما، و`$type`
+  hints علنية (`Request`, `int $billNo`, `: JsonResponse`).
+
+### القرارات والعلل
+
+- **لا منح ترحيبية (كانت البند 6 من الخطة):** تحقّق قراءة-only أظهر أن `APP_USERS` يحتوي مستخدماً
+  واحداً (`arslan`, `IS_ADMIN=1`, `IS_ACTIVATED=1`)، والمدير يتجاوز جدول المنح في `PermissionResolver`
+  قبل أي فحص — فخطر طرد مستخدمين حقيقيين الذي من أجله وُضع ذلك البند غير موجود فعلياً، وتُركت القاعدة
+  بلا كتابة. البند يبقى مطلوباً عند أول مستخدم غير مدير يُنشأ في المرحلة 8.
+- **مسارات الجلسة الذاتية بقيت بلا صلاحية عمداً** (`logout`, `me`, `user`, `auth/permissions`,
+  `biometric/register`, `biometric/revoke`): اشتراط منحٍ لقراءة المرء منحَه يجعل المستخدم بلا صلاحيات
+  عاجزاً عن معرفة أنه كذلك، واشتراطها للبصمة يمنع تسجيل الدخول أصلاً.
+- **`/api/hello` بقي عاماً** لأنه فحص الاتصال الذي تشغّله شاشة إعدادات الواجهة قبل وجود أي جلسة.
+
+### الاختبارات والبوابات
+
+- **`tests/Feature/BusinessRoutesSealedTest.php`** (جديد، 6 اختبارات / 68 تحقّقاً): عقد السطح العام
+  (المسارات العامة = الثلاثة بالضبط، مقارنة مرتّبة لا مجموعة)، وكل مسار محمي يحمل حارس صلاحيات بعد
+  استثناء الستة الذاتية، و19 فعلاً غير مصادق ⇒ 401، و14 فعلاً لمستخدم بلا منح ⇒ 403 مع تسمية الكود
+  الصحيح لكل وحدة، ومرور المدير على القراءة المختومة، وغلاف الفواتير الجديد (بنية + ترميم عربية
+  مشروط بوجود صفوف لأن جدول الإرث قد يكون فارغاً).
+- **`tests/Feature/TableQueryTest.php`** — أُعيدت كتابته ليعكس القفل: اختبار 401 بلا جلسة أولاً،
+  وبقية الحالات خلف `Sanctum::actingAs` على المدير الحيّ، مع اختباري الرفض الجديدين (جدول ممنوع
+  ⇒ 403 حتى للمدير، ولا عمود اعتماد يخرج من جدول مسموح).
+- **بوابات:** `vendor/bin/pint --dirty --format agent` = fixed (ملفان) · `vendor/bin/pest` =
+  **78 اختباراً / 533 تحقّقاً** ناجحة كلها · `php artisan route:list --path=api` = **71** (لا زيادة
+  ولا نقص في العدد — التغيير كان في الطبقات لا في المسارات) · `flutter analyze` = No issues found! ·
+  `flutter test` = 44 ناجحة (لم تلمسها هذه المرحلة، جرت للتأكيد).
+
+---
+
+## [2026-10-19 08:59:30] المرحلة 8 — واجهة الإدارة الكاملة (Flutter) · Qoder Agent
+
+### ما بُني
+
+`lib/features/admin/` (36 ملفاً) فوق المسارات الخلفية الـ 17 التي خُططت في المراحل 2–4، بهيكل
+`data/{models,repositories}` + `presentation/{providers,screens,widgets}` المطابق لبقية الميزات:
+
+- **الموديلات (7 + 2 مشتركين):** `AppUserModel` · `AppPermissionModel` (+`AppPermissionModule`) ·
+  `AppSessionModel` · `AppSecuritySettingModel` · `UserActivityModel` · `AdminResult` ·
+  `PagedResult`. كلها تقرأ مفتاحين (`USER_NAME_AR` و`user_name_ar`) لأن الخادم يمرّر صفوف أوراكل
+  خاماً في بعض المسارات، وكل حقل عربي يمرّ بـ `JsonValues.asArabic()` → `ArabicEncodingUtils.fix()`
+  قبل أن يُعرض، والأرقام تُحلّ بمحللات دفاعية (`asInt`/`asDouble`/`asFlag`) لا بـ `int.parse`.
+- **المستودعات (4):** `AdminUserRepository` (`/users` + `/users/{id}` + `/toggle` + `/activity`) ·
+  `PermissionRepository` (`/permissions`، `/users/{id}/permissions` GET/PUT) ·
+  `SessionRepository` (`/sessions`، `/sessions/{id}`، `/sessions/user/{id}`) ·
+  `SecuritySettingRepository` (`/settings` GET/PUT). كلٌّ يستقبل `CancelToken` ويعيد `AdminResult`
+  أو `PagedResult` ولا يلمس `Dio` أي طبقة أخرى.
+- **المزوّدون (6):** `adminUsersProvider` (التأخير 300ms في الشاشة لا هنا، و`CancelToken` واحد لكل
+  طلب جديد يلغي السابق فلا تكتب نتيجة قديمة فوق الأحدث) · `assignPermissionsProvider` ·
+  `activeSessionsProvider` · `securitySettingsProvider` ·
+  `userActivityProvider` · `permissionsCatalogProvider` كـ `FutureProvider` يُعيد رمي الفشل عمداً
+  كي تظهر «إعادة محاولة» بدل مجموعة فارغة توحي أن النظام بلا صلاحيات.
+- **الشاشات (10):** `ManagementDashboardScreen` · `AdminUsersScreen` · `UserFormScreen` (+
+  `AddUserScreen`/`EditUserScreen` غلافان رفيعان) · `AssignPermissionsScreen` ·
+  `UserActivityScreen` · `ActiveSessionsScreen` · `SecuritySettingsScreen` ·
+  `PermissionsCatalogScreen` · `UserPickerScreen`.
+- **الودجات (9):** `UserCard` (خمسة أفعال، كل فعل بصلاحية) · `UserFormWidget` ·
+  `PermissionsPickerWidget` · `PermissionModuleGroup` · `SessionCard` · `ActivityTile` ·
+  `SettingTile` · `admin_filter_sheet` (`showAdminFilterSheet`) · `user_picker_screen` (منتقي
+  مشترك يسكن `widgets/` لأنه يُستدعى من ثلاث شاشات لا من الموجه).
+
+### قرارات تصميم نُفِّذت كما جُمِّدت
+
+1. **D8 — المنتقي داخل النموذج:** الإنشاء والتعديل يمرّان بنموذج واحد، والمنح تُرسل في نفس طلب
+   الحفظ فيطبّقها الخادم ذرّياً؛ لا شاشة منح منفصلة إلّا كمدخل سريع من البطاقة.
+2. **D1 — تجاوز المدير خارج جدول المنح:** كل بوابة كتابة تُظهر «مدير النظام» بدل صناديق التحديد
+   عندما يكون الهدف مديراً، فلا يُعرض على المستخدم ما لا يستطيع تعديله.
+3. **منع التصعيد:** الصف الذي لا يملكه الممنِح يُظلَّل ولا يقبل اللمس (`canGrant`)، والخادم يبقى
+   الحاجز الحقيقي بـ `not_held` — التحذير قبل الإرسال لا المفاجأة بعده.
+4. **«تحديد كل القسم» لا يرسل `module.*`:** الوايلدكارد أوسع من مجموع أفعال القسم (يغطي ما يُضاف
+   لاحقاً) ومدير بلا `system.*` لا يستطيع إرساله أصلاً، فيُرسل الأفعال الحرفية المرئية.
+5. **مؤقّت واحد للشاشة:** `ActiveSessionsScreen` يملك `Timer.periodic` واحداً ويمرّر `now` لكل
+   بطاقة؛ عشرين بطاقة بعشرين مؤقّت = عشرين مصدراً لإعادة الرسم وأربعين مصدر إلغاء بلا مقابل.
+6. **الحجب بالبوابة لا بالشرط:** `PermissionGate` يقرأ من `authNotifierProvider.select(...)` كوداً
+   واحداً، فلا إعادة بناء للشاشة كلها عند أي تغيّر في المُنح.
+
+### العلل التي ظهرت من الاختبار لا من القراءة
+
+هذه الجولة أضافت اختبارات ثم أصلحت ما كشفته — لا العكس:
+
+- **`LateError: Field '_changePassword' has not been initialized`** في `UserFormWidget`: الحقل كان
+  `late bool` بلا إسناد في `initState`، فكل نموذج تعديل كان ينهار عند أول بناء؛ نموذج الإنشاء كان
+  ينجو بالصدفة لأن `widget.isCreate || _changePassword` يقصر التقييم. صار `bool _changePassword =
+  false;` — والتعديل لا يرسل كلمة مرور إلا إذا صرّح المستخدم بتغييرها.
+- **زرّا «تحديد كل القسم» و«الأساسيات» كانا يظهران أثناء البحث** فيعرض «كل القسم» محقَّقاً بينما
+  الشاشة تعرض خمس نتائج فقط، ويظهران أيضاً عندما يكون الهدف مديراً مقفلاً. أُضيف شرط
+  `!isSearchOn && !disabled` وحُذف حقل `_QuickRow.disabled` الذي لم يعد له معنى.
+- **RenderFlex على الجوال (جملة مواطن):** `Wrap` يقيس أبناءه بعرض غير محدود، فأي `Row` داخله يتجاوز
+  الحافة عند نصّ طويل — الوقت المتبقي في `SessionCard` ورقائق «أساسيات القسم» والسطر السريع في
+  المنتقي. المعالج الصحيح: `LayoutBuilder` حول `Wrap` يمرّر `maxWidth` إلى `ConstrainedBox` ثم
+  `Flexible` حول النص بـ `maxLines: 1` و`overflow: TextOverflow.ellipsis` — لا توسيع الخط ولا
+  تصغير الاختبار.
+- **رأس `SessionCard`:** شارة «هذه الجلسة» والوقت «ساعتان و20 دقيقة» كانا يأخذان عرضهما الطبيعي
+  فيسحقان عمود الاسم إلى 69px ثم يفيضان. صار التوزيع `Expanded(flex: 3)` للهوية و
+  `Expanded(flex: 2)` للحالة، مع `Flexible` حول الشارة و`maxLines: 1 + ellipsis` داخل `_Badge` —
+  لا عنصر واحد يتجاوز ما أُعطي له.
+- **أزرار إنهاء الجلسة** انتقلت من `Row` إلى `Wrap(spacing: 8, runSpacing: 6)` لأن زرين أعرض من
+  بطاقة جوال.
+- **تسريب لاتينية في تعليق عربي:** «لا كتابة على حالة_after_dispose» في `admin_users_provider.dart`
+  صُحِّح إلى «… بعد التفكيك» — قاعدة هذا الملف أن التعليق العربي لا يخلط المحارف.
+- **`_List` في `ActiveSessionsScreen`** حُوّل من `ConsumerWidget` إلى `ConsumerStatefulWidget`:
+  حوارات التأكيد ورسائل النتيجة تحتاج `context` و`mounted` بعد انتظار المستخدم، وحوار يُجاب بعد
+  إلغاء الشاشة كان سيتحدّث على سياق ميت.
+
+### الاختبارات الأمامية (§8.5)
+
+- **`test/ibac_test.dart`** — 20 اختباراً في خمس مجموعات: قواعد الحلّ as-is عن
+  `PermissionResolver::can` (مدير ⇒ صحيح، `system.*` ⇒ كل شيء، فعل حرفي، وايلدكارد قسم، رفض
+  الافتراض)؛ سلامة مطابقة الأكواد (لا تكرار، كل قسم في `permModuleOrder` له عنوان ووايلدكارد،
+  كل فعل حرفي معلن في قسمه)؛ قراءة ما ترسله أوراكل فعلاً (مفاتيح عليا + أرقام نصية `'7'/'1'/'0'` +
+  `'ÎÇáÏ'` ⇒ `'خالد'`)؛ سجل الأقسام (معرّفات فريدة، عناوين فريدة، ≤5 في شريط الجوال، كل `viewCodes`
+  كوداً حقيقياً)؛ وسلوك المنتقي (التحديد الشامل يرسل أفعالاً حرفية ولا يرسل `customers.*` أبداً،
+  الأساسيات تنتقي `isCore`، الاختفاء أثناء البحث والقفلة، ومنح ما لا يملكه الممنِح مستحيل).
+- **`test/responsive_layout_test.dart`** — مجموعة «Admin screens render at both breakpoints»:
+  9 شاشات × حجمين (360×640 و1280×800) = 18 حالة، بمزيفات مستودعات تمتد من الأصلية وتُبطل كل
+  أسلوب عبر `overrideWith` فلا تلمس أي شاشة `Dio` ولا `flutter_secure_storage`، وبتثبيت
+  `authNotifierProvider` على جلسة مدير (`isAdmin: true`) حتى تُرسم أزرار الكتابة والحذف ولا يُختبر
+  فرع الرفض وحده. البوابة `expect(tester.takeException(), isNull)` هي ما كشف العلل أعلاه.
+  شاشة الجلسات تُفكَّك بـ `pumpWidget(const SizedBox())` عمداً وإلا بقي مؤقّت الدقيقة معلّقاً.
+
+### البوابات
+
+`flutter analyze` = **No issues found!** · `flutter test` = **51 ناجحة / صفر فشل** (20 IBAC + 27
+responsive/portal + 4 نماذج سابقة) · الخلفية لم تُمَسّ في هذه المرحلة فلم تُعد Pint/Pest (آخر قياس
+78 اختباراً / 533 تحقّقاً على 71 مساراً).
+
+### ما لم يُنفَّذ لأنه يحتاج إذناً
+
+القبول اليدوي لـ §10 (مستخدم ثانٍ غير مدير، منح ترحيبية، دورة حياة كاملة، إنهاء جلسة على جهاز
+حقيقي، حفظ إعدادات) كلّه كتابة في `ACCOUNTS` الحيّ — متوقف على موافقة صريحة من المستخدم.
+
+---
+
+## [2026-10-20 00:45:10] المرحلة 9 — التوثيق والإغلاق النهائي (مسار كتابة العربية + دليلَي الوكلاء) · Qoder Agent
+
+### ما نُفِّذ ولمسة الكود
+
+- **`kyApp_API/app/Support/ArabicEncoding.php`** — حُذف `encodeForOracle()` بالكامل. كان ينتج سلسلة
+  بايتات CP1256 خاماً ويربطها كما هي؛ ولأن اتصال PHP بـ `AL32UTF8` فإن أوراكل تُعيد تفسير تلك البايتات
+  كمقاطع UTF-8 غير صالحة وتضع مكانها `0xBF`. القياس المباشر على `خالد سالم` أعطى `bf,bf,bf` — ثلاث
+  محرفات بدل تسعة، أي إتلاف للقيمة لا تشويه عرضي. `toOracleSearchChars()` صار المسؤول عن الكتابة
+  والبحث معاً: يحوّل كل بايت CP1256 إلى المحرف اللاتيني ذي الكود نفسه (`0xD6` ⇒ `U+00D6`) فيستقر
+  البايت في القاعدة كما تفعل صفوف نظام الشركة القديمة، ثم يصلحه `fixMojibake()` عند القراءة.
+- **`CustomerController` (6 مواضع) · `AccountController` (4) · `CurrencyController` (6)** —
+  استبدال `encodeForOracle(` ← `toOracleSearchChars(` في مسارات الإدراج والتحديث والبحث، ثم
+  `vendor/bin/pint --dirty` على الملفات الثلاثة (أعاد تنسيقها كلياً لأن بعضها لم يمرّ على Pint منذ
+  إنشائها؛ الفرق الدلالي محصور في الستة عشر استبدالاً).
+- **`SettingsStore`** — قيم `string` تمرّ الآن عبر `toOracleSearchChars()`، و`limitToColumn()` يقارن
+  بـ `mb_strlen` لا `strlen`: الحدّ سعة عمود بالمحرف، ورسالة الرفض صارت «النص أطول من 500 محرف».
+  القراءة السابقة كانت ترفض نصاً عربياً صحيحاً لأن بايتاته أكثر من محرفاته.
+- **`tests/Unit/ArabicWritePathTest.php`** (جديد) — 14 اختباراً / 108 تحقّقاً بلا اتصال أوراكل:
+  على مجموعة `['خالد','عملاء الكبودي للخياطة','كشف حساب','عبد الله سالم']` يتحقق أن الكودبوينت التي
+  تُربط تساوي قائمة البايتات `unpack('C*', iconv('UTF-8','Windows-1256',$t))` حرفياً، وأن
+  `fixMojibake(toOracleSearchChars($t)) === $t`، وأن ASCII والفارغ وnull تعود كما هي، وأن
+  `method_exists(ArabicEncoding::class,'encodeForOracle')` **false** — أي أن الدالة الآمنة لا يمكن
+  أن تعود بصمت.
+
+### دليلَا الوكلاء (مرحلة 9 بند 1)
+
+- **`AGENTS.md` (الجذر)** — تصحيح الحالة (IBAC مطبَّق، الإدارة تعمل، لا RBAC ولا مخطط لها)، جرد
+  المسارات إلى 71 (3 عامّة / 6 ملك للجلسة / 62 محرساة بطبقتين)، جداول IBAC الخمسة وسكربتات
+  `database/oracle/` الأربعة، سبب بقاء `sanctum.expiration => null` وآلية `SessionPolicy`، مفاتيح
+  التخزين الآمن التسعة، نواة الصلاحيات في العميل (`Perm`، `permission_check`، `PermissionGate`،
+  `permissionsNotifierProvider`، `portal_sections`)، جدولَي الاختبارات (Flutter 4 ملفات/51، Laravel
+  11 ملفاً/92)، وبنود جديدة: **S7** سقف الكاش 3000 بايت، **C12** `USER_ID` ≠ `USER_NO`.
+- **`kyApp_API/AGENTS.md`** — البنية الحقيقية (11 متحكماً بأدواره، `Http/Middleware/EnsurePermission`،
+  7 أصناف `Support/`، خمسة singleton في `AppServiceProvider` + خطّاف Sanctum)، الميزان الأمني
+  بطبقتيه مع مثال من `routes/api.php` و`selectFromTable` المغلق، §4 (الظرف، إغلاق استثناء
+  `InvoiceController`، شكلَا `meta`، حدود `UserAdminController`)، §5.1 عقد الكتابة، §5.2 مُشغِّلات IBAC
+  وشرط التسلسل **غير الموصوف** داخل PL/SQL (وجود VIEW باسم `ACCOUNTS` داخل schema `ACCOUNTS`)، سقف
+  الكاش `ORA-01461`، وعودة Oracle لقيمة DATE الفارغة كـ `false`، §6 سياسة الجلسات والـ IBAC
+  (سلّم الحلّ، منع التصعيد، إنهاء الجلسات عند تغيّر المنح، حارس آخر مدير)، §8 الجداول + سكربتات
+  `database/oracle/`، §9 أوامر البذر مع تحذير الكتابة، §10 سياسة الاختبارات المقروءة فقط، §12
+  الحالات المغلقة والجديدة (S1/S2/S5 وC5 وC10/C11)، §14 واقع العمل غير المرتقب، §15 مرجع سريع مطابق.
+
+### البوابات بعد هذه المرحلة
+
+`flutter analyze` = **No issues found!** · `flutter test` = **51 ناجحة / صفر فشل** ·
+`vendor/bin/pint --dirty` = **passed** · `php artisan test` = **92 ناجحة / 653 تحقّقاً** (كانت
+641 قبل إضافة `ArabicWritePathTest`).
+
+### ما لم يُنفَّذ لأنه يحتاج إذناً
+
+القبول اليدوي لـ §10 على جهازين، وحواجز إطلاق APK (إذن `INTERNET` في `AndroidManifest.xml` الرئيسي،
+`applicationId` حقيقي، توقيع فعلي)، وأي commit — الترتيب الواجب: داخل `kyApp_API/` أولاً ثم bump
+المؤشر في الأب. لا شيء من هذا يُعدّ نقصاً في التنفيذ؛ كلها قرارات بيد المستخدم.
+
+---
+
+## [2026-10-20 01:13:30] تتبُعة البوابة — عِلَتا `flutter analyze` قديمتان أُغلقتا · Qoder Agent
+
+عند إعادة قياس البوابات في نهاية المرحلة 9 ظهر `flutter analyze` بـ **مسألتين** بدل «No issues
+found!» — أي أن النظافة السابقة لم تعد سارية، وكان يجب ألا تُنقَل كمسلَّمة:
+
+- **`lib/features/auth/presentation/screens/login_screen.dart:1`** — `unused_import`
+  لـ `package:flutter/gestures.dart`: استيراد بقي من تجربة قديمة على نص links ولم يعد يُستخدم بعد
+  إعادة بناء البطاقة. حُذف السطر وحده.
+- **`lib/features/auth/presentation/screens/splash_screen.dart:43`** — `avoid_unnecessary_containers`:
+  `Container` يلفّ `Image.asset` بلا أي خاصية فعّالة (كان `padding`/`decoration`/`boxShadow` مكتوبة
+  كمعلَّقات لا ككود، فالغلاف كان هيكلًا ميتاً يكلّف طبقة build إضافية). أُزيل الغلاف وصار
+  `Image.asset('assets/logo3.jpg', width: 370, height: 300)` عنصراً مباشراً في الـ `Column` بنفس
+  الأبعاد تماماً — لا تغيّر بصري — مع تعليق عربي/إنجليزي واحد يمنع إعادة الغلاف بدافع التنسيق.
+
+**إعادة القياس:** `flutter analyze` = **No issues found!** · `flutter test` = **51 ناجحة / صفر فشل**.
+الخلفية لم تُمَسّ في هذه التتبّعة فلم تُعَد Pint/Pest (وهما أخضر كما هو موثّق أعلاه: 92 / 653).
+
+**ما تغيّر في طريقة العمل:** البوابات أصبحت تُقاس لا تُستَنتج — أي وثيقة تقول «الأربع خضراء» يجب أن
+تكون قد رأته في هذه الجولة، لأن عِلَتَين ساكتتين ظلتا هنا منذ ما قبل مرحلة IBAC دون أن يكشفهما إلا
+إعادة تشغيل فعلي.
+
+---
+
+## [2026-10-20 04:13:12] إصلاح عِلل الإنتاج الثلاث: إنشاء المستخدم 500 · الرموز في الجلسات وإعدادات الأمان · Qoder Agent
+
+ثلاث بلاغات من المستخدم في أمر واحد (سجلات Dio مرفقة): فشل إنشاء مستخدم بـ 500، ورموز في شاشة
+الجلسات النشطة، ورموز في شاشة إعدادات الأمان. الأول عقد مكسور داخل المتحكم، والثاني والثالث علّة
+ترميز واحدة متكررة في موضعين.
+
+### 1) فشل إنشاء المستخدم — `prepareGrants` يرجع `null` في خانة الخطأ عند النجاح
+
+الخطأ `TypeError: store(): Return value must be of type JsonResponse, null returned` (السطر 246) لم
+يك له علاقة بأوراكل ولا بالتحقق — بل بعقد داخلي مكسور:
+
+- `prepareGrants(?User $actor, ?array $codes)` كانت تعيد `[null, null]` في مسار النجاح (فروع
+  الخطأ فقط كانت تعيد كائن استجابة).
+- `store()` و`update()` يفككان `[$grantIds, $invalid]` ويحرسان `if ($invalid !== []) { return $invalid; }`
+  — و`null !== []` **صحيحة**، فمسار نجاح المنح أعاد خانة الخطأ `null`، مخالفاً نوع الإرجاع
+  `JsonResponse` ومنفجراً قبل أي `INSERT`. الحمولة المبلَّغة (`permissions: ["dashboard.view"]`)
+  كانت تصيب هذا المسار بالضبط.
+
+**الإصلاح:** خانة «لا خطأ» = `[]` لا `null` (`return [null, []]`)، مع إبقاء `null` في خانة
+المُعرِّفات لحالة «لم تُرسل صلاحيات» في `update()` (الفرق بين «لم تُرسل» و«أُرسلت فارغة»). واختبر
+`UsersAdminTest` بالانعكاس (ReflectionMethod): نجاح ⇒ `[]` + مُعرِّفات غير فارغة؛ أكواد مجهولة ⇒
+`JsonResponse` بـ 422. السبب في اختيار الانعكاس: الاختبارات مقصودة قراءةً فقط ضد المخطط الحي،
+وهذا العقد ينفَّذ في الذاكرة دون أي كتابة.
+
+### 2) رموز الجلسات النشطة — إصلاح مزدوج
+
+`GET /api/sessions` أعاد `user_name_ar":"ط§ط±ط³ظ„ط§ظ†"` بينما `/users` كان سليماً — لأن
+`SessionAdminController@index` كان يُصلح كل حقل داخل `shape()` ثم يمرر الصفحة كلها على
+`ArabicEncoding::cleanData()` ثانية. إصلاحٌ ثانٍ يمرر *بايتات* UTF-8 السليمة عبر جدول CP1256:
+`ارسلان` → `ط§ط±ط³ظ„ط§ظ†`، `موظف` → `ظ…ظˆط¸ظپ`، `نشطة` → `ظ†ط´ط·ط©`.
+
+**الإصلاح:** `data` = ناتج `shape()` مباشرة (إصلاح واحد لكل قيمة). و`ActiveSessionsTest` صار يثبت
+مساواة التسميات للقيم المُصلَحة من الصف الخام ولعضوية البدائل النصية العربية (`موظف/عميل`،
+`نشطة/منتهية المهلة/حساب معطّل`).
+
+### 3) رموز إعدادات الأمان — نفس العِلّة في `SettingController`
+
+`index()` كان يُعيد تغليف مخرجات `SettingsStore::definitions()` (التسميات مُصلَحة مرة في `fetch()`)
+بـ `cleanData()` مرة أخرى، و`update()` كذلك عبر `after()`. **الإصلاح:** إرجاع المخرجات كما هي؛
+`SettingsStore` نقطة الإصلاح الوحيدة لهذه الحمولة (قرار معلل: الحمولة عربية وقيمها تتجاوز سقف
+كاش أوراكل 3000 بايت أصلاً). حُذف استيراد `ArabicEncoding` غير المستخدم. و`SecuritySettingsTest`
+صار يثبت مساواة كل مفتاح لمصدر الإصلاح الوحيد مع مقارنة بصف خام من القاعدة.
+
+### 4) السبب الجذري — `fixMojibake()` لم تكن آمنة من التكرار
+
+حتى مع إصلاح الموضعين، بقي `cleanData()` قنبلة موقوتة: أي متحكم جديد يصلح حقوله حقلياً ثم يمرر
+الصفحة على `cleanData()` يعيد العِلّة. أُضيفت حصانة في `fixMojibake()` تسبق كل الخطوات: إذا كان
+النص UTF-8 صالحاً **و** يحوي عربية (U+0600–U+06FF) **و** لا يحوي أي محرف في 0x80–0xFF فهو سليم
+فعلاً ويُرجع كما هو. هذا معيار آمن لأن التشويه الحقيقي يصل دائماً محملاً بمحرف لاتيني في ذلك
+المدى (عبر تحويل العميل AL32UTF8)، أما بايتات CP1256 الخام فليست UTF-8 صالحاً عملياً فلا تختبئ
+خلف الحاصرة. عقد القراءة الجديد `tests/Unit/ArabicReadPathTest.php` (يشتغل **بلا** اتصال أوراكل)
+يثبت: إصلاح شكل Mojibake اللاتيني، الثبات عند التكرار (مرة ومرتين وعبر `cleanData`)، واستمرار
+إصلاح الصفوف المختلطة (عربي سليم + جزء مشوّه).
+
+### تحقّق حي (قراءة فقط) + البوابات
+
+- عبر `tinker` ضد الصفوف الحيّة: `USER_NAME_AR` للمستخدم 1 ⇒ «ارسلان» ثابتة عند الإصلاح المكرر؛
+  `NAME_AR` لـ `session_idle_minutes` ⇒ «مهلة خمول الجلسة (بالدقائق)» بنفس الثبات.
+- عبارات SQL حرفية في `db_commends.md` (بما فيها استعلام أعمدة `APP_USERS` الإلزامية:
+  `USER_ID` و`IS_ADMIN` فقط — وكلاهما مربوط في إدراج `store()`).
+- `php artisan test` = **114 ناجحة / 759 تحقّقاً** · `vendor/bin/pint --dirty` = passed.
+
+**لم يُنفَّذ (بحاجة إذن):** إثبات إنشاء المستخدم بتجربة كتابة مُرجَّعة داخل معاملة — صدّها التنفيذ
+الآمن لأنها كتابة في القاعدة الحيّة، فالمستخدم هو من يقرر إما التجربة المُرجَّعة أو إنشاء مستخدم
+حقيقي من واجهة التطبيق.

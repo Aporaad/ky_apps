@@ -13,6 +13,10 @@ class ApiConstants {
   static const String logout = '/auth/logout';
   static const String me = '/auth/me';
 
+  // حالة الصلاحيات الحالية — تُقرأ عند الدخول وعند رجوع التطبيق من الخلفية
+  // Current IBAC state — read at sign-in and when the app returns to the foreground.
+  static const String permissions = '/auth/permissions';
+
   // مسارات المقاييس الحيوية
   static const String biometricLogin    = '/auth/biometric/login';
   static const String biometricRegister = '/auth/biometric/register';

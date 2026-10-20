@@ -104,3 +104,759 @@ WHERE (ENTRY_SUB.ACC_NO = :acc_no
   AND (ACCOUNTS.ENTRY_SUB.ENTRY_NO = ACCOUNTS.ENTRY_MAIN.ENTRY_NO)
 ORDER BY ENTRY_MAIN.ENTRY_DATE;
 ```
+
+
+---
+## [2026-10-17 05:25:00]
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **المهمة / Task:** IBAC — مرحلة 0 و1: إنشاء نموذج بيانات الصلاحيات والإعدادات وسجل النشاط في مخطط ACCOUNTS
+- **المرجع / Reference:** `kyApp_API/database/oracle/01_ibac_schema.sql` (نفس النص حرفياً)
+- **الأمر / SQL Query:**
+```sql
+-- [0] نقطة الاسترجاع قبل أي تعديل على جدول المستخدمين الإرثي
+CREATE TABLE ACCOUNTS.APP_USERS_BAK_IBAC AS SELECT * FROM ACCOUNTS.APP_USERS;
+
+-- [1] APP_USERS: توسيع كلمة المرور + حقل مدير النظام + تسلسل بلا محفِّز (النظام القديم يكتب في الجدول)
+ALTER TABLE ACCOUNTS.APP_USERS MODIFY (USER_PASSWORD VARCHAR2(100));
+ALTER TABLE ACCOUNTS.APP_USERS ADD (IS_ADMIN NUMBER(1) DEFAULT 0 NOT NULL);
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_USERS_ID
+  START WITH 100 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+
+-- [2] كتالوج الصلاحيات
+CREATE TABLE ACCOUNTS.APP_PERMISSIONS (
+  PERMISSION_ID     NUMBER(6)      NOT NULL,
+  PERMISSION_CODE   VARCHAR2(60)   NOT NULL,
+  MODULE_CODE       VARCHAR2(30)   NOT NULL,
+  ACTION_CODE       VARCHAR2(30)   NOT NULL,
+  NAME_AR           VARCHAR2(150)  NOT NULL,
+  NAME_EN           VARCHAR2(150),
+  IS_CORE           NUMBER(1)      DEFAULT 0 NOT NULL,
+  SORT_ORDER        NUMBER(4)      DEFAULT 0,
+  IS_ACTIVE         NUMBER(1)      DEFAULT 1 NOT NULL,
+  DESCRIPTION_AR    VARCHAR2(500),
+  CREATED_ON        DATE           DEFAULT SYSDATE,
+  CREATED_BY        NUMBER(5),
+  LAST_UPDATED_ON   DATE,
+  LAST_UPDATED_BY   NUMBER(5),
+  CONSTRAINT APP_PERM_PK       PRIMARY KEY (PERMISSION_ID),
+  CONSTRAINT APP_PERM_CODE_UQ  UNIQUE (PERMISSION_CODE),
+  CONSTRAINT APP_PERM_CORE_CK  CHECK (IS_CORE IN (0, 1)),
+  CONSTRAINT APP_PERM_ACT_CK   CHECK (IS_ACTIVE IN (0, 1))
+);
+CREATE INDEX ACCOUNTS.APP_PERM_MOD_IX ON ACCOUNTS.APP_PERMISSIONS (MODULE_CODE, SORT_ORDER);
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_PERMISSIONS
+  START WITH 1 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+
+-- [3] منح الصلاحيات مباشرة للمستخدمين (نواة IBAC — بلا أدوار)
+CREATE TABLE ACCOUNTS.APP_USERS_PERMISSIONS (
+  ID              NUMBER(9)   NOT NULL,
+  USER_ID         NUMBER(5)   NOT NULL,
+  PERMISSION_ID   NUMBER(6)   NOT NULL,
+  GRANTED_BY      NUMBER(5),
+  GRANTED_ON      DATE        DEFAULT SYSDATE,
+  EXPIRES_ON      DATE,
+  IS_ACTIVE       NUMBER(1)   DEFAULT 1 NOT NULL,
+  NOTE            VARCHAR2(200),
+  CONSTRAINT APP_UQ_PK         PRIMARY KEY (ID),
+  CONSTRAINT APP_USER_PERM_UQ  UNIQUE (USER_ID, PERMISSION_ID),
+  CONSTRAINT APP_UQ_USER_FK    FOREIGN KEY (USER_ID)
+    REFERENCES ACCOUNTS.APP_USERS (USER_ID) ON DELETE CASCADE,
+  CONSTRAINT APP_UQ_PERM_FK    FOREIGN KEY (PERMISSION_ID)
+    REFERENCES ACCOUNTS.APP_PERMISSIONS (PERMISSION_ID),
+  CONSTRAINT APP_UQ_ACTIVE_CK  CHECK (IS_ACTIVE IN (0, 1))
+);
+CREATE INDEX ACCOUNTS.APP_UQ_USER_IX ON ACCOUNTS.APP_USERS_PERMISSIONS (USER_ID, IS_ACTIVE);
+CREATE INDEX ACCOUNTS.APP_UQ_PERM_IX ON ACCOUNTS.APP_USERS_PERMISSIONS (PERMISSION_ID);
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_USERS_PERM
+  START WITH 1 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+```
+
+---
+## [2026-10-17 05:25:00]
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **المهمة / Task:** IBAC مرحلة 1 — جدولا إعدادات الأمان وسجل النشاط
+- **الأمر / SQL Query:**
+```sql
+-- [4] إعدادات الأمان والجلسات (قابلة للتعديل من شاشة «إعدادات الأمان»)
+CREATE TABLE ACCOUNTS.APP_SETTINGS (
+  SETTING_ID      NUMBER(6)     NOT NULL,
+  SETTING_KEY     VARCHAR2(60)  NOT NULL,
+  SETTING_VALUE   VARCHAR2(500),
+  VALUE_TYPE      VARCHAR2(20)  DEFAULT 'int' NOT NULL,
+  NAME_AR         VARCHAR2(150) NOT NULL,
+  DESCRIPTION_AR  VARCHAR2(500),
+  MIN_VALUE       NUMBER(10),
+  MAX_VALUE       NUMBER(10),
+  IS_LOCKABLE     NUMBER(1)     DEFAULT 0 NOT NULL,
+  SORT_ORDER      NUMBER(4)     DEFAULT 0,
+  UPDATED_BY      NUMBER(5),
+  UPDATED_ON      DATE,
+  CONSTRAINT APP_SET_PK      PRIMARY KEY (SETTING_ID),
+  CONSTRAINT APP_SET_KEY_UQ  UNIQUE (SETTING_KEY),
+  CONSTRAINT APP_SET_TYPE_CK CHECK (VALUE_TYPE IN ('int', 'bool', 'string', 'json'))
+);
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_SETTINGS
+  START WITH 1 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+
+-- [5] سجل نشاط المستخدمين والتدقيق (بلا قيد FK على USER_ID: فشل الدخول باسم مجهول يُسجَّل NULL،
+--     وحذف مستخدم لا يجب أن يمحو تاريخ تدقيقه)
+CREATE TABLE ACCOUNTS.APP_USER_ACTIVITY (
+  ACTIVITY_ID     NUMBER(11)    NOT NULL,
+  USER_ID         NUMBER(5),
+  TARGET_USER_ID  NUMBER(5),
+  ACTION_CODE     VARCHAR2(60)  NOT NULL,
+  MODULE_CODE     VARCHAR2(30),
+  ENTITY_TYPE     VARCHAR2(40),
+  ENTITY_ID       VARCHAR2(60),
+  DESCRIPTION_AR  VARCHAR2(1000),
+  STATUS          VARCHAR2(10)  DEFAULT 'success' NOT NULL,
+  IP_ADDRESS      VARCHAR2(45),
+  USER_AGENT      VARCHAR2(200),
+  PLATFORM        VARCHAR2(20),
+  CREATED_ON      DATE          DEFAULT SYSDATE,
+  CONSTRAINT APP_ACT_PK        PRIMARY KEY (ACTIVITY_ID),
+  CONSTRAINT APP_ACT_STATUS_CK CHECK (STATUS IN ('success', 'failed'))
+);
+CREATE INDEX ACCOUNTS.APP_ACT_USER_IX ON ACCOUNTS.APP_USER_ACTIVITY (USER_ID, CREATED_ON);
+CREATE INDEX ACCOUNTS.APP_ACT_TGT_IX  ON ACCOUNTS.APP_USER_ACTIVITY (TARGET_USER_ID, CREATED_ON);
+CREATE INDEX ACCOUNTS.APP_ACT_MOD_IX  ON ACCOUNTS.APP_USER_ACTIVITY (MODULE_CODE, CREATED_ON);
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_ACTIVITY
+  START WITH 1 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+```
+
+---
+## [2026-10-17 05:25:00]
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **المهمة / Task:** تشخيص ORA-04098 / PLS-00302 ثم إعادة إنشاء المحفِّزات الأربعة بصيغة صحيحة
+- **السبب الجذري / Root cause:** يوجد VIEW اسمه `ACCOUNTS` داخل مخطط `ACCOUNTS`، فمرجع PL/SQL مثل `ACCOUNTS.SEQ_X.NEXTVAL` يُقرأ كعمود من العرض ويفشل. الحل: أسماء تسلسلات غير مسبوقة كما تفعل محفِّزات النظام القديمة.
+- **الأمر / SQL Query:**
+```sql
+-- [تشخيص] حالة المحفِّزات والأخطاء والتسلسلات وهوية الجلسة
+SELECT TRIGGER_NAME, TABLE_NAME, STATUS FROM ALL_TRIGGERS
+ WHERE TABLE_OWNER='ACCOUNTS' AND TABLE_NAME IN ('APP_PERMISSIONS','APP_USERS_PERMISSIONS','APP_USERS');
+SELECT NAME, TYPE, LINE, POSITION, TEXT FROM ALL_ERRORS
+ WHERE OWNER='ACCOUNTS' AND NAME LIKE 'TRG_APP%' ORDER BY NAME, LINE;
+-- PLS-00302: component 'SEQ_APP_PERMISSIONS' must be declared  (لأربعة محفِّزات)
+SELECT SEQUENCE_NAME, MIN_VALUE, MAX_VALUE, INCREMENT_BY, CACHE_SIZE FROM ALL_SEQUENCES
+ WHERE SEQUENCE_OWNER='ACCOUNTS' AND SEQUENCE_NAME LIKE 'SEQ_APP%';
+SELECT OBJECT_NAME, OBJECT_TYPE, STATUS FROM ALL_OBJECTS
+ WHERE OWNER='ACCOUNTS' AND (OBJECT_NAME LIKE 'TRG_APP%' OR OBJECT_NAME LIKE 'SEQ_APP%');
+SELECT OWNER, TRIGGER_NAME, TRIGGER_BODY, STATUS FROM DBA_TRIGGERS WHERE TRIGGER_NAME='TRG_APP_PERMISSIONS';
+SELECT SYS_CONTEXT('USERENV','SESSION_USER') AS SESSION_USER,
+       SYS_CONTEXT('USERENV','CURRENT_SCHEMA') AS CURRENT_SCHEMA FROM DUAL;   -- ACCOUNTS / ACCOUNTS
+SELECT ACCOUNTS.SEQ_APP_PERMISSIONS.NEXTVAL AS V FROM DUAL;                    -- يعمل في SQL وحده
+SELECT OBJECT_NAME, OBJECT_TYPE, STATUS FROM ALL_OBJECTS
+ WHERE OWNER='ACCOUNTS' AND OBJECT_NAME='ACCOUNTS';                            -- VIEW  ← سبب المشكلة
+SELECT TRIGGER_NAME, TRIGGER_BODY, STATUS FROM ALL_TRIGGERS
+ WHERE OWNER='ACCOUNTS' AND TRIGGER_NAME IN ('PERSONAL_ACCESS_TOKENS_ID_TRG','MIGRATIONS_ID_TRG');
+ALTER TRIGGER ACCOUNTS.TRG_APP_PERMISSIONS COMPILE;                            -- يبقى INVALID
+
+-- [علاج] إعادة الإنشاء بأسماء تسلسلات بلا بادئة مخطط
+CREATE OR REPLACE TRIGGER ACCOUNTS.TRG_APP_PERMISSIONS
+BEFORE INSERT ON ACCOUNTS.APP_PERMISSIONS FOR EACH ROW
+BEGIN
+  IF :NEW.PERMISSION_ID IS NULL THEN
+    SELECT SEQ_APP_PERMISSIONS.NEXTVAL INTO :NEW.PERMISSION_ID FROM DUAL;
+  END IF;
+END;
+
+CREATE OR REPLACE TRIGGER ACCOUNTS.TRG_APP_USERS_PERM
+BEFORE INSERT ON ACCOUNTS.APP_USERS_PERMISSIONS FOR EACH ROW
+BEGIN
+  IF :NEW.ID IS NULL THEN
+    SELECT SEQ_APP_USERS_PERM.NEXTVAL INTO :NEW.ID FROM DUAL;
+  END IF;
+END;
+
+CREATE OR REPLACE TRIGGER ACCOUNTS.TRG_APP_SETTINGS
+BEFORE INSERT ON ACCOUNTS.APP_SETTINGS FOR EACH ROW
+BEGIN
+  IF :NEW.SETTING_ID IS NULL THEN
+    SELECT SEQ_APP_SETTINGS.NEXTVAL INTO :NEW.SETTING_ID FROM DUAL;
+  END IF;
+END;
+
+CREATE OR REPLACE TRIGGER ACCOUNTS.TRG_APP_ACTIVITY
+BEFORE INSERT ON ACCOUNTS.APP_USER_ACTIVITY FOR EACH ROW
+BEGIN
+  IF :NEW.ACTIVITY_ID IS NULL THEN
+    SELECT SEQ_APP_ACTIVITY.NEXTVAL INTO :NEW.ACTIVITY_ID FROM DUAL;
+  END IF;
+END;
+
+-- [تحقق] محفِّزات INVALID؟ صفر صفوف — والأربعة VALID
+SELECT OBJECT_NAME, STATUS FROM ALL_OBJECTS
+ WHERE OWNER='ACCOUNTS' AND OBJECT_TYPE='TRIGGER' AND OBJECT_NAME LIKE 'TRG_APP%';
+```
+
+---
+## [2026-10-17 05:25:00]
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **المهمة / Task:** بذر الكتالوج والإعدادات + تعليقات قاموس البيانات + ترقية المدير العام — نُفِّذت بكود PHP لا بملف SQL
+- **السبب / Why code and not SQL:** موصل Oracle يعمل بترميز عميل `AL32UTF8`؛ إرسال بايتات Windows-1256 الخام يجعل أوراكل يستبدلها بـ `0xBF` (ثبت بـ `DUMP` بعد أول بذر: `Typ=1 Len=4: bf,bf,bf,bf`). الكتابة السليمة هي `ArabicEncoding::toOracleSearchChars()` التي تحوّل كل بايت CP1256 إلى محرف لاتيني بنفس الكود فيستقر البايت كما تفعل أنظمة الشركة القديمة.
+- **الأمر / SQL Query:**
+```text
+# من داخل kyApp_API — السكربتات قابلة لإعادة التشغيل بأمان (idempotent)
+php artisan tinker database/oracle/02_ibac_seed.php       # 93 صلاحيّة + 10 إعدادات، مشتقة من PermissionCatalog
+php artisan tinker database/oracle/03_ibac_bootstrap.php  # 49 تعليقاً + IS_ADMIN=1 + منح system.* + صفحة تدقيق
+```
+```sql
+-- شكل الإدراج داخل 02_ibac_seed.php (استعلامات مربوطة حصراً، والعربية عبر toOracleSearchChars)
+INSERT INTO ACCOUNTS.APP_PERMISSIONS
+    (PERMISSION_CODE, MODULE_CODE, ACTION_CODE, NAME_AR, NAME_EN,
+     IS_CORE, SORT_ORDER, IS_ACTIVE, DESCRIPTION_AR, CREATED_ON, CREATED_BY)
+VALUES (:code, :module, :action, :name_ar, :name_en,
+        :is_core, :sort_order, 1, :desc_ar, SYSDATE, NULL);
+
+INSERT INTO ACCOUNTS.APP_SETTINGS
+    (SETTING_KEY, SETTING_VALUE, VALUE_TYPE, NAME_AR, DESCRIPTION_AR,
+     MIN_VALUE, MAX_VALUE, IS_LOCKABLE, SORT_ORDER, UPDATED_ON)
+VALUES (:key, :value, :type, :name_ar, :desc_ar,
+        :min, :max, :lockable, :sort, SYSDATE);
+
+-- 03_ibac_bootstrap.php
+COMMENT ON TABLE  ACCOUNTS.APP_PERMISSIONS IS 'كتالوج صلاحيات النظام (IBAC) — مصدره PermissionCatalog في التطبيق';
+COMMENT ON COLUMN ACCOUNTS.APP_USERS.IS_ADMIN IS 'مدير النظام: 1 = يملك كل الصلاحيات ويتجاوز فحص المنح';
+UPDATE ACCOUNTS.APP_USERS
+   SET IS_ADMIN = 1, USER_TYPE = NVL(USER_TYPE, 1)
+ WHERE USER_ID = 1 AND NVL(IS_ACTIVATED, 0) = 1;
+INSERT INTO ACCOUNTS.APP_USERS_PERMISSIONS
+    (USER_ID, PERMISSION_ID, GRANTED_BY, GRANTED_ON, IS_ACTIVE, NOTE)
+VALUES (1, :pid, NULL, SYSDATE, 1, :note);
+INSERT INTO ACCOUNTS.APP_USER_ACTIVITY
+    (USER_ID, TARGET_USER_ID, ACTION_CODE, MODULE_CODE, ENTITY_TYPE, ENTITY_ID,
+     DESCRIPTION_AR, STATUS, CREATED_ON)
+VALUES (1, 1, :action, :module, :entity, :entity_id, :descr, :status, SYSDATE);
+
+-- ملاحظة تشخيصية: أول محاولة لسجل التدقيق فشلت بـ ORA-01745 لأن اسم الربط :desc يحجز كلمة DESC،
+-- واستُبدل بـ :descr. وCOMMENT ON لا يقبل bind variables لذلك تُبنى النصوص كحوامل نصية آمنة.
+
+-- [تحقق نهائي]
+SELECT (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS) AS PERMS,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE IS_CORE=1) AS CORE_PERMS,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE ACTION_CODE='*') AS WILDCARDS,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_SETTINGS) AS SETTINGS,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_USER_ACTIVITY) AS ACTIVITY FROM DUAL;
+-- النتيجة: 93 / 47 / 17 / 10 / 1
+
+SELECT PERMISSION_CODE, LENGTH(NAME_AR) AS LEN_CHAR, DUMP(NAME_AR, 1016, 1, 12) AS RAW_DUMP
+  FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE IN ('customers.delete','users.view','customers.*');
+-- customers.delete ⇒ cd,d0,dd,20,c7,e1,da,e3,ed,e1 أي «حذف العميل» بايتات CP1256 سليمة
+
+SELECT up.ID, up.USER_ID, up.PERMISSION_ID, p.PERMISSION_CODE, up.IS_ACTIVE,
+       TO_CHAR(up.GRANTED_ON,'YYYY-MM-DD') AS GRANTED_ON
+  FROM ACCOUNTS.APP_USERS_PERMISSIONS up
+  JOIN ACCOUNTS.APP_PERMISSIONS p ON p.PERMISSION_ID = up.PERMISSION_ID;
+-- ID=1 (مَلأه المحفِّز) — USER_ID=1 — system.* — IS_ACTIVE=1
+
+SELECT TABLE_NAME FROM ALL_TABLES WHERE OWNER='ACCOUNTS' AND TABLE_NAME LIKE 'APP\_%' ESCAPE '\';
+SELECT (SELECT COUNT(*) FROM ALL_TAB_COMMENTS WHERE OWNER='ACCOUNTS' AND COMMENTS IS NOT NULL
+          AND TABLE_NAME IN ('APP_PERMISSIONS','APP_USERS_PERMISSIONS','APP_SETTINGS','APP_USER_ACTIVITY')) AS TABLE_COMMENTS,
+       (SELECT COUNT(*) FROM ALL_COL_COMMENTS WHERE OWNER='ACCOUNTS' AND COMMENTS IS NOT NULL
+          AND TABLE_NAME IN ('APP_PERMISSIONS','APP_USERS_PERMISSIONS','APP_SETTINGS','APP_USER_ACTIVITY','APP_USERS')) AS COLUMN_COMMENTS,
+       (SELECT COUNT(*) FROM ALL_INDEXES WHERE TABLE_OWNER='ACCOUNTS'
+          AND TABLE_NAME IN ('APP_PERMISSIONS','APP_USERS_PERMISSIONS','APP_SETTINGS','APP_USER_ACTIVITY')) AS INDEXES
+  FROM DUAL;   -- 4 / 45 / 13
+```
+
+
+## [2026-10-17 07:17:24] - المرحلة 2: طبقة IBAC في الخلفية (ما نُفِّذ على القاعدة)
+- **النموذج المنفذ / AI Model:** Qoder Agent
+- **كل ما أُجري على القاعدة / SQL executed** — كتاباتُها كلها عبر PHP بمربوطات مربوطة، وقراءاتُها عبر موصل @oracle:
+
+```sql
+-- 1) التحقق من بنية APP_USERS قبل تعديل الموديل (07:05) — قراءة فقط
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='APP_USERS' ORDER BY COLUMN_ID;
+-- النتيجة المؤكدة: USER_PASSWORD VARCHAR2(100) و IS_ADMIN NUMBER(1) موجودان، ولا يوجد عمود USER_NO.
+
+-- 2) توزيع قيم USER_TYPE قبل اعتماد التحويل في موديل User (07:06) — قراءة فقط
+SELECT USER_TYPE, COUNT(*) AS C FROM ACCOUNTS.APP_USERS GROUP BY USER_TYPE ORDER BY USER_TYPE;
+-- النتيجة: USER_TYPE رقمي وقيمته 1 للمستخدم الوحيد، فاعتماد D5 (1=موظف، 2=عميل) آمن مع casts('integer').
+
+-- 3) قراءة إعدادات الأمان قبل اختبار سياسة الجلسة (07:08) — قراءة فقط
+SELECT SETTING_KEY, SETTING_VALUE, VALUE_TYPE, MIN_VALUE, MAX_VALUE, IS_LOCKABLE, SORT_ORDER
+  FROM ACCOUNTS.APP_SETTINGS ORDER BY SORT_ORDER;
+-- النتيجة: 10 إعدادات، منها session_idle_minutes=240 و biometric_login_enabled=1 و max_failed_logins=0.
+
+-- 4) فحص مسار التوكن (07:10) — كتابة على جدول Laravel الخاص بالتطبيق (PERSONAL_ACCESS_TOKENS)
+INSERT INTO ACCOUNTS.PERSONAL_ACCESS_TOKENS (NAME, TOKEN, ABILITIES, TOKENABLE_ID, CREATED_AT, UPDATED_AT)
+     VALUES ('ky_phase2_probe', :hashed_token, :abilities, 1, SYSDATE, SYSDATE);
+UPDATE ACCOUNTS.PERSONAL_ACCESS_TOKENS SET EXPIRES_AT = SYSDATE + 240/1440, UPDATED_AT = SYSDATE WHERE ID = 141;
+SELECT ID, NAME, CREATED_AT, EXPIRES_AT, UPDATED_AT FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS WHERE ID = 141;
+-- النتيجة: CREATED_AT 03:50:19 ⇒ EXPIRES_AT 07:50:19 (مهلة 240 دقيقة كاملة) — التجديد الانزلاقي يعمل.
+UPDATE ACCOUNTS.PERSONAL_ACCESS_TOKENS SET EXPIRES_AT = SYSDATE - 1 WHERE ID = 141;
+-- النتيجة: SessionPolicy::validate() أعادت false ⇒ انتهاء المهلة يُخرج الجلسة من الخدمة.
+DELETE FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS WHERE ID = 141;   -- حذف توكن الفحص فقط (بقي العدد 32 كما كان)
+
+-- 5) فحص مسار سجل النشاط (07:10) — كتابة على APP_USER_ACTIVITY ثم تراجع بما أُضيف فقط
+SELECT NVL(MAX(ACTIVITY_ID), 0) AS M FROM ACCOUNTS.APP_USER_ACTIVITY;
+INSERT INTO ACCOUNTS.APP_USER_ACTIVITY (USER_ID, TARGET_USER_ID, ACTION_CODE, MODULE_CODE, ENTITY_TYPE,
+    ENTITY_ID, DESCRIPTION_AR, STATUS, IP_ADDRESS, USER_AGENT, PLATFORM, CREATED_ON)
+ VALUES (:user_id, :target_user_id, :action_code, :module_code, :entity_type, :entity_id,
+    :description_ar, :status, :ip, :user_agent, :platform, SYSDATE);
+SELECT ACTION_CODE, STATUS, DESCRIPTION_AR, DUMP(DESCRIPTION_AR,1016) AS BYTE_DUMP
+  FROM ACCOUNTS.APP_USER_ACTIVITY WHERE ACTIVITY_ID > :m ORDER BY ACTIVITY_ID DESC;
+-- النتيجة: DUMP = Typ=1 Len=23 CharacterSet=WE8MSWIN1252: dd,cd,d5,20,e3,c4,de,ca,...
+-- ⇒ العربية تُخزَّن بايتات CP1256 مطابقة للنظام القديم (نفس مسار البذر الناجح في المرحلة 1).
+DELETE FROM ACCOUNTS.APP_USER_ACTIVITY WHERE ACTIVITY_ID > :m;   -- حذف سطر الفحص فقط
+
+-- 6) التحقق من دورة قراءة العربية في سجل النشاط (07:12) — قراءة فقط
+SELECT DESCRIPTION_AR FROM ACCOUNTS.APP_USER_ACTIVITY WHERE ROWNUM=1;
+-- الخام: "ÊåíÆÉ äÙÇã ÇáÕáÇÍíÇÊ..." وبعد ArabicEncoding::fixMojibake():
+-- "تهيئة نظام الصلاحيات: تفعيل صفة مدير النظام ومنح شامل للنظام" ⇒ دورة الكتابة/القراءة مغلقة وسليمة.
+
+-- 7) مراجعة أثر اختبارات Pest على سجل النشاط (07:16) — قراءة فقط
+SELECT ACTIVITY_ID, USER_ID, ACTION_CODE, STATUS, CREATED_ON FROM ACCOUNTS.APP_USER_ACTIVITY ORDER BY ACTIVITY_ID;
+-- النتيجة: سطر system.bootstrap (المراحل السابقة) + سطر login_failed من اختبار AuthTest
+-- (اسم مستخدم مجهول ⇒ USER_ID NULL كما هو مصمم).
+
+-- 8) محاولة تنظيف مرفوضة (07:17) — لم تُنفَّذ
+DELETE FROM ACCOUNTS.APP_USER_ACTIVITY WHERE ACTIVITY_ID = 3 AND ACTION_CODE = 'login_failed';
+-- رفضتها سياسة الموافقات (حذف مباشر على قاعدة إنتاجية). السطر باقٍ كأثر اختبار مشروع ومفيد
+-- كأول سجل محاولة دخول فاشلة؛ لا يُحذف دون إذن صريح من المستخدم.
+```
+
+- **حادث أوراكل مكتشف ومعالَج أثناء الفحص / a real Oracle failure found and fixed**:
+```sql
+-- أول محاولة تخزين لإعدادات الكاش فشلت (07:09) عبر مخزن الكاش القاعدي في Laravel:
+merge into "CACHE" using (select :p0 as "EXPIRATION", :p1 as "KEY", :p2 as "VALUE" from dual) "LARAVEL_SOURCE"
+ on ("LARAVEL_SOURCE"."KEY" = "CACHE"."KEY")
+ when matched then update set "EXPIRATION" = :p0, "VALUE" = :p2
+ when not matched then insert ("EXPIRATION", "KEY", "VALUE") values (:p0, :p1, :p2);
+-- ORA-01461: can bind a LONG value only for insert into a LONG column
+-- السبب: CACHE.VALUE نوعه CLOB لكن الكتابة تمر بصيغة `SELECT :value FROM dual`، وأوراكل ترفض
+-- ربط نص أطول من 4000 بايت هناك. كتلة الكاش كانت ~5.4KB لأنها حملت الأسماء والأوصاف العربية.
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='CACHE' ORDER BY COLUMN_ID;
+-- KEY VARCHAR2(255) · VALUE CLOB(4000) · EXPIRATION NUMBER
+-- العلاج: كاش الإعدادات صار حقولاً رقمية فقط (بلا عربي) بحد آمن 3000 بايت، و definitions()
+-- تقرأ التسميات العربية من القاعدة مباشرة؛ ونفس الحد طُبِّق على كاش الصلاحيات.
+```
+- **بوابات الجودة / gates**: `php -l` على 11 ملفاً = بلا أخطاء، `vendor/bin/pint --dirty` = passed،
+  `vendor/bin/pest` = 21 اختباراً ناجحاً (83 تحققاً) منها 12 اختباراً جديداً في `IbacCoreTest.php`.
+
+---
+## [2026-10-18 00:03:42] - المرحلة 3: ما نُفِّذ على القاعدة (قراءة فقط)
+- **النموذج المنفذ / AI Model:** Qoder Agent · **الاتصال:** `oracle` (ACCOUNTS) · **كتابات:** لا شيء
+- **تشخيص العمود التاريخي الفارغ (قراءة خام عبر `php artisan tinker` + `Laravel\Sanctum\PersonalAccessToken`):**
+```sql
+SELECT * FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS
+ WHERE EXPIRES_AT IS NULL AND ROWNUM = 1;
+-- gettype(EXPIRES_AT) = "string" (قيمة فارغة) — وليست null
+-- وعلى نفس الصف من النموذج: gettype($model->expires_at) = "NULL" والمفتاح غائب من getAttributes()
+-- النتيجة: القارئ الرمزي والسلسلة الاختيارية كلاهما غير آمن ⇒ SessionPolicy::toDate()
+```
+- **تدقيق حالة القاعدة بعد المرحلة (mcp oracle):**
+```sql
+SELECT (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS)                AS USERS_TOTAL,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS)    AS GRANTS_TOTAL,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS)          AS PERMISSIONS_TOTAL,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE IS_ADMIN = 1) AS ADMINS,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_USER_ACTIVITY)        AS ACTIVITY_ROWS,
+       (SELECT COUNT(*) FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS)   AS TOKENS
+  FROM DUAL;
+-- USERS_TOTAL=1 · GRANTS_TOTAL=1 · PERMISSIONS_TOTAL=93 · ADMINS=1 · ACTIVITY_ROWS=6 · TOKENS=32
+
+SELECT ACTIVITY_ID, USER_ID, ACTION_CODE, STATUS,
+       TO_CHAR(CREATED_ON,'YYYY-MM-DD HH24:MI:SS') AS CREATED_ON
+  FROM ACCOUNTS.APP_USER_ACTIVITY ORDER BY ACTIVITY_ID;
+-- 1 system.bootstrap (2026-10-17 05:10:13)
+-- 3..7 login_failed (2026-10-17 07:07:50 / 07:14:02 / 23:06:59 / 23:31:46 / 23:43:31)
+-- الأسطر 5 و6 و7 من تشغيلات Pest في هذه المرحلة (اختبار bad credentials في AuthTest).
+```
+- **لم يُنَفَّذ أي كتابة:** مسارات `PermissionGrantSync::replace()` و`UserAdminController@store` و
+  `terminateSessions()` كُتبت واختُبرت على فروع الرفض فقط؛ أول تنفيذ فعلي لها في المرحلة 8 أو باختبار
+  كتابي بموافقة صريحة.
+- **بوابات الجودة / gates:** `vendor/bin/pest` = 47 اختباراً / 199 تحققاً · `vendor/bin/pint --dirty` = passed ·
+  `php artisan route:list --path=api` = 66 مساراً.
+
+---
+## [2026-10-18 02:52:11] - المرحلة 4: ما نُفِّذ على القاعدة (قراءة فقط) — Qoder Agent
+- **النموذج المنفذ / AI Model:** Qoder Agent · **الوقت:** 02:52:11 · **DDL أو كتابة:** لا شيء
+- **استطلاع ترميز الجلسات (عبر موصل `oracle`):**
+  ```sql
+  -- قراءة كل الإعدادات بقيمها الخام للتأكيد أن الحفظ لم يلمس القاعدة
+  SELECT SETTING_KEY, SETTING_VALUE, VALUE_TYPE, UPDATED_BY,
+         TO_CHAR(UPDATED_ON,'YYYY-MM-DD HH24:MI:SS') AS UPDATED_ON
+    FROM ACCOUNTS.APP_SETTINGS
+   ORDER BY SORT_ORDER, SETTING_ID;
+  -- 10 صفوف: session_idle_minutes=240 · session_absolute_days=14 ·
+  --           session_touch_threshold_minutes=5 · single_active_session_per_device=0 ·
+  --           password_min_length=4 · max_failed_logins=0 · lockout_minutes=15 ·
+  --           biometric_login_enabled=1 · activity_log_retention_days=180 ·
+  --           maintenance_message=NULL  وUPDATED_BY فارغ في الكل (وقت البذر 2026-10-17 05:48:11)
+  ```
+  ```sql
+  -- عدّادات تأكيد عدم التغيّر
+  SELECT (SELECT COUNT(*) FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS)          AS TOKENS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_SETTINGS)                    AS SETTINGS_ROWS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE IS_ADMIN = 1)    AS ADMINS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS)                       AS USERS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS)                 AS PERMS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS)           AS GRANTS
+    FROM DUAL;
+  -- TOKENS=32 · SETTINGS_ROWS=10 · ADMINS=1 · USERS=1 · PERMS=93 · GRANTS=1
+  ```
+  ```sql
+  -- حجم الأثر التدقيقي بعد تشغيل حزمة Pest
+  SELECT COUNT(*) AS TOTAL, MAX(ACTIVITY_ID) AS LAST_ID FROM ACCOUNTS.APP_USER_ACTIVITY;
+  -- TOTAL=8 · LAST_ID=9 (كانت 6 في نهاية المرحلة 3؛ الزيادة أسطر login_failed من AuthTest)
+  ```
+  ```sql
+  -- محاولة أولى استخدمت اسماً خاطئاً للعمود الأساسي ⇒ تصحيح الاستطلاع لا تصحيح الكود
+  SELECT MAX(ID) FROM ACCOUNTS.APP_USER_ACTIVITY;
+  -- ORA-00904: "ID": invalid identifier  (الاسم الصحيح ACTIVITY_ID)
+  SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS
+   WHERE OWNER='ACCOUNTS' AND TABLE_NAME='APP_USER_ACTIVITY' ORDER BY COLUMN_ID;
+  -- ACTIVITY_ID NUMBER · USER_ID · TARGET_USER_ID · ACTION_CODE · MODULE_CODE · ENTITY_TYPE ·
+  -- ENTITY_ID VARCHAR2 · DESCRIPTION_AR · STATUS · IP_ADDRESS · USER_AGENT · PLATFORM · CREATED_ON DATE
+  ```
+- **العبارة المرفوضة من المحرّك (كشفها اختبار هذه المرحلة، لم تُبدّل بيانات):**
+  ```sql
+  UPDATE ACCOUNTS.APP_SETTINGS
+     SET SETTING_VALUE = :value, UPDATED_BY = :by, UPDATED_ON = SYSDATE
+   WHERE SETTING_KEY = :key
+  -- Error Code : 1745 / ORA-01745: invalid host/bind variable name
+  -- Position : 87 · Bindings : [8, 1, password_min_length]
+  -- السبب: BY كلمة محجوزة في أوراكل. الصيغة المعتمدة الآن:
+  UPDATE ACCOUNTS.APP_SETTINGS
+     SET SETTING_VALUE = :setting_value, UPDATED_BY = :updated_by, UPDATED_ON = SYSDATE
+   WHERE SETTING_KEY = :setting_key
+  ```
+  ومثلها في تعطيل المستخدم:
+  ```sql
+  -- قديماً (كانت ORA-01745 عند أول تعطيل من الواجهة):
+  UPDATE ACCOUNTS.APP_USERS SET IS_ACTIVATED = :next, …, LAST_UPDATED_BY = :by WHERE USER_ID = :user_id;
+  -- الآن:
+  UPDATE ACCOUNTS.APP_USERS
+     SET IS_ACTIVATED = :activated, LAST_UPDATED_ON = SYSDATE, LAST_UPDATED_BY = :updated_by
+   WHERE USER_ID = :user_id;
+  ```
+- **عبارات جاهزة ولم تُنفَّذ على القاعدة الحيّة:**
+  ```sql
+  -- إنهاء جلسة واحدة (المسار الفعلي للزر في الواجهة)
+  UPDATE ACCOUNTS.PERSONAL_ACCESS_TOKENS
+     SET EXPIRES_AT = SYSDATE - 1, UPDATED_AT = SYSDATE
+   WHERE ID = :id
+     AND TOKENABLE_ID = :user_id
+     AND TOKENABLE_TYPE = :type
+     AND (EXPIRES_AT IS NULL OR EXPIRES_AT > SYSDATE);
+
+  -- إنهاء كل جلسات مستخدم
+  UPDATE ACCOUNTS.PERSONAL_ACCESS_TOKENS
+     SET EXPIRES_AT = SYSDATE - 1, UPDATED_AT = SYSDATE
+   WHERE TOKENABLE_ID = :user_id
+     AND TOKENABLE_TYPE = :type
+     AND (EXPIRES_AT IS NULL OR EXPIRES_AT > SYSDATE);
+  ```
+  ملاحظتان نحويتان أُثبتتا بالمراجعة لا بالتجربة: `UPDATE … t SET` (بديل للجول) مرفوض في أوراكل،
+  والفرز بالصفحات يحتاج `ROW_NUMBER()` داخل غلاف لأن 11g لا تعرف `OFFSET/FETCH`، و`NAME` عمود CLOB
+  فلا يُقرأ إلا بـ `DBMS_LOB.SUBSTR(NAME, 60, 1)`.
+- **بوابات الجودة / gates:** `vendor/bin/pest` = 69 اختباراً / 449 تحقّقاً ·
+  `vendor/bin/pint --dirty --format agent` = passed · `php artisan route:list --path=api` = 71 مساراً.
+
+---
+
+## [2026-10-19 01:47:33] - المرحلة 5+6 (العميل فلتر): ما نُفِّذ على القاعدة — قراءة فقط — Qoder Agent
+
+**الطبيعة:** هذه المرحلة على جانب العميل بالكامل (بناء سجل أقسام البوابة، وتوصيل الصلاحيات بحالة
+المصادقة، وحجب الشاشات). **لم يُنفَّذ أي `INSERT` أو `UPDATE` أو `DELETE` أو DDL** على أي جدول،
+والمسموح به هنا القراءة فقط لأن القاعدة إنتاجية قديمة مشتركة مع نظام آخر.
+
+- **استعلام التحقق من عدد الصلاحيات ومنح المستخدم الوحيد (نُفِّذ فعلياً):**
+  ```sql
+  SELECT (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE STATUS = 'ACTIVE') AS ACTIVE_PERMS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS UP
+            JOIN ACCOUNTS.APP_PERMISSIONS P ON P.ID = UP.PERMISSION_ID
+           WHERE P.STATUS = 'ACTIVE'
+             AND (UP.EXPIRES_AT IS NULL OR UP.EXPIRES_AT > SYSDATE)) AS ACTIVE_GRANTS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE IS_ADMIN = 1) AS HAS_IS_ADMIN
+    FROM DUAL;
+  ```
+  **النتيجة:** `ACTIVE_PERMS = 93` · `ACTIVE_GRANTS = 1` · `HAS_IS_ADMIN = 1`.
+  يعني: كتالوج الخادم فيه 93 رمزاً نشطاً، ومنح فعلي واحد فقط، ومستخدم واحد مدير يتجاوز جدول المنح.
+  لهذا تُبنى اختبارات العميل على 93 رمزاً لا على التخمين.
+
+- **مطابقة كتالوج الأكواد بين الطرفين (لم تلمس القاعدة؛ مقارنة نصّية بأدوات المشروع):**
+  ```bash
+  # الأكواد كما يقرّها الخادم
+  grep -rhoP "(?<=')[a-z_]+\.[a-z_]+(?=')" kyApp_API/app/Support/PermissionCatalog.php | sort -u
+  # الأكواد كما تعرفها الواجهة
+  grep -oP "(?<=')[a-z_]+\.[a-z_]+(?=')" lib/core/constants/permission_codes.dart | sort -u
+  ```
+  النتيجة: 93 مقابل 93، و`missingInDart = []` و`missingInPhp = []` و`firstOrderDiffIndex = -1`
+  (أي أن الترتيب متطابق أيضاً، لأن واجهة اختيار الصلاحيات تعرض الأكواد بترتيب الكتالوج).
+
+- **قراءة دفاعية سُجّلت لأن شكلها يخذل من لا يعرفها:** عمود `DATE` الفارغ في أوراكل 11g يصل عبر
+  مسار القراءة `false` أو `''` لا `null` فقط؛ لذلك `_parseNullableString` يعتبر نص `'false'` فراغاً.
+  وبالمثل أسماء الأعمدة قد تصل بأي حالة أحرف، فتقرأ الواجهة الحالتين معاً (`permissions` / `PERMISSIONS`).
+
+- **الآثار على الصلاحيات نفسها:** لا شيء. لم يُمنح أحد ولم يُسحب من أحد؛ الحجب في هذه المرحلة يحدث في
+  الواجهة فقط اعتماداً على ما يرسله الخادم في `GET /auth/permissions` ودمج `login`/`me`. ختم مسارات
+  الأعمال بمiddleware الصلاحيات مؤجَّل إلى المرحلة 7 (قرار D3) لأنه يسبقه توزيع منح الترحيب
+  للمستخدمين النشطين — وهذا كتابة تحتاج موافقة صريحة.
+
+- **بوابات الجودة / gates:** `flutter analyze` = No issues found! · `flutter test` = 44 اختباراً ناجحاً
+  (منها 39 اختباراً لكتالوج الأكواد وقواعد الحل وسجل الأقسام) · `git status` بلا أي تعديل على `.env`.
+
+---
+
+## [2026-10-19 02:59:38] - المرحلة 7: ختم مسارات الأعمال — ما نُفِّذ على القاعدة — Qoder Agent
+
+**الطبيعة:** هذه المرحلة طبقة سلطة في Laravel لا مخطط. **صفر `INSERT`، صفر `UPDATE`، صفر `DELETE`،
+وصفر DDL** — لا جداول جديدة ولا أعمدة ولا فهارس ولا منح.
+
+- **التنفيذ الفعلي الوحيد على القاعدة (قراءة):**
+  ```sql
+  SELECT USER_ID, USER_NAME_EN, USER_TYPE, IS_ACTIVATED, IS_ADMIN
+    FROM ACCOUNTS.APP_USERS
+   ORDER BY USER_ID;
+  ```
+  **النتيجة:** صفّ واحد `USER_ID=1 | arslan | USER_TYPE=1 | IS_ACTIVATED=1 | IS_ADMIN=1`.
+
+- **لماذا هذه القراءة بالتحديد قبل الختم:** الخطة تشترط (البند 6 / مرحلة 7) توزيع منح ترحيب على كل
+  المستخدمين النشطين **قبل** إغلاق أي مسار، حتى لا يُطرد مستخدم حقيقي عند أول قفل. النتيجة تُسقط
+  هذا الشرط عملياً: لا يوجد مستخدم غير مدير، والمدير يتجاوز جدول المنح في `PermissionResolver`
+  قبل فحص أي منح. فالحصر هنا هو ما يثبت أن الختم آمن بلا كتابة، لا الافتراض بأن «لا مستخدمين غيري».
+
+- **تحقق بعدها أن الصلاحيات المطلوبة موجودة كلها في الكتالوج** (لم يُنفَّذ على القاعدة؛ قراءة من
+  الكود) لأن صلاحية في مسار لا تعرفها `APP_PERMISSIONS` تعني رفضاً أبدياً حتى لمنحه لاحقاً:
+  ```text
+  customers.view/create/update/delete/statement        employees.* cutters.* tailors.*  (view/create/update/delete/toggle/statement)
+  accounts.view/create/update/structure_manage/statement
+  currencies.view/create/update/delete/prices_view/prices_manage
+  invoices.view        system.*
+  ```
+
+- **عبارات جاهزة ولم تُنفَّذ:** لم تُحفظ أي عبارة SQL جديدة في هذه المرحلة؛ استعلامات `SALES_BILL`
+  في `InvoiceController` هي التي كانت موجودة، أُلغِيت منها المصفوفة العارية وأُضيف البحث والتصفح:
+  ```sql
+  -- الصيغة الجديدة (تُبنى عبر builder الاستعلام، لا نصاً خاماً، وكل مربَّط بربط حقيقي)
+  SELECT BILL_NO, YEAR, DAT, CUST_NO, CUST_NAME, TOTAL, DISCOUNT, NET, AMOUNT_PAID, STORE_NO, HANDING_DONE,
+         (NET - AMOUNT_PAID) AS REMAINING
+    FROM ACCOUNTS.SALES_BILL
+   WHERE CUST_NAME LIKE :search_a OR CUST_NAME LIKE :search_b   -- الصيغتان معاً (CP1256 و UTF-8)
+   ORDER BY DAT DESC
+   -- والتصفح بـ ROW_NUMBER() داخل غلاف لأن أوراكل 11g لا تعرف OFFSET/FETCH (البند المؤرشف في المرحلة 4)
+  ```
+
+- **ما لم يُنفَّذ وبقي معلَّقاً عمداً** (بأسماء الأعمدة الصحيحة من `ALL_TAB_COLUMNS`، انظر التصحيح أدناه):
+  ```sql
+  -- منح ترحيبية (لم تُكتب — لا مستخدم غير مدير في القاعدة)
+  INSERT INTO ACCOUNTS.APP_USERS_PERMISSIONS
+         (ID, USER_ID, PERMISSION_ID, GRANTED_BY, GRANTED_ON, IS_ACTIVE)
+  SELECT ACCOUNTS.SEQ_APP_USERS_PERM.NEXTVAL, :user_id, P.PERMISSION_ID, :granted_by, SYSDATE, 1
+    FROM ACCOUNTS.APP_PERMISSIONS P
+   WHERE P.IS_ACTIVE = 1;
+  ```
+  `IS_ACTIVE` عمود `NOT NULL` في جدول المنح، فلا يمكن كتابة منح بدونه — وهذا ما يجعل العبارة أعلاه
+  قابلة للتنفيذ لا للنسخ فقط.
+  اسم التسلسل `SEQ_APP_USERS_PERM` مأخوذ من `ALL_SEQUENCES` لا من التخمين؛ وهو موجود فعلاً مع
+  `SEQ_APP_PERMISSIONS` و`SEQ_APP_SETTINGS` و`SEQ_APP_ACTIVITY` و`SEQ_APP_USERS_ID` — وهي التسلسلات
+  التي أُنشئت في المرحلة 1 بدل نمط `MAX(pk)+1` لأن هذا الجدول جدول منح لا جدول أعمال.
+  هذه العبارة تعود مطلوبة فور إنشاء أول مستخدم غير مدير من واجهة المرحلة 8، وتحتاج إذناً صريحاً
+  بالكتابة قبل تنفيذها.
+
+- **تصحيح وثائقي إلزامي (سُجّل بالمراجعة لا بالإهمال):** البلوك السابق (المرحلة 5+6 في هذا الملف،
+  سطر ~569 فما بعده حيث استعلام «التحقق من عدد الصلاحيات») كتب الاستعلام بأسماء أعمدة **غير موجودة**:
+  `P.STATUS = 'ACTIVE'` و`P.ID = UP.PERMISSION_ID` و`UP.EXPIRES_AT`.
+  أوراكل يردّ على الأولى بـ `ORA-00904: "STATUS": invalid identifier` (أُعيد تنفيذها حرفياً للتو
+  وفشلت في نفس الموضع). الأسماء الصحيحة كما تقرّها `ALL_TAB_COLUMNS`:
+  | الجدول | ما كُتب خطأً | الصحيح |
+  |---|---|---|
+  | `APP_PERMISSIONS` | `ID` | `PERMISSION_ID` |
+  | `APP_PERMISSIONS` | `STATUS = 'ACTIVE'` | `IS_ACTIVE = 1` |
+  | `APP_USERS_PERMISSIONS` | `EXPIRES_AT` | `EXPIRES_ON` |
+  | `APP_USERS_PERMISSIONS` | — | `IS_ACTIVE = 1` (كان غائباً: منح معطّلة كانت تُعدّ منشّطة) |
+
+  العبارة الصحيحة كما نُفِّذت الآن فعلياً:
+  ```sql
+  SELECT (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE IS_ACTIVE = 1) AS ACTIVE_PERMS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS UP
+            JOIN ACCOUNTS.APP_PERMISSIONS P ON P.PERMISSION_ID = UP.PERMISSION_ID
+           WHERE P.IS_ACTIVE = 1
+             AND UP.IS_ACTIVE = 1
+             AND (UP.EXPIRES_ON IS NULL OR UP.EXPIRES_ON > SYSDATE)) AS ACTIVE_GRANTS,
+         (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE IS_ADMIN = 1 AND IS_ACTIVATED = 1) AS ACTIVE_ADMINS
+    FROM DUAL;
+  ```
+  **النتيجة:** `ACTIVE_PERMS = 93` · `ACTIVE_GRANTS = 1` · `ACTIVE_ADMINS = 1` — أي أن الأرقام التي
+  بُني عليها قرار «93 مطابقة» لم تتغير، بل الذي تغيّر هو صحة العبارة التي تُثبتها. الأرقام صحيحة
+  والوثيقة كانت مكتوبة بأسماء خاطئة، ولهذا يُصحَّح النص لا النتيجة.
+  **العبرتان المُستفادتان:** (1) عبارة SQL تُوثَّق كما نُفِّذت، لا كما تُخمين؛ (2) عمود حالة في
+  أوراكل هنا رقمي `IS_ACTIVE` لا نصي `STATUS` — وكل قراءة لاحقة لجدول منح أو كتالوج يجب أن تمرّ
+  عليه، وأي استعلام يُنسج على نمط جداول أخرى سيُخطئ الصمت لا الخطأ المسموع.
+- **تنويه حتى لا يُقرأ التصحيح كانحراف في الكود:** الكود الخلفي صحيح ولم يُغيَّر شيء فيه —
+  ثابت `PermissionResolver::GRANTS_SQL` (يقرأه `fetchCodes()` وحده) يكتب الأسماء السليمة حرفياً:
+  `JOIN ACCOUNTS.APP_PERMISSIONS p ON p.PERMISSION_ID = up.PERMISSION_ID` مع
+  `up.IS_ACTIVE = 1 AND p.IS_ACTIVE = 1 AND (up.EXPIRES_ON IS NULL OR up.EXPIRES_ON > SYSDATE)`.
+  الخطأ كان في **الوثيقة وحدها**: عبارة حُفظت بصيغة أقرب إلى العرف الحديث منها إلى ما أُرسل فعلياً.
+  **وهذا يرفع الخطأ من باب الخطأ المطبوع إلى باب الخطأ المؤجَّل:** من يقرأ `db_commends.md` ويصدّقه
+  يبني استعلامه على `STATUS` و`ID`، فيُصاب بـ `ORA-00904` — أو أسوأ: يظن أن الجدول بلا عمود حالة
+  فيكتب منحاً بلا `IS_ACTIVE = 1` فيسقط المنح صامتاً لأنه `NOT NULL` بلا قيمة افتراضية.
+
+- **بوابات الجودة / gates:** `vendor/bin/pint --dirty --format agent` = fixed (ملفان) ·
+  `vendor/bin/pest` = **78 اختباراً / 533 تحقّقاً** ناجحة · `php artisan route:list --path=api` = **71**
+  (العدد لم يتغيّر: الختم طبقات لا مسارات) · `flutter analyze` = No issues found! ·
+  `flutter test` = 44 ناجحة.
+
+---
+
+## [2026-10-19 06:25:45] المرحلة 8 — واجهة الإدارة: لا SQL نُفِّذ، وما هو معلّق على إذن · Qoder Agent
+
+**لم يُنفَّذ أي أمر SQL في هذه المرحلة — لا قراءة ولا كتابة.** الواجهات خُصصت واختُبرت بمزيفات
+مستودعات داخل `test/responsive_layout_test.dart` و`test/ibac_test.dart`، فبقي الاتصال بالقاعدة الحيّة
+صفراً: لا `INSERT` ولا `UPDATE` ولا `DELETE` ولا `DDL`، ولا استدعاء `oracle` MCP في هذه الجولة. هذا
+البيان مقصود بالتحديد: من يقرأ السجل يجب أن يميّز ما جرى تنفيذه فعلاً عمّا هو مُعَدّ للتنفيذ.
+
+### العبارات التي ستُشغَّل عند أول قبول يدوي مأذون (لم تُنفَّذ)
+
+مكتوبة هنا بأسماء الأعمدة الصحيحة الموثّقة في قطاع «المرجع الصحيح لأعمدة جداول IBAC»، ومبنية على
+ما تقرأه الخلفية فعلاً:
+
+```sql
+-- 1) قبل الكتابة: هل يوجد مستخدم ثانٍ أصلاً؟ (قراءة)
+SELECT USER_ID, USER_NAME_EN, USER_TYPE, IS_ACTIVATED, IS_ADMIN
+  FROM ACCOUNTS.APP_USERS
+ ORDER BY USER_ID;
+
+-- 2) بعد إنشاء مستخدم من الواجهة: تسلسل المفتاح يعمل ولا يتكرر (قراءة)
+SELECT ID, USER_ID, PERMISSION_ID, GRANTED_BY, IS_ACTIVE, EXPIRES_ON
+  FROM ACCOUNTS.APP_USERS_PERMISSIONS
+ WHERE USER_ID = :new_user_id
+ ORDER BY ID;
+
+-- 3) بعد كل عملية: سجل النشاط كتب بالعربية الصحيحة (قراءة) — 11g بلا FETCH FIRST
+SELECT *
+  FROM (SELECT ACTIVITY_ID, USER_ID, TARGET_USER_ID, ACTION_CODE, STATUS, IP_ADDRESS,
+               DESCRIPTION_AR, TO_CHAR(CREATED_ON,'YYYY-MM-DD HH24:MI:SS') AS ON_STR
+          FROM ACCOUNTS.APP_USER_ACTIVITY
+         ORDER BY ACTIVITY_ID DESC)
+ WHERE ROWNUM <= 20;
+
+-- 4) بعد إنهاء جلسة من الشاشة: EXPIRES_AT تقدّم إلى SYSDATE (قراءة)
+SELECT ID AS TOKEN_ID, TOKENABLE_ID AS USER_ID,
+       DBMS_LOB.SUBSTR(NAME, 60, 1) AS TOKEN_NAME,
+       TO_CHAR(CREATED_AT,'YYYY-MM-DD HH24:MI:SS') AS CREATED_STR,
+       TO_CHAR(LAST_USED_AT,'YYYY-MM-DD HH24:MI:SS') AS LAST_USED_STR,
+       TO_CHAR(EXPIRES_AT,'YYYY-MM-DD HH24:MI:SS') AS EXPIRES_STR
+  FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS
+ WHERE TOKENABLE_TYPE = 'App\Models\User'
+ ORDER BY ID DESC;
+
+-- 5) بعد حفظ إعداد الأمان: الصف تُحيّن لا يُدرج (قراءة)
+SELECT SETTING_ID, SETTING_KEY, SETTING_VALUE, VALUE_TYPE, MIN_VALUE, MAX_VALUE
+  FROM ACCOUNTS.APP_SETTINGS
+ ORDER BY SORT_ORDER;
+```
+
+> **تنبيه 11g مُسجَّل حتى لا يُنسخ الخطأ:** `FETCH FIRST … ROWS ONLY` غير مدعوم في أوراكل 11g
+> (ظهرت في 12c+)؛ الحدّ يُكتب بلفّ الاستعلام في طبقة فرعية ثم `WHERE ROWNUM <= 20` كما في العبارة
+> (3) أعلاه، لأن ترتيب `ROWNUM` بعد الفرز لا يتحقق إلا داخل الطبقة الخارجية. وجدول النشاط هو الوحيد
+> هنا الذي يكبر بسرعة، فكل استعلام فحصٍ عليه يحتاج حداً.
+
+### ما لم يُنفَّذ ولماذا
+
+`INSERT` في `APP_USERS` (مستخدم ثانٍ غير مدير) و`UPDATE` في `APP_SETTINGS`
+(`session_idle_minutes=1` لاختبار الخمول) — الاثنان كتابة على مخطط إنتاجي مشترك مع نظام الإرث،
+وموقوفان على موافقة صريحة من المستخدم. تُوثَّق نتيجتهما هنا فور الإذن، بالعبارة الحرفية والصفوف
+التي ردّت.
+
+---
+
+## [2026-10-20 00:45:10] المرحلة 9 — عبارات التحقق (قراءة فقط، عبر خادم `oracle` MCP) · Qoder Agent
+
+لم تُنفَّذ أي عبارة كتابة في هذه الجولة: التصحيح كان في PHP لا في DDL. العبارات أدناه حرفية، ونُسخ
+نتائجها كما ردّت.
+
+```sql
+-- 1) البرهان البايتي: شكل القيمة المفسَدة مقابل الشكل الصحيح للعربية في WE8MSWIN1252
+SELECT DUMP(CHR(191)||CHR(191)||CHR(191), 1016) AS corrupted_shape,
+       DUMP(CHR(216)||CHR(225)||CHR(233)||CHR(199), 1016) AS correct_shape
+  FROM DUAL;
+-- CORRUPTED_SHAPE = Typ=1 Len=3 CharacterSet=WE8MSWIN1252: bf,bf,bf      (ما كان ينتجه encodeForOracle)
+-- CORRECT_SHAPE   = Typ=1 Len=4 CharacterSet=WE8MSWIN1252: d8,e1,e9,c7   («خالد» — ما ينتجه toOracleSearchChars)
+
+-- 2) هل أفسدت العلّة بيانات قائمة؟ صفر علامة استبدال في أسماء العملاء
+SELECT (SELECT COUNT(*) FROM ACCOUNTS.CUST WHERE CUST_NAME LIKE '%'||CHR(191)||'%') AS corrupted_cust,
+       (SELECT COUNT(*) FROM ACCOUNTS.CUST) AS total_cust,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS) AS perms,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_SETTINGS) AS settings,
+       (SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS) AS grants
+  FROM DUAL;
+-- CORRUPTED_CUST=0 · TOTAL_CUST=25406 · PERMS=93 · SETTINGS=10 · GRANTS=1
+
+-- 3) المُشغِّلات (Triggers) الثمانية صالحة؟ و`USER_NO` زال و`IS_ADMIN` موجود؟
+SELECT (SELECT COUNT(*) FROM ALL_OBJECTS
+         WHERE OWNER='ACCOUNTS' AND OBJECT_TYPE='TRIGGER' AND STATUS<>'VALID') AS invalid_triggers,
+       (SELECT COUNT(*) FROM ALL_OBJECTS
+         WHERE OWNER='ACCOUNTS' AND OBJECT_TYPE='TRIGGER') AS total_triggers,
+       (SELECT COUNT(*) FROM ALL_TAB_COLUMNS
+         WHERE OWNER='ACCOUNTS' AND TABLE_NAME='APP_USERS' AND COLUMN_NAME='USER_NO') AS user_no_left,
+       (SELECT COUNT(*) FROM ALL_TAB_COLUMNS
+         WHERE OWNER='ACCOUNTS' AND TABLE_NAME='APP_USERS' AND COLUMN_NAME='IS_ADMIN') AS is_admin
+  FROM DUAL;
+-- INVALID_TRIGGERS=0 · TOTAL_TRIGGERS=8 · USER_NO_LEFT=0 · IS_ADMIN=1
+
+-- 4) قيم سياسة الجلسات المقروءة من الجدول لا من الكود
+SELECT SETTING_KEY, SETTING_VALUE, VALUE_TYPE
+  FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY IN ('session_idle_minutes','session_absolute_days','session_touch_threshold_minutes')
+ ORDER BY SETTING_KEY;
+-- session_absolute_days=14 (int) · session_idle_minutes=240 (int) · session_touch_threshold_minutes=5 (int)
+
+-- 5) شاهد على تخزين النظام القديم لبايتات CP1256 في صفوف حقيقية
+SELECT CUST_NO, DUMP(CUST_NAME, 1016) AS name_bytes
+  FROM ACCOUNTS.CUST
+ WHERE ROWNUM <= 2 AND CUST_NAME IS NOT NULL
+ ORDER BY CUST_NO;
+-- CUST_NO=0 → Typ=1 Len=21 … da,e3,e1,c7,c1,20,c7,e1,df,c8,e6,cf,ed,20,e1,e1,ce,ed,c7,d8,c9
+-- CUST_NO=1 → Typ=1 Len=8  … da,e1,ed,20,e3,d5,e1,cd
+```
+
+**ملاحظات 11g مُسجَّلة كي لا تُعاد:** `FETCH FIRST … ROWS ONLY` غير مدعوم في 11g فيُستخدم `ROWNUM`
+(العبارة 5)، والعدّادات المتعددة تُلفّ في **استعلامات فرعية عدّادية** داخل `SELECT … FROM DUAL` لأن
+`UNION ALL` ثم `FROM DUAL` أعطى `ORA-00933` في جلسة سابقة، وقراءة أسماء الأعمدة تُتحقّق أولاً من
+`ALL_TAB_COLUMNS` قبل أي محاولة (كُشِفت `ORA-00904` أكثر من مرة بهذا الطريق).
+
+**الكتابة المعلّقة على إذن:** لم تتغيّر قائمة المعلَّقات — `INSERT` مستخدم ثانٍ في `APP_USERS`،
+`UPDATE` لـ `APP_SETTINGS` بسيناريو الخمول، وكل ما في `ibac_permissions_plan.md` §10. تُسجَّل عباراتها
+هنا بحرفيتها عند الإذن.
+
+---
+
+## [2026-10-20 04:13:12] تحقّق قراءة فقط: ثبات إصلاح الترميز على صفوف حيّة (Qoder Agent)
+
+بعد حصانة التكرار في `ArabicEncoding::fixMojibake()` — نص UTF-8 سليم (عربية U+0600–U+06FF ولا
+محرف في 0x80–0xFF) يُرجع كما هو — طُبّق الإصلاح على صفوف الإنتاج للتأكد أن الثبات ميداني لا
+نظري. القراءة عبر MCP `oracle` للعبارات 2–4، وعبر `php artisan tinker` للعبارة 1 (نفس النص بربط
+`:k`).
+
+```sql
+-- 1) اسم مستخدم حيّ: إصلاح واحد = «ارسلان»، والإصلاح الثاني لا يغيّره (idempotent)
+SELECT USER_NAME_AR FROM ACCOUNTS.APP_USERS WHERE USER_ID = 1;
+-- النتيجة (عبر tinker): has_arabic_once=true · idempotent=true · identical_to_php_literal=true
+
+-- 2) تسمية إعداد حيّ: إصلاح واحد = «مهلة خمول الجلسة (بالدقائق)» وثابت عند التكرار
+SELECT NAME_AR FROM ACCOUNTS.APP_SETTINGS WHERE SETTING_KEY = 'session_idle_minutes';
+
+-- 3) الإعدادات العشر كاملة: القيم كلها ASCII (int/bool) عدا maintenance_message (string, NULL)
+--    ⇒ لا عربية تظهر في raw_value الذي يرجعه SettingController خاماً
+SELECT SETTING_KEY, VALUE_TYPE, SETTING_VALUE, NAME_AR
+  FROM ACCOUNTS.APP_SETTINGS
+ ORDER BY SORT_ORDER;
+
+-- 4) الأعمدة الإلزامية في APP_USERS: يجب أن يكون كلها مربوطاً في إدراج store() بعد إصلاح العقد
+SELECT COLUMN_NAME, NULLABLE, DATA_DEFAULT
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'APP_USERS' AND NULLABLE = 'N'
+ ORDER BY COLUMN_ID;
+-- النتيجة: USER_ID (default=null) · IS_ADMIN (default='0 ') — ولا غيرهما، وكلاهما مربوط صراحة
+```
+
+**لماذا هذا التحقق بالذات:** شاشتا الجلسات وإعدادات الأمان كانتا تعرضان رموزاً (`ط§ط±ط³ظ„ط§ظ†` بدل
+`ارسلان`) لأن إصلاحاً ثانياً مرّ على قيم مُصلَحة — فتُقلب بايتات UTF-8 السليمة عبر جدول CP1256
+(`موظف` → `ظ…ظˆط¸ظپ`). الثبات عند التكرار على الصف الحيّ هو الدليل الميداني على عمل الحصانة.
+عُرضت تجربة كتابة مُرجَّعة (إنشاء مستخدم داخل معاملة تُلغى) لإثبات `store()` فصدّها التنفيذ الآمن،
+فلم تُنفَّذ أي كتابة في هذه الجولة أصلاً — القائمة المعلَّقة أعلاه لم تتغيّر.
