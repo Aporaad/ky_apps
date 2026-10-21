@@ -74,15 +74,24 @@ class ChartAccountModel {
 // ================================================================
 
 /// حركة واحدة في كشف الحساب
+/// Mirrors one row of the ENTRY_MAIN/ENTRY_SUB/ENTRY_TYPE join returned by
+/// GET /accounts/chart/{accNo}/statement — same dual-case key reading convention
+/// used throughout the accounts models (Oracle may uppercase or lowercase keys).
 class AccountTransactionModel {
+  final int? entryNo;
+  final String? subEntryNo;
   final String? date;
+  final String? entryTypeName;
   final String? description;
   final double? debit;
   final double? credit;
   final double? balance;
 
   const AccountTransactionModel({
+    this.entryNo,
+    this.subEntryNo,
     this.date,
+    this.entryTypeName,
     this.description,
     this.debit,
     this.credit,
@@ -91,26 +100,52 @@ class AccountTransactionModel {
 
   factory AccountTransactionModel.fromJson(Map<String, dynamic> json) =>
       AccountTransactionModel(
-        date: json['date']?.toString(),
-        description: ArabicEncodingUtils.fix(json['description']),
-        debit: _parseDouble(json['debit']),
-        credit: _parseDouble(json['credit']),
-        balance: _parseDouble(json['balance']),
+        entryNo: _parseInt(json['entry_no'] ?? json['ENTRY_NO']),
+        subEntryNo: (json['sub_entry_no'] ?? json['SUB_ENTRY_NO'])?.toString(),
+        date: (json['date'] ?? json['DATE'] ?? json['ENTRY_DATE'] ?? json['entry_date'])?.toString(),
+        entryTypeName: ArabicEncodingUtils.fix(
+          json['entry_type_name'] ?? json['ENTRY_TYPE_NAME'],
+        ),
+        description: ArabicEncodingUtils.fix(
+          json['description'] ?? json['DESCRIPTION'] ?? json['DETAILS'] ?? json['details'],
+        ),
+        debit: _parseDouble(json['debit'] ?? json['DEBIT']),
+        credit: _parseDouble(json['credit'] ?? json['CREDIT']),
+        balance: _parseDouble(json['balance'] ?? json['BALANCE'] ?? json['BALANCE_S'] ?? json['balance_s']),
       );
 }
 
 /// بيانات كشف الحساب الكاملة
+/// Envelope matching the rewritten getAccountStatement response: `data.account`,
+/// `data.transactions[]`, and `data.summary` (which now carries the newly exposed
+/// opening/final balances, totals, currency label, and the resolved date range).
 class AccountStatementData {
   final Map<String, dynamic>? account;
   final List<AccountTransactionModel> transactions;
   final double? currentBalance;
   final int totalRecords;
+  final double? openingBalance;
+  final double? finalBalance;
+  final double? totalDebit;
+  final double? totalCredit;
+  final String? currency;
+  final String? fromDate;
+  final String? toDate;
+  final bool defaulted;
 
   const AccountStatementData({
     this.account,
     this.transactions = const [],
     this.currentBalance,
     this.totalRecords = 0,
+    this.openingBalance,
+    this.finalBalance,
+    this.totalDebit,
+    this.totalCredit,
+    this.currency,
+    this.fromDate,
+    this.toDate,
+    this.defaulted = false,
   });
 
   factory AccountStatementData.fromJson(Map<String, dynamic> json) {
@@ -125,6 +160,16 @@ class AccountStatementData {
       transactions: txList,
       currentBalance: _parseDouble(summary['current_balance']),
       totalRecords: _parseInt(summary['total_records']) ?? 0,
+      openingBalance: _parseDouble(summary['opening_balance']),
+      finalBalance: _parseDouble(summary['final_balance']),
+      totalDebit: _parseDouble(summary['total_debit']),
+      totalCredit: _parseDouble(summary['total_credit']),
+      currency: (summary['currency'] ?? '').toString().isEmpty
+          ? null
+          : ArabicEncodingUtils.fix(summary['currency']),
+      fromDate: summary['from_date']?.toString(),
+      toDate: summary['to_date']?.toString(),
+      defaulted: summary['defaulted'] == true,
     );
   }
 }

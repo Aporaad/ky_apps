@@ -5,11 +5,21 @@
 - [pubspec.yaml](file://pubspec.yaml)
 - [widget_test.dart](file://test/widget_test.dart)
 - [api_config_test.dart](file://test/api_config_test.dart)
+- [app_config_model_test.dart](file://test/app_config_model_test.dart)
 - [ibac_test.dart](file://test/ibac_test.dart)
+- [app_config_model.dart](file://lib/features/app_config/data/models/app_config_model.dart)
+- [app_palette.dart](file://lib/core/theme/app_palette.dart)
 - [composer.json](file://kyApp_API/composer.json)
 - [Pest.php](file://kyApp_API/tests/Pest.php)
 - [TestCase.php](file://kyApp_API/tests/TestCase.php)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added comprehensive documentation for configuration model testing covering JSON serialization, color parsing, default value handling, and edge cases
+- Updated Flutter unit tests section with new AppConfigModel test coverage
+- Enhanced test organization examples with configuration model patterns
+- Added new diagram showing configuration model testing workflow
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -17,15 +27,16 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Configuration Model Testing](#configuration-model-testing)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
+11. [Appendices](#appendices)
 
 ## Introduction
 This Testing Guide documents the testing strategy for a Flutter frontend and a Laravel backend (KyApp API). It covers:
-- Frontend unit tests for models, services, and business logic using Flutter’s built-in testing framework.
+- Frontend unit tests for models, services, and business logic using Flutter's built-in testing framework.
 - Backend integration tests for API endpoints using Pest, including database testing strategies and mocking patterns.
 - Patterns for authentication flows, permission validation, and biometric authentication scenarios.
 - Test organization, naming conventions, asynchronous testing, mocking external dependencies, CI practices, performance considerations, and test data management.
@@ -41,6 +52,7 @@ subgraph "Flutter Frontend"
 T["test/"]
 W["widget_test.dart"]
 A["api_config_test.dart"]
+C["app_config_model_test.dart"]
 I["ibac_test.dart"]
 end
 subgraph "Laravel Backend"
@@ -50,6 +62,7 @@ C["TestCase.php"]
 end
 T --> W
 T --> A
+T --> C
 T --> I
 K --> P
 K --> C
@@ -70,18 +83,21 @@ K --> C
 - Existing Flutter tests cover:
   - Model parsing and mapping (UserModel, AuthResponse).
   - API configuration utilities (base URL normalization and constants).
+  - **New**: Comprehensive configuration model testing (AppConfigModel) covering JSON serialization, color parsing, default value handling, and edge cases.
   - Permission system decision rules and UI interactions (IBAC).
 - Laravel testing setup uses Pest with Laravel integration. The base TestCase is provided; RefreshDatabase is available but not enabled by default.
 
 Key responsibilities:
 - widget_test.dart: Unit tests for auth-related models.
 - api_config_test.dart: Unit tests for API configuration helpers and constants.
+- **app_config_model_test.dart**: Comprehensive tests for configuration model JSON serialization, color parsing, default values, copyWith operations, and palette integration.
 - ibac_test.dart: Comprehensive tests for permission resolution, catalog consistency, user model parsing, and permissions picker widget behavior.
 
 **Section sources**
 - [pubspec.yaml:48-50](file://pubspec.yaml#L48-L50)
 - [widget_test.dart:1-45](file://test/widget_test.dart#L1-L45)
 - [api_config_test.dart:1-25](file://test/api_config_test.dart#L1-L25)
+- [app_config_model_test.dart:1-107](file://test/app_config_model_test.dart#L1-L107)
 - [ibac_test.dart:1-421](file://test/ibac_test.dart#L1-L421)
 - [composer.json:19-29](file://kyApp_API/composer.json#L19-L29)
 - [Pest.php:16-18](file://kyApp_API/tests/Pest.php#L16-L18)
@@ -284,11 +300,12 @@ Assert --> End(["Test Exit"])
 - Laravel:
   - Organize tests under tests/Feature and tests/Unit.
   - Name files after the feature or class under test.
-  - Use Pest’s expressive syntax for readable specs.
+  - Use Pest's expressive syntax for readable specs.
 
 **Section sources**
 - [widget_test.dart:5-43](file://test/widget_test.dart#L5-L43)
 - [api_config_test.dart:5-23](file://test/api_config_test.dart#L5-L23)
+- [app_config_model_test.dart:10-106](file://test/app_config_model_test.dart#L10-L106)
 - [ibac_test.dart:85-164](file://test/ibac_test.dart#L85-L164)
 - [Pest.php:16-33](file://kyApp_API/tests/Pest.php#L16-L33)
 
@@ -326,8 +343,70 @@ Assert --> End(["Test Exit"])
 
 **Section sources**
 - [widget_test.dart:7-42](file://test/widget_test.dart#L7-L42)
+- [app_config_model_test.dart:12-57](file://test/app_config_model_test.dart#L12-L57)
 - [ibac_test.dart:19-52](file://test/ibac_test.dart#L19-L52)
 - [Pest.php:16-18](file://kyApp_API/tests/Pest.php#L16-L18)
+
+## Configuration Model Testing
+
+### AppConfigModel Comprehensive Test Suite
+The new configuration model test suite provides comprehensive coverage for the AppConfigModel class, ensuring robustness of the configuration system data handling.
+
+```mermaid
+flowchart TD
+Start(["AppConfigModel Tests"]) --> JsonParsing["JSON Parsing Tests"]
+JsonParsing --> DirectPayload["Direct snake_case payload"]
+JsonParsing --> WrappedPayload["Wrapped {success,data} payload"]
+JsonParsing --> InvalidColors["Invalid color handling"]
+JsonParsing --> EmptyStrings["Empty string handling"]
+Start --> Serialization["Serialization Tests"]
+Serialization --> ToJsonUpdate["toJsonForUpdate format"]
+Serialization --> RoundTrip["Round-trip JSON conversion"]
+Start --> Defaults["Default Values Tests"]
+Defaults --> PaletteSync["Palette synchronization"]
+Defaults --> CopyWith["copyWith operations"]
+Start --> PaletteIntegration["Palette Integration Tests"]
+PaletteIntegration --> ApplyToPalette["applyToPalette functionality"]
+```
+
+**Diagram sources**
+- [app_config_model_test.dart:10-106](file://test/app_config_model_test.dart#L10-L106)
+- [app_config_model.dart:67-166](file://lib/features/app_config/data/models/app_config_model.dart#L67-L166)
+
+#### JSON Parsing and Deserialization
+The test suite validates multiple JSON input formats and error handling scenarios:
+
+- **Direct snake_case payload parsing**: Ensures proper parsing of server-provided configuration data with snake_case keys.
+- **Wrapped payload handling**: Validates support for `{success, data}` wrapper format commonly used by APIs.
+- **Color parsing robustness**: Tests invalid color formats (non-hex strings, malformed hex codes, null values) to ensure graceful fallback to default colors.
+- **String field validation**: Verifies empty string handling and whitespace trimming with proper fallback to default values.
+
+#### Serialization and Update Operations
+Comprehensive coverage of the `toJsonForUpdate()` method ensures proper serialization for API updates:
+
+- **Hex color formatting**: Validates conversion of Color objects to uppercase `#RRGGBB` format.
+- **Snake_case key generation**: Ensures proper key naming convention for API compatibility.
+- **Security validation**: Confirms sensitive fields (like API passwords) are excluded from update payloads.
+- **Round-trip consistency**: Verifies that JSON → Model → JSON conversions maintain color value integrity.
+
+#### Default Value Handling and Immutability
+Tests ensure the configuration system maintains consistent defaults and immutability patterns:
+
+- **Default factory verification**: Confirms `AppConfigModel.defaults()` produces values matching `AppPalette` defaults.
+- **copyWith functionality**: Validates partial object updates while preserving unchanged fields.
+- **Immutability enforcement**: Ensures original objects remain unchanged after copy operations.
+
+#### Palette Integration Testing
+Tests verify seamless integration with the application's theme system:
+
+- **Dynamic palette updates**: Validates that `applyToPalette()` correctly updates runtime theme colors.
+- **Theme synchronization**: Ensures palette changes propagate throughout the application.
+- **State cleanup**: Confirms proper reset mechanisms to prevent test interference.
+
+**Section sources**
+- [app_config_model_test.dart:10-106](file://test/app_config_model_test.dart#L10-L106)
+- [app_config_model.dart:67-166](file://lib/features/app_config/data/models/app_config_model.dart#L67-L166)
+- [app_palette.dart:56-98](file://lib/core/theme/app_palette.dart#L56-L98)
 
 ## Dependency Analysis
 Flutter testing dependencies:
@@ -376,19 +455,22 @@ Common issues and resolutions:
 - Flutter:
   - Widget tests failing due to provider state: ensure ProviderScope and overrides are correctly set.
   - Async timing issues: use pumpAndSettle and explicit awaits.
+  - Configuration model tests failing: verify AppPalette state is properly reset between tests.
 - Laravel:
   - Database state leakage: enable RefreshDatabase trait in TestCase.
   - Missing environment variables: configure .env.testing and secrets appropriately.
 
 **Section sources**
 - [ibac_test.dart:54-83](file://test/ibac_test.dart#L54-L83)
+- [app_config_model_test.dart:98-105](file://test/app_config_model_test.dart#L98-L105)
 - [Pest.php:16-18](file://kyApp_API/tests/Pest.php#L16-L18)
 
 ## Conclusion
 This guide outlines a robust testing strategy across Flutter and Laravel:
 - Flutter tests validate models, configuration, permission logic, and UI interactions.
+- **Enhanced**: Comprehensive configuration model testing ensures robust data handling, color parsing, and theme synchronization.
 - Laravel tests leverage Pest for expressive integration testing with database and mocking support.
-- Following the patterns here ensures reliability, clarity, and maintainability across the application’s critical paths.
+- Following the patterns here ensures reliability, clarity, and maintainability across the application's critical paths.
 
 [No sources needed since this section summarizes without analyzing specific files]
 

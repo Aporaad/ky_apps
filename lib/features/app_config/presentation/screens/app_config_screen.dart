@@ -28,7 +28,9 @@ class AppConfigScreen extends ConsumerStatefulWidget {
 class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
   // ── حقول النصوص / text controllers ───────────────────────
   late final TextEditingController _companyName;
+  late final TextEditingController _companyNameEn;
   late final TextEditingController _companyAddress;
+  late final TextEditingController _companyAddressEn;
   late final TextEditingController _companyWebsite;
   late final TextEditingController _companyPhone;
   late final TextEditingController _appName;
@@ -62,7 +64,9 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
     final config = ref.read(appConfigNotifierProvider).config;
 
     _companyName = TextEditingController(text: config.companyName);
+    _companyNameEn = TextEditingController(text: config.companyNameEn);
     _companyAddress = TextEditingController(text: config.companyAddress);
+    _companyAddressEn = TextEditingController(text: config.companyAddressEn);
     _companyWebsite = TextEditingController(text: config.companyWebsite);
     _companyPhone = TextEditingController(text: config.companyPhone);
     _appName = TextEditingController(text: config.appName);
@@ -86,7 +90,9 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
   @override
   void dispose() {
     _companyName.dispose();
+    _companyNameEn.dispose();
     _companyAddress.dispose();
+    _companyAddressEn.dispose();
     _companyWebsite.dispose();
     _companyPhone.dispose();
     _appName.dispose();
@@ -105,7 +111,9 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
   Future<void> _save() async {
     final updated = AppConfigModelBuild.fromFields(
       companyName: _companyName.text.trim(),
+      companyNameEn: _companyNameEn.text.trim(),
       companyAddress: _companyAddress.text.trim(),
+      companyAddressEn: _companyAddressEn.text.trim(),
       companyWebsite: _companyWebsite.text.trim(),
       companyPhone: _companyPhone.text.trim(),
       appName: _appName.text.trim(),
@@ -162,7 +170,13 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
           children: [
             _sectionTitle('معلومات الشركة'),
             _textField(_companyName, 'اسم الشركة'),
+            // الحقول الإنجليزية تُرسم من اليسار لأنها نص لاتيني، وتظهر في العمود
+            // الأيسر من ترويسة التقارير المطبوعة.
+            // The English fields are typed left-to-right: they fill the left column of the
+            // printed report letterhead.
+            _textField(_companyNameEn, 'اسم الشركة بالإنجليزية', ltr: true),
             _textField(_companyAddress, 'العنوان'),
+            _textField(_companyAddressEn, 'العنوان بالإنجليزية', ltr: true),
             _textField(_companyWebsite, 'الموقع الإلكتروني'),
             _textField(_companyPhone, 'الهاتف', phone: true),
             _textField(_appName, 'اسم التطبيق'),
@@ -232,12 +246,16 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
     TextEditingController controller,
     String label, {
     bool phone = false,
+    bool ltr = false,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
         keyboardType: phone ? TextInputType.phone : TextInputType.text,
+        // النص اللاتيني يحتاج اتجاهًا صريحًا وإلا ورَدَ مقلوبًا داخل واجهة RTL
+        // Latin text needs an explicit direction, otherwise it renders mirrored in an RTL app.
+        textDirection: ltr ? TextDirection.ltr : null,
         inputFormatters: phone
             ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9+\-\s]'))]
             : null,
@@ -429,7 +447,9 @@ class AppConfigModelBuild {
 
   static AppConfigModel fromFields({
     required String companyName,
+    required String companyNameEn,
     required String companyAddress,
+    required String companyAddressEn,
     required String companyWebsite,
     required String companyPhone,
     required String appName,
@@ -450,7 +470,9 @@ class AppConfigModelBuild {
 
     return AppConfigModel.fromJson({
       'company_name': companyName,
+      'company_name_en': companyNameEn,
       'company_address': companyAddress,
+      'company_address_en': companyAddressEn,
       'company_website': companyWebsite,
       'company_phone': companyPhone,
       'app_name': appName,

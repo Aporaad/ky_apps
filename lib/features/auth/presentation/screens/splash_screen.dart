@@ -23,7 +23,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
   }
 
   Future<void> _checkNavigation() async {
-    await Future.delayed(const Duration(milliseconds: 1200));
+    await Future.delayed(const Duration(milliseconds: 2000));
     if (!mounted) return;
 
     final authState = ref.read(authNotifierProvider);
@@ -42,7 +42,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
         ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
 
     return Scaffold(
-      backgroundColor: AppColors.primaryDark,
+      backgroundColor: AppColors.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -50,16 +50,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
             // الشعار الموحّد — محلي إن وُجد وإلا الأصل المضمّن
             // Unified logo — local file when present, otherwise the bundled asset.
             AppLogo(
-              width: 370,
-              height: 300,
+              width: 300,
+              height: 250,
             ),
             const SizedBox(height: 24),
             Text(
               companyName,
-              style: const TextStyle(
+              style:  TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,
-                color: Colors.white,
+                color: AppColors.textPrimary,
                 letterSpacing: 0.5,
               ),
             ),

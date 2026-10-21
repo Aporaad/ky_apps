@@ -17,11 +17,13 @@ class ApiConstants {
   // Current IBAC state — read at sign-in and when the app returns to the foreground.
   static const String permissions = '/auth/permissions';
 
-  // تهيئة التطبيق (الهوية/المظهر/اتصال API) — عامة للقراءة، ومحمية للكتابة
-  // App config (identity/theming/API connection) — public read, protected writes.
+  // تهيئة التطبيق (الهوية/المظهر) — عامة للقراءة، ومحمية للكتابة
+  // App config (identity/theming) — public read, protected writes.
+  // كلمة سر إعدادات API أصبحت محلية بالكامل — لا تحقق ولا تغيير عبر الخادم، لأن شاشة
+  // إعدادات API يجب أن تُفتح حتى عندما يكون رابط الخادم خاطئ أو غير متصل.
+  // The API-settings password is fully local now — never verified/changed via the server,
+  // because the API-settings screen must open even when the server URL is wrong or offline.
   static const String appConfig = '/app-config';
-  static const String appConfigVerifyApiPassword = '/app-config/verify-api-password';
-  static const String appConfigApiPassword = '/app-config/api-password';
 
   // مسارات المقاييس الحيوية
   static const String biometricLogin    = '/auth/biometric/login';

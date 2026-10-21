@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
+import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../../data/models/worker_statement_model.dart';
 import '../providers/workers_provider.dart';
@@ -638,7 +641,7 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. الترويسة الرئيسية والشعار المطابق للصورة
+              // 1. الترويسة — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
               _buildReportHeader(),
               const SizedBox(height: 7),
 
@@ -683,132 +686,22 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
   }
 
   // -------------------------------------------------------------
-  // الترويسة العلوية والشعار المطابق للصورة المعتمدة
+  // الترويسة الرسمية — الشريط الثلاثي الأعمدة الموحَّد لكل التقارير
+  // Official header — the same three-column band every report draws.
+  //
+  // كانت تُرسم يدوياً باسم وعنوان ثابتين؛ الآن تُقرأ من `APP_SETTINGS` (مفاتيح
+  // company_*) عبر `ReportLetterheadBranding` فلا تختلف عن ترويسة شاشات الحسابات.
+  // It used to be hand-drawn from hardcoded strings; it now comes from APP_SETTINGS
+  // (the company_* keys) through ReportLetterheadBranding, identical to the accounts reports.
   // -------------------------------------------------------------
   Widget _buildReportHeader() {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // اليمين: الكبودي للخياطة الرجالية
-            const Expanded(
-              flex: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Al-Kaboudy',
-                    style: TextStyle(
-                      fontSize: 8,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF8B4513),
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  Text(
-                    'الـكـبـودي',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF4A1208),
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  Text(
-                    'لـلـخـيـاطـة الـرجـالـيـة',
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B2D1B),
-                      letterSpacing: 1,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // الوسط: الشعار الهندسي K.Y
-            Expanded(
-              flex: 3,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xFFB8860B).withValues(alpha: 0.4),
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    color: const Color(0xFFFFF9EE),
-                  ),
-                  child: const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.diamond_outlined,
-                        size: 24,
-                        color: Color(0xFF8B4513),
-                      ),
-                      Text(
-                        'K.Y',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF5A1E14),
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // اليسار: البانر البني للعناوين والهاتف
-            Expanded(
-              flex: 5,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4A1208),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF8B3A2B), width: 1),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'صنعاء - خط المطار - الجراف - جوار بيت الشيخ الشايف',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      '780 154 000 - 780 164 000 ✆',
-                      textAlign: TextAlign.center,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                        fontSize: 8,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFFE082),
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+    // مشاهدة الإعدادات تعيد رسم الترويسة فور أي حفظ من شاشة تهيئة التطبيق
+    // Watching the config repaints the band right after a save in the settings screen.
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.watch(appConfigNotifierProvider).config,
     );
+
+    return ReportLetterheadBranding(info: letterhead);
   }
 
   // -------------------------------------------------------------

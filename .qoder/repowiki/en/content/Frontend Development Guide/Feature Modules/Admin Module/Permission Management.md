@@ -7,13 +7,24 @@
 - [PermissionGrantSync.php](file://kyApp_API/app/Support/PermissionGrantSync.php)
 - [PermissionController.php](file://kyApp_API/app/Http/Controllers/PermissionController.php)
 - [ActivityLogger.php](file://kyApp_API/app/Support/ActivityLogger.php)
+- [AppConfigController.php](file://kyApp_API/app/Http/Controllers/AppConfigController.php)
+- [api.php](file://kyApp_API/routes/api.php)
 - [01_ibac_schema.sql](file://kyApp_API/database/oracle/01_ibac_schema.sql)
 - [02_ibac_seed.php](file://kyApp_API/database/oracle/02_ibac_seed.php)
 - [permission_repository.dart](file://lib/features/admin/data/repositories/permission_repository.dart)
+- [permission_codes.dart](file://lib/core/constants/permission_codes.dart)
 - [ibac_test.dart](file://test/ibac_test.dart)
 - [IbacCoreTest.php](file://kyApp_API/tests/Feature/IbacCoreTest.php)
 - [PermissionSyncTest.php](file://kyApp_API/tests/Feature/PermissionSyncTest.php)
+- [AppConfigTest.php](file://kyApp_API/tests/Feature/AppConfigTest.php)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added documentation for the new `app_config` module with four permission codes: `app_config.view`, `app_config.update`, and `app_config.api_manage`
+- Updated the permission catalog section to include the new app configuration management capabilities
+- Enhanced examples to demonstrate the new dynamic configuration access permissions
+- Updated architecture diagrams to reflect the integration of AppConfigController with the permission system
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -51,6 +62,8 @@ Grants --> DB[("Oracle Schema<br/>APP_PERMISSIONS / APP_USERS_PERMISSIONS")]
 Resolver --> DB
 Seed["02_ibac_seed.php"] --> Catalog
 Schema["01_ibac_schema.sql"] --> DB
+AppConfig["AppConfigController<br/>AppConfigController.php"] --> Routes["API Routes<br/>api.php"]
+Routes --> Resolver
 ```
 
 **Diagram sources**
@@ -59,6 +72,8 @@ Schema["01_ibac_schema.sql"] --> DB
 - [PermissionGrantSync.php:7-19](file://kyApp_API/app/Support/PermissionGrantSync.php#L7-L19)
 - [ActivityLogger.php:9-17](file://kyApp_API/app/Support/ActivityLogger.php#L9-L17)
 - [PermissionResolver.php:9-26](file://kyApp_API/app/Support/PermissionResolver.php#L9-L26)
+- [AppConfigController.php:38-44](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L44)
+- [api.php:141-146](file://kyApp_API/routes/api.php#L141-L146)
 - [01_ibac_schema.sql:36-100](file://kyApp_API/database/oracle/01_ibac_schema.sql#L36-L100)
 - [02_ibac_seed.php:3-24](file://kyApp_API/database/oracle/02_ibac_seed.php#L3-L24)
 - [permission_repository.dart:70-95](file://lib/features/admin/data/repositories/permission_repository.dart#L70-L95)
@@ -69,6 +84,8 @@ Schema["01_ibac_schema.sql"] --> DB
 - [PermissionGrantSync.php:7-19](file://kyApp_API/app/Support/PermissionGrantSync.php#L7-L19)
 - [ActivityLogger.php:9-17](file://kyApp_API/app/Support/ActivityLogger.php#L9-L17)
 - [PermissionResolver.php:9-26](file://kyApp_API/app/Support/PermissionResolver.php#L9-L26)
+- [AppConfigController.php:38-44](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L44)
+- [api.php:141-146](file://kyApp_API/routes/api.php#L141-L146)
 - [01_ibac_schema.sql:36-100](file://kyApp_API/database/oracle/01_ibac_schema.sql#L36-L100)
 - [02_ibac_seed.php:3-24](file://kyApp_API/database/oracle/02_ibac_seed.php#L3-L24)
 - [permission_repository.dart:70-95](file://lib/features/admin/data/repositories/permission_repository.dart#L70-L95)
@@ -79,6 +96,7 @@ Schema["01_ibac_schema.sql"] --> DB
 - PermissionGrantSync: Write path for user grants, including code resolution, atomic replacement, and cache invalidation.
 - PermissionController: HTTP endpoints serving the catalog, reading current grants, replacing grants safely, terminating sessions, and auditing changes.
 - ActivityLogger: Audit trail writer that never breaks successful requests.
+- AppConfigController: Manages application configuration including company identity, theming, and API connection settings with granular permissions.
 - Oracle Schema and Seed: Database tables for permissions, user grants, settings, and activity; idempotent seeding driven by PermissionCatalog.
 - Flutter PermissionRepository: Client-side repository fetching the grouped catalog from `/permissions`.
 
@@ -88,6 +106,7 @@ Schema["01_ibac_schema.sql"] --> DB
 - [PermissionGrantSync.php:20-190](file://kyApp_API/app/Support/PermissionGrantSync.php#L20-L190)
 - [PermissionController.php:30-378](file://kyApp_API/app/Http/Controllers/PermissionController.php#L30-L378)
 - [ActivityLogger.php:18-170](file://kyApp_API/app/Support/ActivityLogger.php#L18-L170)
+- [AppConfigController.php:38-423](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L423)
 - [01_ibac_schema.sql:36-100](file://kyApp_API/database/oracle/01_ibac_schema.sql#L36-L100)
 - [02_ibac_seed.php:332-461](file://kyApp_API/database/oracle/02_ibac_seed.php#L332-L461)
 - [permission_repository.dart:70-95](file://lib/features/admin/data/repositories/permission_repository.dart#L70-L95)
@@ -137,6 +156,12 @@ class PermissionController {
 -findUser(userId)
 -terminateSessions(userId)
 }
+class AppConfigController {
++publicConfig()
++update(request)
++verifyApiPassword(request)
++updateApiPassword(request)
+}
 class ActivityLogger {
 +record(action, context, request)
 +success(action, context, request)
@@ -146,6 +171,8 @@ PermissionController --> PermissionCatalog : "reads"
 PermissionController --> PermissionGrantSync : "writes"
 PermissionController --> PermissionResolver : "evaluates"
 PermissionController --> ActivityLogger : "audits"
+AppConfigController --> PermissionResolver : "checks permissions"
+AppConfigController --> ActivityLogger : "logs changes"
 PermissionGrantSync --> PermissionResolver : "invalidates cache"
 PermissionResolver --> PermissionCatalog : "uses constants"
 ```
@@ -155,6 +182,7 @@ PermissionResolver --> PermissionCatalog : "uses constants"
 - [PermissionResolver.php:27-274](file://kyApp_API/app/Support/PermissionResolver.php#L27-L274)
 - [PermissionGrantSync.php:20-190](file://kyApp_API/app/Support/PermissionGrantSync.php#L20-L190)
 - [PermissionController.php:30-378](file://kyApp_API/app/Http/Controllers/PermissionController.php#L30-L378)
+- [AppConfigController.php:38-423](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L423)
 - [ActivityLogger.php:18-170](file://kyApp_API/app/Support/ActivityLogger.php#L18-L170)
 
 ## Detailed Component Analysis
@@ -167,7 +195,9 @@ The catalog is the authoritative source for all permission metadata. It defines:
 - Wildcards for module-level grants and system-wide grants.
 - Methods to generate rows for seeding, group permissions for UI, validate codes, and compute counts.
 
-The controller’s index endpoint returns the grouped catalog with database IDs so the Flutter UI can submit IDs rather than raw codes.
+**Updated** The catalog now includes the `app_config` module with four permission codes: `app_config.*` (wildcard), `app_config.view` (view application configuration), `app_config.update` (update company identity and theming), and `app_config.api_manage` (manage API connection settings).
+
+The controller's index endpoint returns the grouped catalog with database IDs so the Flutter UI can submit IDs rather than raw codes.
 
 ```mermaid
 flowchart TD
@@ -202,8 +232,8 @@ The grant engine ensures safe administration:
 - Non-admins cannot edit their own grants.
 - Non-admins can only grant permissions they hold.
 - Unknown or inactive permission codes are rejected.
-- Replacing grants is atomic: delete existing grants, insert new ones, then invalidate the user’s cached codes.
-- Changing grants optionally terminates the target user’s sessions to avoid stale access.
+- Replacing grants is atomic: delete existing grants, insert new ones, then invalidate the user's cached codes.
+- Changing grants optionally terminates the target user's sessions to avoid stale access.
 
 ```mermaid
 sequenceDiagram
@@ -231,6 +261,37 @@ API-->>Admin : Response with granted_codes/granted_ids/sessions_ended
 **Section sources**
 - [PermissionController.php:137-243](file://kyApp_API/app/Http/Controllers/PermissionController.php#L137-L243)
 - [PermissionGrantSync.php:77-163](file://kyApp_API/app/Support/PermissionGrantSync.php#L77-L163)
+
+### Application Configuration Management
+**New Section** The `app_config` module provides granular control over application configuration management through three distinct permission levels:
+
+- `app_config.view`: Allows viewing application configuration without modification
+- `app_config.update`: Allows updating company identity, theming, and visual appearance settings
+- `app_config.api_manage`: Highest privilege level for managing API connection settings and passwords
+
+The AppConfigController implements a tiered security model where:
+- Public endpoints provide configuration data without authentication for login screen rendering
+- Branding updates require `app_config.update` permission
+- API password changes require the elevated `app_config.api_manage` permission
+- All configuration changes are audited with detailed change tracking
+
+```mermaid
+flowchart TD
+Public["GET /app-config<br/>Public endpoint"] --> LoginScreen["Login Screen Rendering"]
+Update["PUT /app-config<br/>Requires app_config.update"] --> CompanyInfo["Company Identity & Theming"]
+ApiPassword["PUT /app-config/api-password<br/>Requires app_config.api_manage"] --> ApiSettings["API Connection Settings"]
+```
+
+**Diagram sources**
+- [AppConfigController.php:55-67](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L55-L67)
+- [AppConfigController.php:80-175](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L80-L175)
+- [AppConfigController.php:240-292](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L240-L292)
+- [api.php:141-146](file://kyApp_API/routes/api.php#L141-L146)
+
+**Section sources**
+- [AppConfigController.php:38-423](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L423)
+- [api.php:141-146](file://kyApp_API/routes/api.php#L141-L146)
+- [AppConfigTest.php:52-64](file://kyApp_API/tests/Feature/AppConfigTest.php#L52-L64)
 
 ### Runtime Permission Evaluation (PermissionResolver)
 The resolver implements IBAC decision rules in order:
@@ -272,6 +333,8 @@ Permission changes are recorded through ActivityLogger:
 - Successful permission synchronization logs include actor, target user, module, entity type, description, and status.
 - Logging failures are silently reported without breaking the request.
 - The audit table supports querying by user, target user, module, and time.
+
+**Updated** The audit trail now includes comprehensive logging for application configuration changes, including company information updates, theming modifications, and API password changes.
 
 ```mermaid
 flowchart TD
@@ -319,6 +382,8 @@ IBAC grants permissions directly to users without roles:
 - `PermissionResolver` evaluates access against these grants plus admin bypass and wildcards.
 - `PermissionGrantSync` writes grants atomically and invalidates caches.
 - `PermissionController` orchestrates catalog retrieval, grant reads/writes, session termination, and audit logging.
+
+**Updated** The system now includes the `app_config` module with specialized permissions for application configuration management, providing fine-grained control over different aspects of application setup.
 
 ```mermaid
 erDiagram
@@ -368,7 +433,8 @@ The components have clear dependencies:
 - PermissionGrantSync depends on PermissionResolver for cache invalidation.
 - PermissionResolver depends on PermissionCatalog for constants and on Oracle for grants.
 - Seed script depends on PermissionCatalog to generate rows.
-- Flutter repository depends on the controller’s `/permissions` endpoint.
+- Flutter repository depends on the controller's `/permissions` endpoint.
+- AppConfigController depends on PermissionResolver for permission checks and ActivityLogger for audit trails.
 
 ```mermaid
 graph LR
@@ -379,6 +445,8 @@ Controller --> Logger["ActivityLogger"]
 Grants --> Resolver
 Seed["02_ibac_seed.php"] --> Catalog
 Repo["permission_repository.dart"] --> Controller
+AppConfig["AppConfigController"] --> Resolver
+AppConfig --> Logger
 ```
 
 **Diagram sources**
@@ -386,16 +454,18 @@ Repo["permission_repository.dart"] --> Controller
 - [PermissionGrantSync.php:32-32](file://kyApp_API/app/Support/PermissionGrantSync.php#L32-L32)
 - [02_ibac_seed.php:432-461](file://kyApp_API/database/oracle/02_ibac_seed.php#L432-L461)
 - [permission_repository.dart:70-95](file://lib/features/admin/data/repositories/permission_repository.dart#L70-L95)
+- [AppConfigController.php:40-44](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L40-L44)
 
 **Section sources**
 - [PermissionController.php:30-42](file://kyApp_API/app/Http/Controllers/PermissionController.php#L30-L42)
 - [PermissionGrantSync.php:32-32](file://kyApp_API/app/Support/PermissionGrantSync.php#L32-L32)
 - [02_ibac_seed.php:432-461](file://kyApp_API/database/oracle/02_ibac_seed.php#L432-L461)
 - [permission_repository.dart:70-95](file://lib/features/admin/data/repositories/permission_repository.dart#L70-L95)
+- [AppConfigController.php:40-44](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L40-L44)
 
 ## Performance Considerations
 - Caching: PermissionResolver caches effective codes per user with a TTL and a maximum serialized size to avoid Oracle cache limits. Oversized sets skip caching to prevent ORA-01461.
-- Cache invalidation: After any grant replacement, the resolver forgets the affected user’s cache to ensure immediate effect.
+- Cache invalidation: After any grant replacement, the resolver forgets the affected user's cache to ensure immediate effect.
 - Query efficiency: Grants SQL joins active permission rows and filters by expiration and activation flags.
 - Atomic writes: Grant replacement deletes old grants and inserts new ones within a transaction, minimizing inconsistent states.
 - Session termination: Optional termination of target user sessions prevents stale client-side cached permission lists.
@@ -414,10 +484,16 @@ Common issues and resolutions:
 - Stale permissions after grant changes: Ensure cache invalidation occurs; verify `PermissionResolver::forget()` is called after `PermissionGrantSync::replace()`.
 - Flutter UI mismatch: Confirm the server returns grouped modules from `PermissionCatalog::grouped()` and that the client does not re-sort locally.
 
+**Updated** For app_config related issues:
+- API password changes require `app_config.api_manage` permission, not just `app_config.update`
+- Public configuration endpoint should not expose sensitive API password data
+- Configuration changes are audited with detailed change descriptions
+
 Diagnostic checks:
-- Catalog endpoint returns correct totals and module counts.
+- Catalog endpoint returns correct totals and module counts (now 97 permissions including app_config).
 - Resolver denies by default for unknown users and empty permission lists.
 - Seed script reports inserted/updated counts matching expected catalog size.
+- AppConfig endpoints properly enforce permission requirements.
 
 **Section sources**
 - [PermissionController.php:171-210](file://kyApp_API/app/Http/Controllers/PermissionController.php#L171-L210)
@@ -425,9 +501,12 @@ Diagnostic checks:
 - [PermissionResolver.php:95-132](file://kyApp_API/app/Support/PermissionResolver.php#L95-L132)
 - [PermissionSyncTest.php:71-92](file://kyApp_API/tests/Feature/PermissionSyncTest.php#L71-L92)
 - [IbacCoreTest.php:76-84](file://kyApp_API/tests/Feature/IbacCoreTest.php#L76-L84)
+- [AppConfigTest.php:83-157](file://kyApp_API/tests/Feature/AppConfigTest.php#L83-L157)
 
 ## Conclusion
-The permission management system provides a robust, auditable, and scalable IBAC implementation. Permission definitions are centralized in PermissionCatalog, grants are managed securely through PermissionController and PermissionGrantSync, and access decisions are enforced by PermissionResolver with caching and wildcard logic. The Oracle schema and seed scripts keep the catalog synchronized, while ActivityLogger records critical changes. The Flutter repository integrates cleanly with the server’s grouped catalog to deliver a consistent admin experience.
+The permission management system provides a robust, auditable, and scalable IBAC implementation. Permission definitions are centralized in PermissionCatalog, grants are managed securely through PermissionController and PermissionGrantSync, and access decisions are enforced by PermissionResolver with caching and wildcard logic. The Oracle schema and seed scripts keep the catalog synchronized, while ActivityLogger records critical changes. The Flutter repository integrates cleanly with the server's grouped catalog to deliver a consistent admin experience.
+
+**Updated** The recent addition of the `app_config` module enhances the system with granular control over application configuration management, providing three distinct permission levels for viewing, updating branding, and managing API connection settings. This enables fine-grained security policies for application setup and configuration management.
 
 ## Appendices
 
@@ -443,15 +522,24 @@ Implementing custom permission logic
 - Ensure any new rule respects admin bypass and wildcard semantics unless explicitly scoped.
 - Update tests to mirror resolver behavior.
 
+**Updated** Managing application configuration permissions
+- Grant `app_config.view` for read-only access to application configuration
+- Grant `app_config.update` for modifying company identity and theming settings
+- Grant `app_config.api_manage` for managing API connection settings and passwords
+- Use the public `/app-config` endpoint for login screen rendering without authentication
+
 Troubleshooting permission conflicts
 - Validate codes with `PermissionCatalog::isValidCode()` and `PermissionCatalog::knows()`.
 - Check for inactive permissions and unknown codes returned by `PermissionGrantSync::resolve()`.
 - Confirm escalation guards prevent self-editing and unauthorized granting.
 - Invalidate caches after grant changes and terminate sessions when necessary.
+- For app_config issues, verify proper permission hierarchy: `app_config.api_manage` > `app_config.update` > `app_config.view`
 
 **Section sources**
 - [PermissionCatalog.php:22-479](file://kyApp_API/app/Support/PermissionCatalog.php#L22-L479)
 - [PermissionResolver.php:27-274](file://kyApp_API/app/Support/PermissionResolver.php#L27-L274)
 - [PermissionGrantSync.php:77-163](file://kyApp_API/app/Support/PermissionGrantSync.php#L77-L163)
 - [PermissionController.php:137-243](file://kyApp_API/app/Http/Controllers/PermissionController.php#L137-L243)
+- [AppConfigController.php:38-423](file://kyApp_API/app/Http/Controllers/AppConfigController.php#L38-L423)
 - [02_ibac_seed.php:432-461](file://kyApp_API/database/oracle/02_ibac_seed.php#L432-L461)
+- [IbacCoreTest.php:45-48](file://kyApp_API/tests/Feature/IbacCoreTest.php#L45-L48)

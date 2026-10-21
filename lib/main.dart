@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/restart_widget.dart';
 import 'features/app_config/presentation/providers/app_config_notifier.dart';
+import 'features/auth/presentation/providers/auth_notifier.dart';
 import 'routing/app_router.dart';
 
 Future<void> main() async {
@@ -29,6 +30,23 @@ class KyApp extends ConsumerWidget {
     // Watch the config: any save rebuilds ThemeData from the updated AppPalette.
     final appName =
         ref.watch(appConfigNotifierProvider.select((s) => s.config.appName));
+
+    // أي سقوط من «مُصادق» إلى «غير مُصادق» يذهب لشاشة الدخول، من أي مسار جاء
+    // Any fall from signed-in to signed-out routes to the login screen, wherever it came from.
+    //
+    // centralized هنا لأن مخرجات الجلسة ثلاث: إنهاء المدير للجلسة (401 من أول طلب)، ومهلة الخمول
+    // (حارس محلي بلا طلب أصلاً)، وتسجيل الخروج العادي. ترك التوجيه لكل شاشة يعني مساراً ناقصاً
+    // دائماً — وهو سبب بقاء الشاشات مرسومة بعد انتهاء الجلسة.
+    // It lives here because the session ends three ways: an admin terminating it (a 401 on the next
+    // request), an idle timeout (a local check with no request at all), and a normal logout. Letting
+    // each screen navigate is how one of them always ends up missing — and why dead sessions kept
+    // drawing the portal.
+    ref.listen(
+      authNotifierProvider.select((s) => s.isAuthenticated),
+      (previous, next) {
+        if (previous == true && !next) appRouter.go('/login');
+      },
+    );
 
     return MaterialApp.router(
       title: appName,

@@ -73,32 +73,34 @@ class _ApiPasswordDialogState extends ConsumerState<ApiPasswordDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('كلمة سر إعدادات الـ API'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Text(
-            'هذه الإعدادات محمية. أدخل كلمة السر لفتح إعدادات خادم الـ API.',
-            style: TextStyle(fontSize: 13),
-          ),
-          const SizedBox(height: 16),
-          TextField(
-            controller: _controller,
-            autofocus: true,
-            obscureText: _obscure,
-            onSubmitted: (_) => _checking ? null : _verify(),
-            decoration: InputDecoration(
-              labelText: 'كلمة السر',
-              errorText: _error,
-              suffixIcon: IconButton(
-                icon: Icon(
-                  _obscure ? Icons.visibility_off : Icons.visibility,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'هذه الإعدادات محمية. أدخل كلمة السر لفتح إعدادات خادم الـ API.',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _controller,
+              autofocus: true,
+              obscureText: _obscure,
+              onSubmitted: (_) => _checking ? null : _verify(),
+              decoration: InputDecoration(
+                labelText: 'كلمة السر',
+                errorText: _error,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscure ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () => setState(() => _obscure = !_obscure),
                 ),
-                onPressed: () => setState(() => _obscure = !_obscure),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       actions: [
         TextButton(

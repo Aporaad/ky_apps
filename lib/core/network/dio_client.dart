@@ -11,7 +11,21 @@ class DioClient {
   final SecureStorageService storage;
   final void Function()? onUnauthorized;
 
-  DioClient({required this.storage, this.onUnauthorized, String? baseUrl}) {
+  /// بلّغ بموعد انتهاء الجلسة القادم في ترويسة `X-Session-Expires-At`
+  /// Reports the deadline carried by the server's `X-Session-Expires-At` header.
+  ///
+  /// الموعد يتجدد انزلاقياً عند كل طلب، فلا يعرفه الجهاز إلا من الرد نفسه؛ يمرّ إلى حارس الموعد
+  /// المحلي في `AuthNotifier` ليُخرج المستخدم حين ينتهي دون انتظار طلب جديد.
+  /// The deadline slides on every request, so the device only learns it from a response; it feeds
+  /// AuthNotifier's local watchdog, which can then evict the user without waiting for another call.
+  final void Function(String deadline)? onSessionDeadline;
+
+  DioClient({
+    required this.storage,
+    this.onUnauthorized,
+    this.onSessionDeadline,
+    String? baseUrl,
+  }) {
     final initialUrl = (baseUrl != null && baseUrl.isNotEmpty)
         ? baseUrl
         : ApiConstants.defaultBaseUrl;
@@ -29,7 +43,7 @@ class DioClient {
     );
 
     dio.interceptors.addAll([
-      AuthInterceptor(storage),
+      AuthInterceptor(storage, onSessionDeadline: onSessionDeadline),
       ErrorInterceptor(storage, onUnauthorized: onUnauthorized),
       LogInterceptor(
         requestBody: true,

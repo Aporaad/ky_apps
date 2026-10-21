@@ -11,22 +11,6 @@ import '../../../../core/network/dio_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
 import '../models/app_config_model.dart';
 
-/// نتيجة التحقق من كلمة سر إعدادات API — تفرّق بين «كلمة خاطئة» و«الخادم غير متاح»
-/// API-settings password verification result — distinguishes a wrong password from an
-/// unreachable server, so the caller can decide whether to fall back to the local hash.
-class ApiVerifyResult {
-  const ApiVerifyResult({
-    required this.verified,
-    required this.serverReached,
-  });
-
-  /// هل كانت الكلمة صحيحة (وفق الخادم إن كان متاحاً)
-  final bool verified;
-
-  /// هل تم الوصول إلى الخادم فعلاً (false = تعذّرت الشبكة/الاتصال)
-  final bool serverReached;
-}
-
 /// مستودع تهيئة التطبيق — الشبكة + الكاش الآمن + ملف الشعار المحلي
 /// App-config repository — network + secure cache + local logo file.
 class AppConfigRepository {
@@ -38,6 +22,16 @@ class AppConfigRepository {
 
   final DioClient _client;
   final SecureStorageService _storage;
+
+  /// كلمة سر إعدادات API الافتراضية — محلية بالكامل داخل التطبيق
+  /// Default API-settings password — fully local inside the app itself.
+  ///
+  /// تُستخدم ما لم يُعيَّن كلمة أخرى عبر [setApiPassword]؛ التحقق لا يلمس الخادم أبداً
+  /// لأن شاشة إعدادات API يجب أن تُفتح حتى عندما يكون رابط الـ API خاطئ أو غير متصل،
+  /// وإلا استحال إصلاح الرابط من داخل التطبيق.
+  /// Used until another password is set via [setApiPassword]; verification never touches the
+  /// server, because the API-settings screen must open even when the API URL is wrong or down.
+  static const String defaultApiSettingsPassword = 'A1.b2.c3.d4';
 
   /// اسم الملف الثابت للشعار داخل مجلد مستندات التطبيق
   /// Fixed logo filename inside the app-documents directory.
@@ -83,49 +77,6 @@ class AppConfigRepository {
     return config;
   }
 
-  /// التحقق من كلمة سر إعدادات API عبر الخادم (نقطة عامة مُقيّدة المعدل)
-  /// Verify the API-settings password against the server (public, rate-limited endpoint).
-  Future<ApiVerifyResult> verifyApiPassword(String password) async {
-    try {
-      final response = await _dio.post<dynamic>(
-        ApiConstants.appConfigVerifyApiPassword,
-        data: {'password': password},
-      );
-      final body = response.data;
-      if (body is Map<String, dynamic>) {
-        final data = body['data'];
-        final verified = data is Map
-            ? data['verified'] == true
-            : body['success'] == true;
-        return ApiVerifyResult(verified: verified, serverReached: true);
-      }
-      // استجابة غير متوقعة لكنها وصلت — نعتبرها «غير متحقق» مع وصول الخادم
-      // Unexpected but reachable response — treat as not verified, server reached.
-      return const ApiVerifyResult(verified: false, serverReached: true);
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        return const ApiVerifyResult(verified: false, serverReached: false);
-      }
-      // خطأ اتصال/مهلة = الخادم غير متاح؛ أخطاء 4xx (كثافة المعدل) = الخادم متاح ورفض
-      // Connection/timeout = server unreachable; a 4xx (rate limit) = reached & refused.
-      final reached = e.response != null;
-      return ApiVerifyResult(verified: false, serverReached: reached);
-    }
-  }
-
-  /// تغيير كلمة سر إعدادات API (يتطلب `app_config.api_manage`) — يُرجع التجزئة المحلية SHA-256
-  /// Change the API-settings password (requires `app_config.api_manage`). Returns the local
-  /// SHA-256 fallback hash the client derives and stores (the server never echoes the secret).
-  Future<String> updateApiPassword(String newPassword) async {
-    await _dio.put<dynamic>(
-      ApiConstants.appConfigApiPassword,
-      data: {'password': newPassword},
-    );
-    // نتيجتنا المحلية للاحتياط دون اتصال — نمزجها مع ملح ثابت مثل نمط جهاز البصمة
-    // Our own offline fallback digest — salted like the biometric device-token pattern.
-    return _localPasswordHash(newPassword);
-  }
-
   // ── الكاش الآمن / secure cache ───────────────────────────
 
   /// قراءة التهيئة من الكاش (null = لا كاش بعد) — لا يفشل أبداً على بيانات تالفة
@@ -151,16 +102,27 @@ class AppConfigRepository {
   }
 
   /// قراءة/كتابة التجزئة المحلية لكلمة سر API
-  /// Read/write the local API-password fallback hash.
+  /// Read/write the local API-password hash.
   Future<String?> loadLocalPasswordHash() => _storage.getApiPasswordHash();
   Future<void> saveLocalPasswordHash(String hash) =>
       _storage.saveApiPasswordHash(hash);
 
-  /// التحقق المحلي من كلمة سر API مقابل التجزئة المخزّنة (fallback دون اتصال)
-  /// Verify a password against the stored local hash (offline fallback).
+  /// تعيين كلمة سر جديدة لإعدادات API — تُخزَّن مجزّأة محلياً فقط (بلا خادم)
+  /// Set a new API-settings password — stored as a hash locally only (never via the server).
+  Future<void> setApiPassword(String newPassword) async {
+    await _storage.saveApiPasswordHash(_localPasswordHash(newPassword));
+  }
+
+  /// التحقق المحلي من كلمة سر إعدادات API — مقابل التجزئة المخزّنة أو الافتراضية
+  /// Verify the API-settings password locally — against the stored hash, or the built-in
+  /// default when nothing was ever set. This is deliberately offline-first: no network call.
   Future<bool> verifyLocally(String password) async {
     final stored = await _storage.getApiPasswordHash();
-    if (stored == null || stored.isEmpty) return false;
+    if (stored == null || stored.isEmpty) {
+      // لا كلمة مخصّصة بعد — الكلمة الافتراضية المضمّنة هي الصحيحة
+      // No custom password yet — the embedded default is the valid one.
+      return password == defaultApiSettingsPassword;
+    }
     return _localPasswordHash(password) == stored;
   }
 
@@ -215,7 +177,7 @@ class AppConfigRepository {
   /// SHA-256 مع ملح ثابت — نفس روح نمط رمز الجهاز في `device_id_helper`
   /// Salted SHA-256 — same spirit as the device-token pattern in `device_id_helper`.
   static String _localPasswordHash(String password) {
-    return _sha256Hex('$password:ky_apps_api_pw_fallback_v1_2026');
+    return _sha256Hex('$password:ky_apps_api_pw_local_v1_2026');
   }
 
   /// تجزئة SHA-256 لنص UTF-8 إلى سداسي صغير

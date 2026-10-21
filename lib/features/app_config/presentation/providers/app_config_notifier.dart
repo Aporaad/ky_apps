@@ -189,29 +189,22 @@ class AppConfigNotifier extends Notifier<AppConfigState> {
     state = state.copyWith(logoPath: () => null);
   }
 
-  /// التحقق من كلمة سر إعدادات API: الخادم أولاً ثم الاحتياط المحلي عند تعذّر الوصول
-  /// Verify the API-settings password: server first, then the local fallback if unreachable.
+  /// التحقق من كلمة سر إعدادات API — محلي بالكامل داخل التطبيق (بلا خادم)
+  /// Verify the API-settings password — fully local inside the app (never via the server).
+  ///
+  /// السبب: شاشة إعدادات API تُفتح لتعديل الرابط وإختبار الاتصال حين يكون الخادم غير متصل
+  /// أو رابطه تغيّر؛ لو كان التحقق عبر الـ API نفسه لتعذّر الدخول إليها أصلح عند انقطاعه.
+  /// Rationale: the API-settings screen is opened to fix/test the URL precisely when the server
+  /// is down or its address changed; verifying through the API would lock it out exactly then.
   Future<bool> verifyApiSettingsPassword(String password) async {
-    final result = await _repository.verifyApiPassword(password);
-    if (result.serverReached) {
-      return result.verified;
-    }
-    // الخادم غير متاح — نعتمد على التجزئة المحلية المخزّنة (إن وُجدت)
-    // Server unreachable — rely on the stored local hash, if any.
     return _repository.verifyLocally(password);
   }
 
-  /// تغيير كلمة سر إعدادات API وحفظ التجزئة المحلية للاحتياط دون اتصال
-  /// Change the API-settings password and store the local fallback hash.
+  /// تغيير كلمة سر إعدادات API وتخزينها التجزئة محلياً داخل التطبيق
+  /// Change the API-settings password and store its hash locally inside the app.
   Future<bool> setApiPassword(String newPassword) async {
-    try {
-      final localHash = await _repository.updateApiPassword(newPassword);
-      await _repository.saveLocalPasswordHash(localHash);
-      return true;
-    } on Exception catch (e) {
-      state = state.copyWith(errorMessage: () => _describeError(e));
-      return false;
-    }
+    await _repository.setApiPassword(newPassword);
+    return true;
   }
 
   /// تهيئة اللوحة من الحالة الحالية (تُستدعى داخل `main()` قبل runApp)

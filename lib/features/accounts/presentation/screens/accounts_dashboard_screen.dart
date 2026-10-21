@@ -6,6 +6,7 @@ import '../providers/accounts_provider.dart';
 import '../providers/currency_provider.dart';
 import 'account_statement_detail_screen.dart';
 import 'account_statement_screen.dart';
+import 'account_group_statement_screen.dart';
 import 'account_tree_screen.dart';
 import 'create_account_screen.dart';
 import 'currency_screen.dart';
@@ -239,15 +240,7 @@ class _AccountsDashboardScreenState
                             fontWeight: FontWeight.bold,
                             color: AppColors.textPrimary,
                           ),
-                        ),
-                        SizedBox(height: 2),
-                        Text(
-                          'الشجرة المحاسبية، كشوفات الحساب، العملات والصرف',
-                          style: TextStyle(
-                            fontSize: 11.5,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
+                        ),                        
                       ],
                     ),
                   ),
@@ -348,6 +341,22 @@ class _AccountsDashboardScreenState
                           MaterialPageRoute(
                             builder: (_) =>
                                 const AccountStatementDetailScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                    _buildModernActionTile(
+                      title: 'كشف حساب مجموعة حسابات جزئية',
+                      subtitle: 'ميزان مراجعة محلي/أجنبي',
+                      icon: Icons.account_tree_rounded,
+                      badgeText: 'تقرير',
+                      badgeColor: const Color(0xFF00695C),
+                      iconColor: const Color(0xFF00695C),
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const AccountGroupStatementScreen(),
                           ),
                         );
                       },

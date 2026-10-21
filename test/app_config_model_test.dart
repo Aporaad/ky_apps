@@ -55,6 +55,22 @@ void main() {
       final m = AppConfigModel.fromJson({'company_name': '   '});
       expect(m.companyName, 'الكبودي للخياطة الرجالية');
     });
+
+    test('يقرأ الحقول الإنجليزية بفتحتي حالة ويسقط الفارغ للافتراضي', () {
+      // الخادم يمرّر صفوف أوراكل الخام فقد تصل المفاتيح بأحرف كبيرة
+      // The API proxies raw Oracle rows, so the keys may arrive UPPERCASE.
+      final upper = AppConfigModel.fromJson(const {
+        'COMPANY_NAME_EN': "ALKABODI FOR MEN's TAILORING",
+        'COMPANY_ADDRESS_EN': 'Airport Street - Next to Al-shayef House',
+      });
+      expect(upper.companyNameEn, "ALKABODI FOR MEN's TAILORING");
+      expect(upper.companyAddressEn, 'Airport Street - Next to Al-shayef House');
+
+      // الفراغ يعيد الافتراضي المضمّن فلا يفقد العمود الأيسر اسمه
+      // A blank keeps the baked-in default: the left column never loses its name.
+      final blank = AppConfigModel.fromJson({'company_name_en': '   '});
+      expect(blank.companyNameEn, "ALKABODI FOR MEN's TAILORING");
+    });
   });
 
   group('AppConfigModel.toJsonForUpdate', () {
@@ -76,6 +92,19 @@ void main() {
       final hex = '#1A2B3C';
       final m = AppConfigModel.fromJson({'theme_primary_color': hex});
       expect(m.toJsonForUpdate()['theme_primary_color'], hex.toUpperCase());
+    });
+
+    test('يحمل مفتاحي الاسم والعنوان بالإنجليزية في جسم التحديث', () {
+      // هما مفتاحان قابلان للكتابة في `AppConfig::WRITABLE_KEYS` بالخادم
+      // Both are writable keys in the server's AppConfig::WRITABLE_KEYS list.
+      final m = AppConfigModel.fromJson(const {
+        'company_name_en': 'AL-KABOODI TAILORING',
+        'company_address_en': 'Hadda Street - Sanaa',
+      });
+      final json = m.toJsonForUpdate();
+
+      expect(json['company_name_en'], 'AL-KABOODI TAILORING');
+      expect(json['company_address_en'], 'Hadda Street - Sanaa');
     });
   });
 

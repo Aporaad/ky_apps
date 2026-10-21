@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/network/dio_client.dart';
 import '../../../../core/storage/secure_storage_service.dart';
@@ -20,6 +22,12 @@ final dioClientProvider = Provider<DioClient>((ref) {
     storage: storage,
     onUnauthorized: () {
       ref.read(authNotifierProvider.notifier).forceLogout();
+    },
+    // موعد الجلسة يصل من ترويسة كل رد، ويُبلَّغ للحارس المحلي في نفس اللحظة التي يجددها الخادم
+    // The deadline arrives on every response and goes straight to the watchdog, in the same moment
+    // the server slid it.
+    onSessionDeadline: (deadline) {
+      ref.read(authNotifierProvider.notifier).updateSessionDeadline(deadline);
     },
   );
 });
@@ -152,16 +160,67 @@ DateTime? _parseServerDate(String? raw) {
 
 /// إدارة حالة المصادقة عبر Riverpod Notifier الحديث
 class AuthNotifier extends Notifier<AuthState> {
+  /// دورية فحص الموعد — لا طلب شبكة فيها: أي استعلام يمدّد الجلسة عند الخادم فيُبطل الخمول
+  /// Watchdog cadence — deliberately network-free: any probe would renew the session server-side
+  ///
+  /// المهلة نفسها بالساعات، ففحص كل نصف دقيقة يكفي للإخراج «فوراً» دون أن يستهلك شيئاً؛ وزيادته
+  /// دقةً لا تُقدم سوى ثوانٍ على قرار لا يتخذه إلا الخادم في النهاية.
+  /// The idle window is measured in hours, so a 30-second tick is immediate enough to be honest
+  /// while costing nothing; finer ticks would only shave seconds off a call the server still makes.
+  static const Duration _watchdogInterval = Duration(seconds: 30);
+
+  Timer? _sessionWatchdog;
+
   @override
   AuthState build() {
     // فحص حالة الدخول ودعم البصمة في أول بناء
     Future.microtask(() => checkAuthStatus());
+
+    // حارس واحد living مع المزوّد: يُلغى عند انتهائه فلا يبقى مؤقّت بعد `ProviderScope` مغلق
+    // One guard living with the provider: cancelled on dispose, so no timer outlives the scope.
+    _sessionWatchdog?.cancel();
+    _sessionWatchdog = Timer.periodic(_watchdogInterval, (_) => _enforceDeadline());
+    ref.onDispose(() => _sessionWatchdog?.cancel());
+
     return const AuthState(isLoading: true);
   }
 
   AuthRepository get _repository => ref.read(authRepositoryProvider);
   SecureStorageService get _storage => ref.read(secureStorageProvider);
   BiometricService get _biometricService => BiometricService();
+
+  /// استقبال موعد الجلسة من ترويسة الخادم وتحديث الحارس المحلي به
+  /// Take the session deadline from the server header and re-arm the local watchdog with it.
+  ///
+  /// لا يُقارن الحارس بموعد تسجيل الدخول لأن الخادم يجدّد `EXPIRES_AT` انزلاقياً مع كل طلب ناجح،
+  /// فذلك الموعد القديم يطرد مستخدماً نشيطاً بعد مهلة واحدة من دخوله. والتخزين يأتي هنا أيضاً حتى
+  /// يبقى الموعد صحيحاً لو أُغلق التطبيق ثم فُتح وهو ما زال خاملًا.
+  /// The guard must not fall back to the sign-in time: the server slides EXPIRES_AT on every request,
+  /// so the stale value would evict an active user after one idle window. It is persisted here too, so
+  /// the deadline is still correct when the app closes and reopens while the session idles.
+  void updateSessionDeadline(String raw) {
+    final deadline = _parseServerDate(raw);
+    if (deadline == null || !state.isAuthenticated) return;
+
+    if (state.sessionExpiresAt == deadline) return;
+
+    state = state.copyWith(sessionExpiresAt: () => deadline);
+    unawaited(_storage.saveSessionExpiresAt(raw.trim()));
+  }
+
+  /// انتهى الموعد؟ — الفحص الوحيد المستخدم من الحارس ومن فحص البداية
+  /// Has the deadline passed? The single check used by both the watchdog and the startup probe.
+  bool _deadlinePassed(DateTime? deadline) =>
+      deadline != null && !DateTime.now().isBefore(deadline);
+
+  /// إن انتهت الجلسة فالخروج الآن، لا عند أول طلب
+  /// If the session is over, sign out now — not on the next request.
+  void _enforceDeadline() {
+    if (!state.isAuthenticated) return;
+    if (!_deadlinePassed(state.sessionExpiresAt)) return;
+
+    forceLogout();
+  }
 
   /// تحديث حالة ودعم البصمة
   Future<void> refreshBiometricStatus() async {
@@ -204,6 +263,12 @@ class AuthNotifier extends Notifier<AuthState> {
         biometricCapability: state.biometricCapability,
         isBiometricEnabled: state.isBiometricEnabled,
       ).withPermissions(snapshot);
+
+      // انتهت أثناء إغلاق التطبيق؟ تُغلق محلياً قبل أي طلب: الموعد استُعيد من التخزين المشفّر،
+      // وانتظار 401 يعني رسم البوابة كاملة ثم إسقاطها
+      // A session that expired while the app was closed ends here, before any request: the deadline
+      // came back from secure storage, and waiting for a 401 would draw the whole portal first.
+      _enforceDeadline();
     } else {
       state = state.copyWith(
         isAuthenticated: false,
@@ -344,9 +409,19 @@ class AuthNotifier extends Notifier<AuthState> {
     );
   }
 
-  /// تسجيل الخروج الإجباري (عند 401)
-  /// Forced logout on 401 — grants are cleared too, so no screen stays drawn on a dead session.
+  /// تسجيل الخروج الإجباري (عند 401 أو عند انتهاء الموعد محلياً)
+  /// Forced logout: on a 401, or when the local watchdog finds the deadline passed.
+  ///
+  /// يمسح التخزين بنفسه لأن مسار الحارس لا يمر بـ `ErrorInterceptor`: بلا ذلك يبقى التوكن على
+  /// الجهاز ويُستعاد «مسجّل الدخول» عند أول إعادة تشغيل بعد الخروج. `clearAll()` تُبقي أثر البصمة
+  /// ورابط الـ API كما في الخروج العادي، فلا يفقد المستخدم دخوله بالبصمة بسبب انتهاء الخمول.
+  /// It wipes storage itself because the watchdog path never touches ErrorInterceptor: otherwise the
+  /// token survives on the device and the next app start reads back as "signed in". clearAll keeps
+  /// the biometric enrollment and the API URL, exactly as a normal logout does, so an idle timeout
+  /// never costs the user their fingerprint sign-in.
   void forceLogout() {
+    unawaited(_storage.clearAll());
+
     state = AuthState(
       selectedUserType: state.selectedUserType,
       biometricCapability: state.biometricCapability,

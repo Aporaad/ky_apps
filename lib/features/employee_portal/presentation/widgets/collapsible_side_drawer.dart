@@ -40,7 +40,7 @@ class CollapsibleSideDrawer extends StatelessWidget {
       duration: const Duration(milliseconds: 250),
       width: width,
       decoration: BoxDecoration(
-        color: AppColors.primaryDark,
+        color: AppColors.background,
         border: Border(left: BorderSide(color: Color(0xFF1E293B))),
       ),
       child: Column(
@@ -58,45 +58,45 @@ class CollapsibleSideDrawer extends StatelessWidget {
                     color: AppColors.primary,
                     borderRadius: BorderRadius.circular(10),
                   ),
-                  child: const Icon(
+                  child:  Icon(
                     Icons.account_balance_wallet_rounded,
-                    color: Colors.white,
+                    color: AppColors.textPrimary,
                     size: 20,
                   ),
                 ),
                 if (!isCollapsed) ...[
                   const SizedBox(width: 12),
-                  const Expanded(
+                  Expanded(
                     child: Text(
                       'الكبودي للخياطة الرجالية',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: AppColors.primary,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
-                IconButton(
-                  onPressed:
-                      isDrawerMode
-                          ? () => Navigator.of(context).maybePop()
-                          : onToggleCollapse,
-                  icon: Icon(
-                    isDrawerMode
-                        ? Icons.close_rounded
-                        : (isCollapsed
-                            ? Icons.keyboard_double_arrow_left_rounded
-                            : Icons.keyboard_double_arrow_right_rounded),
-                    color: AppColors.textMuted,
-                    size: 20,
-                  ),
-                  tooltip:
-                      isDrawerMode
-                          ? 'إغلاق القائمة'
-                          : (isCollapsed ? 'توسيع القائمة' : 'طي القائمة'),
-                ),
+                // IconButton(
+                //   onPressed:
+                //       isDrawerMode
+                //           ? () => Navigator.of(context).maybePop()
+                //           : onToggleCollapse,
+                //   icon: Icon(
+                //     isDrawerMode
+                //         ? Icons.close_rounded
+                //         : (isCollapsed
+                //             ? Icons.keyboard_double_arrow_left_rounded
+                //             : Icons.keyboard_double_arrow_right_rounded),
+                //     color: AppColors.textMuted,
+                //     size: 20,
+                //   ),
+                //   tooltip:
+                //       isDrawerMode
+                //           ? 'إغلاق القائمة'
+                //           : (isCollapsed ? 'توسيع القائمة' : 'طي القائمة'),
+                // ),
               ],
             ),
           ),
@@ -141,8 +141,8 @@ class CollapsibleSideDrawer extends StatelessWidget {
                             size: 20,
                             color:
                                 isSelected
-                                    ? Colors.white
-                                    : const Color(0xFF94A3B8),
+                                    ? AppColors.textSecondary
+                                    : AppColors.textPrimary,
                           ),
                           if (!isCollapsed) ...[
                             const SizedBox(width: 14),
@@ -157,8 +157,8 @@ class CollapsibleSideDrawer extends StatelessWidget {
                                           : FontWeight.w500,
                                   color:
                                       isSelected
-                                          ? Colors.white
-                                          : const Color(0xFFCBD5E1),
+                                          ? AppColors.textSecondary
+                                          : AppColors.textPrimary,
                                 ),
                               ),
                             ),
@@ -181,11 +181,11 @@ class CollapsibleSideDrawer extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 18,
-                  backgroundColor: AppColors.accent,
+                  backgroundColor: AppColors.primary,
                   child: Text(
                     employeeName.isNotEmpty ? employeeName[0] : 'U',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:  TextStyle(
+                      color: AppColors.accent,
                       fontWeight: FontWeight.bold,
                       fontSize: 14,
                     ),
@@ -199,10 +199,10 @@ class CollapsibleSideDrawer extends StatelessWidget {
                       children: [
                         Text(
                           employeeName,
-                          style: const TextStyle(
+                          style:  TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.primary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),

@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
+import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/customer_statement_model.dart';
 import '../providers/customers_provider.dart';
@@ -612,8 +615,8 @@ class _CustomerStatementScreenState
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // 1. ترويسة كشف الحساب الرسمية المتجاوبة
-              _buildOfficialHeader(context),
+              // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
+              _buildOfficialHeader(),
               const SizedBox(height: 14),
 
               // 2. شريط بيانات العميل والحساب والتواريخ
@@ -651,250 +654,22 @@ class _CustomerStatementScreenState
   }
 
   // -------------------------------------------------------------
-  // الترويسة الرسمية المتجاوبة تماماً مع مختلف أحجام الشاشات
+  // الترويسة الرسمية — الشريط الثلاثي الأعمدة الموحَّد لكل التقارير
+  // Official header — the same three-column band every report draws.
+  //
+  // كانت تُرسم يدوياً باسم وعنوان ثابتين؛ الآن تُقرأ من `APP_SETTINGS` (مفاتيح
+  // company_*) عبر `ReportLetterheadBranding` فلا تختلف عن ترويسة شاشات الحسابات.
+  // It used to be hand-drawn from hardcoded strings; it now comes from APP_SETTINGS
+  // (the company_* keys) through ReportLetterheadBranding, identical to the accounts reports.
   // -------------------------------------------------------------
-  Widget _buildOfficialHeader(BuildContext context) {
-    return LayoutBuilder(
-      builder: (ctx, constraints) {
-        final isNarrow = constraints.maxWidth < 650;
-
-        if (isNarrow) {
-          return Column(
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  // اسم الشركة بالعربي
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Al-Kaboudy',
-                        style: TextStyle(
-                          fontFamily: 'serif',
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Color(0xFF7A4B29),
-                        ),
-                      ),
-                      Text(
-                        'الكبـودي',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: const Color(0xFF4A1A0B),
-                        ),
-                      ),
-                      const Text(
-                        'لـلـخـيـاطـة الـرجـالـيـة',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF6B2D1B),
-                        ),
-                      ),
-                    ],
-                  ),
-                  // الشعار الهندسي K.Y
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: const Color(0xFFB8860B).withValues(alpha: 0.4),
-                      ),
-                      borderRadius: BorderRadius.circular(6),
-                      color: const Color(0xFFFFF9EE),
-                    ),
-                    child: const Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.diamond_outlined,
-                          size: 22,
-                          color: Color(0xFF8B4513),
-                        ),
-                        Text(
-                          'K.Y',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: Color(0xFF5A1E14),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              // البانر البني المتجاوب
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4A1208),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Column(
-                  children: [
-                    Text(
-                      'صنعاء - خط المطار - الجراف - جوار بيت الشيخ الشايف',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      '780 154 000 - 780 164 000 ✆',
-                      textAlign: TextAlign.center,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFFE082),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        }
-
-        // عرض الشاشات العريضة (Desktop / Tablet)
-        return Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // اليمين: عنوان الشركة والشعار النصي
-            Expanded(
-              flex: 4,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Al-Kaboudy',
-                    style: TextStyle(
-                      fontFamily: 'serif',
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF7A4B29),
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  Text(
-                    'الكبـودي',
-                    style: TextStyle(
-                      fontSize: 30,
-                      fontWeight: FontWeight.w900,
-                      color: const Color(0xFF4A1A0B),
-                    ),
-                  ),
-                  const Text(
-                    'لـلـخـيـاطـة الـرجـالـيـة',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B2D1B),
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // الوسط: الشعار الهندسي K.Y
-            Expanded(
-              flex: 3,
-              child: Center(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: const Color(0xFFB8860B).withValues(alpha: 0.4),
-                    ),
-                    borderRadius: BorderRadius.circular(8),
-                    color: const Color(0xFFFFF9EE),
-                  ),
-                  child: const Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.diamond_outlined,
-                        size: 26,
-                        color: Color(0xFF8B4513),
-                      ),
-                      Text(
-                        'K.Y',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          color: Color(0xFF5A1E14),
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-
-            // اليسار: البانر البني
-            Expanded(
-              flex: 5,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF4A1208),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: const Color(0xFF8B3A2B), width: 1),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Text(
-                      'صنعاء - خط المطار - الجراف - جوار بيت الشيخ الشايف',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      '780 154 000 - 780 164 000 ✆',
-                      textAlign: TextAlign.center,
-                      textDirection: TextDirection.ltr,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: Color(0xFFFFE082),
-                        letterSpacing: 1,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        );
-      },
+  Widget _buildOfficialHeader() {
+    // مشاهدة الإعدادات تعيد رسم الترويسة فور أي حفظ من شاشة تهيئة التطبيق
+    // Watching the config repaints the band right after a save in the settings screen.
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.watch(appConfigNotifierProvider).config,
     );
+
+    return ReportLetterheadBranding(info: letterhead);
   }
 
   // -------------------------------------------------------------
@@ -909,7 +684,7 @@ class _CustomerStatementScreenState
     required String toDate,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: const Color(0xFFFAF7F2),
         borderRadius: BorderRadius.circular(4),
@@ -917,18 +692,18 @@ class _CustomerStatementScreenState
       ),
       child: Wrap(
         alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        spacing: 12,
-        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.start,
+        spacing: 6,
+        runSpacing: 5,
         children: [
           // اليمين: كشف حساب عميل + الاسم + الرقم
           Row(
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'كشف حساب عميل  ',
+                'كشف حساب العميل :  ',
                 style: TextStyle(
-                  fontSize: 13.5,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.bold,
                   color: Colors.black87,
                 ),
@@ -937,7 +712,7 @@ class _CustomerStatementScreenState
                 child: Text(
                   customerName,
                   style: const TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 10.5,
                     fontWeight: FontWeight.bold,
                     color: Colors.black,
                   ),
@@ -948,7 +723,7 @@ class _CustomerStatementScreenState
               Text(
                 customerCode,
                 style: const TextStyle(
-                  fontSize: 15,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: Color(0xFFDC2626), // أحمر مطابق للصورة
                 ),
@@ -960,60 +735,33 @@ class _CustomerStatementScreenState
           Text(
             currency,
             style: const TextStyle(
-              fontSize: 13.5,
+              fontSize: 10.5,
               fontWeight: FontWeight.w900,
               color: Colors.black87,
             ),
           ),
 
           // رقم واسم الحساب
-          Text(
-            ArabicEncodingUtils.fix(accountTitle),
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFF1E293B),
-            ),
-          ),
+          // Text(
+          //   ArabicEncodingUtils.fix(accountTitle),
+          //   style: const TextStyle(
+          //     fontSize: 10.5,
+          //     fontWeight: FontWeight.bold,
+          //     color: Color(0xFF1E293B),
+          //   ),
+          // ),
 
           // نطاق التاريخ
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'من تاريخ  ',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              Text(
-                fromDate,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Text(
-                'إلى تاريخ  ',
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-              Text(
-                toDate,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.black,
-                ),
-              ),
-            ],
+          Center(
+            child: Text(
+              'من تاريخ: ${fromDate}   إلى تاريخ: ${toDate}',
+             style: TextStyle(
+               fontSize: 7.5,
+               fontWeight: FontWeight.w600,
+               color: Colors.black87,
+             ),
+             textAlign: TextAlign.center,
+            ),
           ),
         ],
       ),

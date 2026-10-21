@@ -25,11 +25,11 @@ class BiometricLoginButton extends StatelessWidget {
         ? 'تسجيل الدخول بـ Face ID'
         : 'تسجيل الدخول بالبصمة';
 
-    return OutlinedButton.icon(
+    return IconButton(
       style: OutlinedButton.styleFrom(
         foregroundColor: AppColors.primary,
-        side: BorderSide(color: AppColors.primary, width: 1.5),
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+        // side: BorderSide(color: AppColors.primary, width: 1.5),
+        // padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
@@ -44,15 +44,15 @@ class BiometricLoginButton extends StatelessWidget {
                 color: AppColors.primary,
               ),
             )
-          : Icon(icon, size: 24, color: AppColors.primary),
-      label: Text(
-        isLoading ? 'جاري التحقق...' : label,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          color: AppColors.primary,
-        ),
-      ),
+          : Icon(icon, size: 34, color: AppColors.primary),
+      // label: Text(
+      //   isLoading ? 'جاري التحقق...' : label,
+      //   style: TextStyle(
+      //     fontSize: 14,
+      //     fontWeight: FontWeight.bold,
+      //     color: AppColors.primary,
+      //   ),
+      // ),
     );
   }
 }

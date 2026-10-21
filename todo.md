@@ -474,3 +474,248 @@
 - كلمة سر API لا تظهر في أي حمولة عامة؛ التحقق عام مُقيّد المعدل يسجّل المحاولات الفاشلة ويعيد
   200 دائماً (يمنع تسريب السبب ويميّز الخطأ عن تعذّر الخادم). الكتابة كلها خلف `auth:sanctum` +
   صلاحية، ومعاملة ذرّية، وسجل تدقيق. الشعار محلي بحت لا يغادر الجهاز.
+
+---
+
+## 2026-10-21 — تقارير الحسابات المالية (Account Financial Reports)
+
+**المهمة:** تنفيذ خطّة كاملة لبناء تقريرين ماليين على غرار تقارير أوراكل القديمة
+(`acc_report.RDF` و`TRIAL_BALANCE_REPORT.RDF`) داخل ميزة الحسابات: كشف حساب تفصيلي لرمز
+حسابي واحد (CHART_ACC) + كشف مجموعة حسابات جزئية (ميزان مراجعة) مع تقسيم عملة محلية/أجنبية.
+
+**نموذج الذكاء الاصطناعي المنفّذ:** Qoder Agent — خطة `Account_Financial_Reports_1686e067.md`.
+
+### المهام الفرعية (كلها ✓)
+- [x] **t1 Backend**: إعادة كتابة `AccountController::getAccountStatement` — مسار `ENTRY_MAIN → ENTRY_SUB → ENTRY_TYPE` (لا يوجد `ACC_TRXN`)، رصيد افتتاحي + رصيد جارٍ لكل سطر، نافذة 15 يوم افتراضية محسوبة من آخر حركة فعلية، ترميز `ArabicEncoding::fixMojibake` على البيان/النوع.
+- [x] **t2 Backend**: إضافة `AccountController::getGroupStatement` + مسار `GET /api/accounts/group-statement` خلف `permission:accounts.statement` — تحديد النطاق عبر 4 مستويات (`acc_no`/`acc_sub`/`acc_part`/`group_id`) بأولوية الأعمق، تصنيف محلي/أجنبي عبر `CUR_NO=1` = YR، بدون فترة افتراضية (كل السجل ما لم تُحدَّد).
+- [x] **t3 Backend**: تحديث `tests/Feature/BusinessRoutesSealedTest.php` — تغطية المسارين الجديدين، **6 اختبارات / 71 تأكيد** نجحت.
+- [x] **t4 Flutter**: إضافة `printing: ^5.13.1` + `pdf: ^3.11.1` إلى `pubspec.yaml` ثم `flutter pub get` (استقرّت على 5.14.3 / 3.11.3).
+- [x] **t5 Flutter**: توسيع `chart_account_model.dart` (`AccountTransactionModel` + `entryNo/subEntryNo/entryTypeName`، قراءات dual-case، ملخّص موسّع: `openingBalance/finalBalance/totalDebit/totalCredit/currency/fromDate/toDate/defaulted`)؛ نموذج جديد `account_group_statement_model.dart` (`TrialBalanceRow/TrialBalanceTotals/TrialBalanceReport`).
+- [x] **t6 Flutter**: تعديل `fetchAccountStatement` و`fetchGroupStatement` داخل `account_repository.dart` مع `CancelToken`.
+- [x] **t7 Flutter**: إعادة بناء `AccountStatementScreen` — ترويسة الشركة بـ`assets/CENTER.JPG`، جدول `Table` بسبعة أعمدة (السند|النوع|تأريخه|البيان|مدين|دائن|الرصيد)، صف الرصيد الافتتاحي، رصيد جارٍ لكل سطر، صندوق الإجماليات + توقيعات + تنويه 15 يوماً، `InteractiveViewer(0.5, 3)` للتكبير، شريط فلاتر قابل للطيّ، أزرار طباعة/تصدير PDF خلف `PermissionGate`.
+- [x] **t8 Flutter**: شاشة جديدة `AccountGroupStatementScreen` + `resolveStatementScope()` (دالة نقية بالأولوية groupId>sub>main>account) + بلاطة جديدة في `AccountsDashboardScreen` (ثالثة، أيقونة `account_tree_rounded`).
+- [x] **t9 Flutter**: مولّدا PDF عربيان — `account_statement_pdf_builder.dart` (طولي A4، `pw.MultiPage(24)`) و`account_group_statement_pdf_builder.dart` (عرضي `a4.landscape`)، كلاهما يعتمد `report_pdf_fonts.dart` (`PdfGoogleFonts.cairoRegular/cairoBold` مع كاش الحزمة).
+- [x] **t10 Testing**: `flutter analyze` = **No issues found!** · `flutter test` = **80 ناجحة** (منها 20 جديدة) · `php artisan route:list --path=api` = 76 مسار · `vendor/bin/pint --dirty` = نظيف · Pest `BusinessRoutesSealedTest` = **6/6 · 71 تأكيد**.
+- [x] **t11 Docs**: هذا القسم.
+
+### الاختبارات الجديدة
+- `test/features/accounts/group_statement_scope_test.dart` — 8 اختبارات لوحدة `resolveStatementScope` (مستويات/null/أولوية الأعمق/سلسلة المعاملات).
+- `test/features/accounts/account_statement_models_test.dart` — قراءات dual-case، تصحيح الترميز CP-1256 (0xDE → ق)، تطبيع عملة فارغة إلى null، تحليل ميزان المراجعة.
+- `test/features/accounts/account_group_statement_screen_test.dart` — 3 widget tests (الحالة الفارغة، تبديل الفلاتر، اختيار الحساب الأولى وزرّ الطباعة/التصدير الظاهران).
+
+### قرارات فنية
+- **`ACC_TRXN` غير موجود** في `ACCOUNTS` — المسار الحقيقي `ENTRY_MAIN → ENTRY_SUB` مع `ENTRY_TYPE` لكود النوع العربي؛ تم التوثيق في `DBdevloping_history.md`.
+- **`SEQ_PRICE` NULL** للحركات المحلية (YR) — التصنيف محلي/أجنبي يعتمد على `CUR_NO = 1` وليس سعر الصرف.
+- لا حاجة لإضافة أصول TTF للعربية — الحزمة `printing` تُضمّن Cairo داخل `PdfGoogleFonts`.
+- **`pw.Context`** وليس `pw.BuildContext` (typedef `BuildCallback` داخل `pdf` package).
+- **`PdfPageFormat.a4.landscape`** getter وليس method.
+- الحاشية انتقلت إلى `pw.MultiPage(margin: EdgeInsets.all(24))` لأن `copyWith(marginAll:)` غير متاحة.
+
+### ملاحظات أمنية
+- كلا المسارين يحملان `auth:sanctum` + `permission:accounts.statement` — رفض افتراضي بدون صلاحية.
+- زرّا الطباعة والتصدير محميّان بـ`PermissionGate` رمزين `accounts.print`/`accounts.export` على العميل؛ الخادم يعيد التحقّق لكل طلب.
+- كل نص عربي يمرّ عبر `ArabicEncodingUtils.fix` في النماذج وعبر `ArabicEncoding::fixMojibake` في المتحكم.
+
+---
+
+## [2026-10-21 06:17] دورة حياة الجلسات — حذف فور الانتهاء + خروج قسري فوري
+
+**المطلوب:** (1) الجلسات تتراكم وتظل مسجّلة، (2) لا يُسجَّل خروج المستخدم عند انتهاء جلسته.
+**المنفِّذ:** Qoder Agent · **المرجع الزمني:** ساعة القاعدة `SYSDATE` كما أمر المستخدم.
+
+- [x] **توحيد الساعة (أصل المشكلتين معاً):** `SessionPolicy::dbNow()` يزيح ساعة PHP (`UTC`) إلى `SYSDATE` (`+03:00`) بإزاحة تُقاس مرة واحدة في الطلب. قبله: كتابةُ الموعد بـ`now()` تجعل كل جلسة تبدو «منتهية» على شاشة تقارن بـ`SYSDATE`، وكتابةُ `expireTokens` لـ`SYSDATE - 1` تُقرأ في PHP كأنها في المستقبل ~3 ساعات فلا تُرفض الجلسة المنهية أصلاً.
+- [x] **حذف الجلسة المنتهية فور رفضها:** `validate()` يمسح التوكن عند انتهاء الخمول وعند تجاوز العمر المطلق عبر `discard()` (بأفضل جهد — الفشل لا يمنع الرفض).
+- [x] **كنس شامل `purgeExpired()` بفرعين على ساعة القاعدة:** منتهي الموعد، وقديم بلا موعد مع خمول يتجاوز `session_idle_minutes` (هذا هو التراكم فعلاً: 20 صفاً من سبتمبر/أكتوبر بلا `EXPIRES_AT` تظهر «نشطة» إلى الأبد).
+- [x] **أماكن الكنس:** بعد `prime()` في `login` و`biometricLogin`، وفي أول `SessionAdminController::index()`.
+- [x] **ترويسة `X-Session-Expires-At`** عبر middleware جديد `AppendSessionExpiry` ملحق بمجموعة `api`، يحمل الموعد الحالي بعد كل تجديد انزلاقي، مع `Access-Control-Expose-Headers` لبناء الويب.
+- [x] **العميل — التقاط الموعد:** `AuthInterceptor.onResponse` ← `AuthNotifier.updateSessionDeadline` يحدّث الحالة ويخزّن `ky_session_expires_at`.
+- [x] **كلب حراسة محلي:** `Timer.periodic(30s)` **بلا أي طلب شبكة** (أي probe يمدّد الجلسة عند الخادم فيُبطل الخمول) → `forceLogout()` متى تجاوز الموعد وقتُ الجهاز.
+- [x] `forceLogout()` صار يمسح التخزين الآمن بنفسه، لأن مسار الحارس لا يمر بـ`ErrorInterceptor`.
+- [x] **فحص بداية التطبيق:** جلسة ماتت أثناء إغلاق التطبيق تُغلَق محلياً قبل أي طلب (بدل رسم البوابة ثم إسقاطها).
+- [x] **توجيه مركزي:** `KyApp` يراقب `isAuthenticated` (مُصادق ← غير مُصادق) → `appRouter.go('/login')`؛ وأُزيل `context.go('/login')` اليدوي من `employee_main_layout` (مع استيراد `go_router` الذي صار غير مستخدم).
+- [x] `minutes_left` في شاشة الجلسات يُقارن بـ`SessionPolicy::dbNow()` لا `now()`.
+- [x] **اختبارات:** 4 حالات جديدة في `IbacCoreTest` (ساعة القاعدة = `SYSDATE`، الكنس يمسح الميت ويدع الحيّ، الترويسة موجودة، الترويسة غائبة بلا جلسة/بلا موعد).
+- [x] **بوابات الجودة (قيست من جديد لا موروثة):** Pest **127 اختبار / 685 تأشير** ✓ · Pint ✓ · `flutter test` **80** ✓ · `flutter analyze` تحذير واحد **لا علاقة له بالمهمة** (`biometric_login_button.dart:24` — `label` غير مستخدم، داخل ملف يعمله مسار آخر؛ لم يُمَسّ).
+- [ ] قرار معلّق للمستخدم: إثبات إنشاء المستخدم من واجهة التطبيق (أو الموافقة على dry-run داخل معاملة rollback) لإغلاق خطأ 500 السابق نهائياً.
+
+
+---
+
+## 2026-10-21 — إصلاح: انهيار منتقي التاريخ في كشف الحساب المالي (سنة 93422)
+
+**نموذج AI:** Qoder Agent · **الأمر:** «هناك مشكله في عرض كشف حساب مالي قم بحلها».
+
+### السبب الجذري (مُتحقَّق منه بمسبار حي)
+1. **خطأ PHP في الخادم** — `AccountController.php:502-503` استخدم `format('YYYY-MM-DD')`. في PHP كل `Y` تُخرِج السنة كاملة، و`M` اسم الشهر، و`D` اسم اليوم — فنتجت `"2025202520252025-MarMar-SatSat"` بدل `"2025-03-16"`. نفس الخطأ كان في `CustomerController.php:446`.
+2. **تطبيع Dart على العميل** — `_parseServerDate` حلّل السلسلة المشوهة إلى `DateTime(0, 1, 2025202520252025)` التي يطبّعها Dart إلى **سنة 93422** (تم إثبات ذلك بمسبار `dart run` أعاد `93422-12-11 01:12:58`).
+3. **انهيار الـ assertion** — `showDatePicker(initialDate: 93422, lastDate: 2030)` → `'initialDate == null || !initialDate.isAfter(lastDate)'` ينكسر.
+
+### الإصلاحات
+- **الخادم** (`AccountController` + `CustomerController`): `format('Y-m-d')` + تحقق نطاق (سنة 1900–2100، شهر 1–12، يوم 1–31) داخل `parseStatementDateToIso`/`parseDateToIso` — أي تاريخ مشوه من عميل قديم يُرفض ويُعامَل كغائب.
+- **العميل**: ملف مشترك جديد `lib/features/accounts/presentation/utils/statement_date_parser.dart`:
+  - `parseStatementServerDate()` — يرفض أي تاريخ خارج 1900–2100 (يُرجع null)؛ التعبئة التلقائية للفلاتر لا تحدث إلا إذا نجح تحليل التاريخين معاً.
+  - `clampToDatePickerRange()` — حارس صلب يقصّ initialDate داخل [firstDate, lastDate] قبل `showDatePicker` في كلتا الشاشتين.
+- **اختبارات انحدار**: `test/features/accounts/statement_date_parser_test.dart` — 11 اختباراً تغطي السلسلة المشوهة الحرفية، السنة 93422، صفوف Oracle الفاسدة (سنة 0025)، والتقصّص.
+
+### اكتشاف قاعدة البيانات (قراءة فقط)
+- `ENTRY_MAIN` يحتوي صفوفاً بتواريخ فاسدة (سنة 0025) — الحارس الجديد يتجاهلها بدل تسميم الفلاتر.
+- استعلامات الفحص موثّقة في `db_commends.md` (بلا أي كتابة).
+
+### التحقق
+- `flutter analyze` = نظيف (تحذير واحد قديم غير متصل) · `flutter test` = **91/91** (كانت 80) · `php -l` = سليم · `pint --dirty` = PASS · `php artisan test` = **127 ناجحاً (683 تأكيداً)**.
+
+---
+
+## [2026-10-21 07:32] — تتمة آلية الجلسات (توثيق + اختبار) — Qoder Agent
+- [x] `kyApp_API/tests/Feature/ActiveSessionsTest.php`: فحص بنية الصفّ لكل صف موجود + تخطٍّ لطيف عند جدول توكنات فارغ (لم يعد يعتمد على جلسة حيّة كـ fixture)
+- [x] `AGENTS.md` (جذر): سطر الجلسات في §14 · §8 (127 اختباراً + حالات `IbacCoreTest` + استثناء `PERSONAL_ACCESS_TOKENS`)
+- [x] `kyApp_API/AGENTS.md`: §2 وسطان + مسؤوليات `SessionPolicy` · §3 ترويسة `X-Session-Expires-At` · §6 دورة حياة الجلسة (`dbNow`/`discard`/`purgeExpired`) · §10 الاختبارات · §12 مصيدة C12 وتحديث S5 · §14 حالة الالتزام · §15 مرجع سريع
+- [x] `db_commends.md` + `DBdevloping_history.md`: حصر `PERSONAL_ACCESS_TOKENS` (قراءة فقط) وجدول الحالة 22 → 1 → 0
+- [x] بوابات الجودة: Pest 127 (125 ناجح + 2 متخطٍّ، 669 تأكيداً) · `pint --dirty` PASS · `flutter test` 91/91 · `flutter analyze` تحذير واحد خارج النطاق (ملف لمهمة أخرى)
+- [ ] قرار معلّق للمستخدم: إثبات إصلاح إنشاء المستخدم إما بإنشاء مستخدم من الواجهة أو بالموافقة على تجربة محمية بـ rollback
+
+
+
+---
+
+## 2026-10-21 — كلمة سر إعدادات API: تحقّق محلي بالكامل (إصلاح تعذّر الاتصال)
+## 2026-10-21 — API-settings password: fully local verification (offline-unreachable fix)
+
+**المشكلة / Problem:** كان التحقق من كلمة سر إعدادات API يحاول الخادم أولاً
+(`POST /app-config/verify-api-password`). عند تغيّر رابط الـ API أو انقطاعه تتعذّر
+الوصول إليه (connection timeout)، فلا يستطيع المستخدم فتح شاشة إعدادات API لإصلاح
+الرابط — وهو تناقض منطقي. كان يظهر خطأ RenderFlex overflow أيضاً في الحوار.
+Verification hit the server first; when the URL changed or the server was down the call
+timed out, so the user could not open the API-settings screen to fix the URL. A dialog
+RenderFlex overflow was reported too.
+
+**الحل / Fix (offline-unreachable):**
+- [x] جعل التحقق محلياً بالكامل داخل التطبيق — لا يلمس الشبكة إطلاقاً.
+      Fully local verification — never touches the network.
+- [x] كلمة السر الافتراضية المضمّنة `A1.b2.c3.d4`؛ تُستخدم ما لم يُخزَّن تجزئة مخصّصة.
+      Embedded default `A1.b2.c3.d4`, used until a custom hash is stored.
+- [x] تغيير الكلمة يحفظ تجزئة SHA-256 مملّحة محلياً في `flutter_secure_storage` فقط.
+      Password change stores a salted SHA-256 hash locally only.
+- [x] إزالة ثوابت المسارين `appConfigVerifyApiPassword`/`appConfigApiPassword` من العميل.
+      Removed the two endpoint constants from the client.
+- [x] إصلاح الفيضان: `SingleChildScrollView` حول محتوى `ApiPasswordDialog`.
+      Overflow fixed with a scrollable dialog body.
+
+**الملفات / Files (client only — no DB, no backend route removed):**
+`api_constants.dart` · `app_config_repository.dart` · `app_config_notifier.dart` ·
+`api_password_dialog.dart`.
+
+**التحقق / Verification:** `flutter analyze` نظيف (تحذير واحد سابق غير متعلق) ·
+`flutter test` app_config + api_config ناجح.
+
+---
+
+## 2026-10-21 — كشف حساب مجموعة حسابات جزئية (ميزان المراجعة) — تأكيد اكتمال
+## 2026-10-21 — Sub-group accounts statement (trial balance) — status confirmed
+
+**المتطلب / Requirement:** خيارات تحديد القسم/المجموعة أربعة (حساب رئيسي – فرعي –
+جزئي – مجموعات الحساب الجزئي) + فترة من/إلى تاريخ، مطابق لـ `TRIAL_BALANCE_REPORT.RDF`
+والقالب مطابق لـ `TRIAL_BALANCE_REPORT.pdf`.
+
+**الحالة / Status:** مُنفَّذ بالكامل سابقاً ولا تغيير مطلوب — تم التحقّق فقط.
+Already fully implemented; verified only.
+- Backend: `AccountController::getGroupStatement` — حلّ نطاق رباعي المستويات + فصل
+  عملة محلية (CUR_NO=1) عن أجنبية + فترة اختيارية داخل شرط الربط.
+  Route `GET /accounts/group-statement` behind `permission:accounts.statement`, sealed test.
+- Flutter: `AccountGroupStatementScreen` (4 قوائم متسلسلة + من/إلى تاريخ + طباعة/PDF)،
+  `AccountGroupStatementReportTable` (رأس مزدوج محلي/أجنبي)،
+  `buildAccountGroupStatementPdf` (A4 عرضي، خط Cairo)، مطابق للقالب.
+
+---
+
+## 2026-10-21 — ترويسة التقارير المالية + هوية الشركة من الإعدادات
+## 2026-10-21 — Financial report letterheads + company identity from app config
+
+**المتطلب / Requirement:** ترويسة «كشف حساب مالي» و«كشف حساب مجموعة حسابات جزئية»
+تعرض اسم الشركة وعنوانها ومعلومات تواصلها كما في `acc_report.pdf` /
+`TRIAL_BALANCE_REPORT.pdf`.
+
+- [x] `utils/report_letterhead_info.dart` — `ReportLetterheadInfo` + `fromConfig()` +
+      `contactLine` (`العنوان | هاتف: … | الموقع: …` مع تجاهل الفارغ).
+      Letterhead identity read from `AppConfigModel` (`APP_SETTINGS.company_*`).
+- [x] `widgets/report_letterhead_branding.dart` — `ReportLetterheadBranding(info:)` عمود
+      موسّط يُلفّ العنوان الطويل بدل أن يفيض عند تكبير الخط 1.25×.
+      Centered column so a long address wraps instead of overflowing.
+- [x] `utils/report_pdf_letterhead.dart` — `reportPdfLetterheadBranding(info)` مقابلها في PDF.
+      The PDF counterpart of the same block, fed by the same object.
+- [x] الشاشة (`account_statement_screen`) والمكوّن (`AccountStatementLetterhead`) والمولّدان
+      (`buildAccountStatementPdf` / `buildAccountGroupStatementPdf`) كلها تمرّر `letterhead`
+      إجبارياً — فما يُرى وما يُطبع من مصدر واحد.
+      One required `letterhead` argument through widget, screen and both PDF builders.
+- [x] الاختبارات: `report_letterhead_info_test.dart` (4) + اختبار ترويسة في
+      `account_statement_report_widgets_test.dart`؛ وتضييق `find.textContaining('من تاريخ')`
+      إلى `'من تاريخ:'` لأن تنويه التذييل كان يلتقطه معه (نفس العبارة في مكانين).
+      Narrowed the pre-existing finder that matched the footer disclaimer as well.
+
+**التحقق / Verification:** `flutter analyze` نظيف (عدا تحذير سابق غير متعلق) ·
+`flutter test` **100/100**.
+
+**ملاحظة / Note:** لا حقل «صندوق بريدي» في `APP_SETTINGS`؛ القالب يطبعه لكن الإعدادات
+لا تحمله — يُضاف مفتاح `company_po_box` إن طُلب.
+
+---
+
+## 2026-10-21 — ترويسة التقارير: شريط ثلاثي الأعمدة (تصحيح المطلوب)
+## 2026-10-21 — Report letterhead: three-column band (design correction)
+
+**المتطلب / Requirement:** «من جهة اليمين اسم الشركة وتحتها العنوان وأرقام التواصل،
+المنتصف شعار الشركة، اليسار اسم الشركة والعنوان وأرقام التواصل بالإنجليزي — كما في الصورة».
+Right = Arabic name + address + contact numbers, center = logo, left = the same in English.
+
+- [x] `utils/report_letterhead_info.dart` — حقول إنجليزية (`companyNameEn`, `addressEn`)،
+      سطور كل عمود عبر `arabicLines` / `englishLines`، نص الترويسة المطبوعة كافتراضي
+      (`kFallbackNameAr/En`, `kFallbackAddressAr/En`, `kFallbackPhone`) عندما يكون
+      الإعداد فارغاً، و`toArabicIndicDigits()` لإظهار الهاتف بالأرقام الهندية (٠١٢٣…).
+      English fields + per-column line lists + printed-header fallbacks + Arabic-Indic digits.
+- [x] `app_config_model.dart` — `companyNameEn` / `companyAddressEn` مع قراءة بفتحتي
+      حالة (`company_name_en` / `COMPANY_NAME_EN`) وافتراضي `ALkabodi` وتمريرهما في
+      `toJsonForUpdate()` (الخادم يتجاهل المفاتيح غير المعروفة حالياً — بلا أي كسر للحفظ).
+- [x] `widgets/report_letterhead_branding.dart` — استبدال العمود الموسّط المرفوض بشريط
+      `Row` من ثلاثة `Expanded` بنِسَب (5 : 4 : 5): الكتلة العربية يميناً (بداية RTL)،
+      الشعار في المنتصف، الكتلة الإنجليزية يساراً باتجاه LTR صريح. الأحجام مشتقة من
+      العرض المتاح داخل `LayoutBuilder` فلا فيضان على 320px عند تكبير خط 1.25×.
+- [x] `utils/report_pdf_letterhead.dart` — `reportPdfLetterheadBranding(info, logo:)`
+      يرسم نفس الأعمدة الثلاثة في PDF، مع `loadPdfLetterheadLogo()` الذي يحوّل أصل
+      الشعار إلى `pw.MemoryImage` ويعيد null بأمان عند تعذّر القراءة.
+- [x] إزالة الشعار المكرّر من `AccountStatementLetterhead` ومن ترويسة
+      `AccountGroupStatementScreen`؛ وكلاهما يمرّر الشعار المحمّل إلى مولّد الـ PDF.
+- [x] لا تغيير في قاعدة البيانات، ولا مسارات API جديدة، ولا جدول جديد.
+      No DB change, no new route, no new table.
+
+**اختبارات / Tests:** `report_letterhead_info_test.dart` (8) يغطي الأسطر والافتراضيات
+وتحويل الأرقام؛ `account_statement_report_widgets_test.dart` += اختبار موقع الأعمدة
+(`arabicName.dx > logoLeft.dx > englishName.dx`) واختبارا عدم الفيضان على 360px و320px.
+
+**التحقق / Verification:** `flutter analyze` نظيف (تحذير واحد سابق غير متعلق في
+`biometric_login_button.dart:24`) · `flutter test` ناجح 105/105.
+
+
+---
+
+### [2026-10-21 11:07] — حقلا الشركة بالإنجليزية في القاعدة + تعميم الترويسة
+**النموذج المنفّذ:** Qoder Agent
+**المتطلب / Requirement:** «قم باضافه حقلي company_name_en, company_address_en الى جدول APP_SETTINGS
+وقم باضافه حقلين لهما في شاشه الاعدادات وقم بتطبيق ترويسه التقرير لتقرير العملاء والعاملين ايضا
+customer_statement_screen and the worker statements وقم بالاتصال بقاعده البيانات باستخدام موصل oracledb mcp».
+
+- [x] **القاعدة (oracledb MCP):** إدراج صفَّي `company_name_en` / `company_address_en` في
+      `ACCOUNTS.APP_SETTINGS` (id 23/24 من `TRG_APP_SETTINGS`، `SORT_ORDER` 115/125، `VALUE_TYPE=string`،
+      `IS_LOCKABLE=0`) + `COMMIT`؛ التحقّق بـ`SELECT` و`DUMP` بايتياً و`LOCAL_TRANSACTION_ID='NONE'`.
+- [x] **الخادم:** `AppConfig` — ثابتان + `DEFAULTS` + `WRITABLE_KEYS`؛ `AppConfigController::textLimit()`
+      = 300 للعنوانين؛ `IbacCoreTest` عدّ التعريفات 22 → 24.
+- [x] **نقل الترويسة إلى `lib/core`:** `report_letterhead_info.dart` / `report_pdf_letterhead.dart` /
+      `report_letterhead_branding.dart` + إعادة توجيه مستورِدي الـ accounts والاختبار (`directives_ordering`).
+- [x] **شاشة الإعدادات:** حقلا «اسم الشركة بالإنجليزية» و«العنوان بالإنجليزية» مع `ltr` للإدخال،
+      وربطهما بالتهيئة/التخلّص/الحفظ عبر `AppConfigModelBuild.fromFields`.
+- [x] **تطبيق الترويسة:** `customer_statement_screen` و`worker_statement_screen` يستهلكان
+      `ReportLetterheadBranding(info:)` الموصول بالإعداد، بدل الكتل المرسومة يدوياً.
+- [x] تنظيف: إزالة `now`/`timestamp` الميّت من `account_statement_report_table.dart`.
+
+**التحقق / Verification:** `flutter analyze` نظيف (تحذير سابق واحد) · `flutter test` **108/108** ·
+`php -l` سليم · `pint --dirty` **PASS** · `php artisan test` **127/683**.
+**لم يَمَسّ:** لا أعمدة/جداول جديدة، لا `UPDATE`/`DELETE`، لا مسارات API جديدة.

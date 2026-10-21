@@ -242,14 +242,29 @@ Conventions that matter:
 `lib/core/network/dio_client.dart` builds one `Dio` with `Content-Type`/`Accept: application/json`
 and three interceptors, **in this order**:
 
-1. `AuthInterceptor` — injects `Authorization: Bearer <token>` from secure storage on every request.
+1. `AuthInterceptor` — injects `Authorization: Bearer <token>` from secure storage on every request,
+   and on every response reads `X-Session-Expires-At` and reports it through `onSessionDeadline`
+   (see the session watchdog below).
 2. `ErrorInterceptor` — resolves `DioExceptionType.cancel` into a synthetic 200
    `{success:false, cancelled:true, data:[], meta:{}}`; on **401** calls `clearAll()` + the
    `onUnauthorized` callback, which is wired to `AuthNotifier.forceLogout()`.
 3. `LogInterceptor` — request/response bodies on, headers off.
 
-There is **no refresh-token flow** (Sanctum personal access tokens never expire) and **no
-`RetryInterceptor`** even though `appsroles.md` prescribes one.
+> **Session lifetime is enforced on both ends.** The server decides (`SessionPolicy` on `EXPIRES_AT`)
+> and answers every authenticated response with the *current* deadline in `X-Session-Expires-At`,
+> because it slides that column on each request. `AuthNotifier` stores it (`updateSessionDeadline` →
+> `ky_session_expires_at`) and a **local, network-free** `Timer.periodic(30s)` evicts the user the
+> moment it passes. The watchdog must never probe the network: a probe would renew the session and
+> cancel the very idle expiry it is supposed to honour. `checkAuthStatus()` runs the same check at
+> start, so a session that died while the app was closed never draws the portal.
+>
+> Navigation is **centralised in `KyApp`**: one `ref.listen` on `isAuthenticated` routes
+> signed-in → signed-out to `/login`, covering all three exits (admin termination, idle timeout,
+> normal logout). Do not add `context.go('/login')` to individual screens — that is how one path was
+> always missed.
+
+There is **no refresh-token flow** (a dead session ends and the user signs in again — it is never
+silently renewed) and **no `RetryInterceptor`** even though `appsroles.md` prescribes one.
 
 Base URL switching is runtime, not compile time: `updateBaseUrl()` / `initializeBaseUrl()`
 (restore from secure storage, called by `AuthNotifier.checkAuthStatus()`).
@@ -274,7 +289,7 @@ Exact keys (`lib/core/storage/secure_storage_service.dart`):
 | `ky_biometric_user_id` | user id as string |
 | `ky_user_permissions` | JSON list of granted permission codes (IBAC) |
 | `ky_is_admin` | `'1'` / `'0'` — the `IS_ADMIN` bypass flag |
-| `ky_session_expires_at` | ISO instant of the current session's idle expiry |
+| `ky_session_expires_at` | the server's `YYYY-MM-DD HH:MM:SS` deadline text of the current session (Oracle clock, no zone marker) |
 
 `clearAll()` (logout) removes token + user type + user data + the three IBAC keys, but **intentionally
 keeps** biometric enrollment and the API URL, so a logged-out user can still sign in with a
@@ -389,12 +404,16 @@ Full details live in [`kyApp_API/AGENTS.md`](kyApp_API/AGENTS.md). The essential
   kick out an active worker. Session lifetime is driven by the `EXPIRES_AT` column instead, through
   `App\Support\SessionPolicy` (idle sliding renewal + absolute cap), registered in
   `AppServiceProvider` via `Sanctum::$accessTokenAuthenticationCallback`. Do not set `expiration`.
+  A rejected token is now **deleted** (`discard()`), `purgeExpired()` sweeps dead ones on login and on
+  the sessions screen, and every time computation runs on `SessionPolicy::dbNow()` — the **Oracle**
+  clock, because `app.timezone` is `UTC` while `SYSDATE` is `+03:00` (see trap C13).
 - One model: `app/Models/User.php` → Oracle table `APP_USERS`, `$primaryKey = 'user_id'` (resolved
   through the model's case-insensitive `getAttribute()` fallback; **`USER_NO` no longer exists** — it
   was the legacy ERP number), `$timestamps = false`, UPPERCASE `$fillable` including `IS_ADMIN`, and
   an `isAdmin()` helper.
-- Eleven controllers + one middleware (`EnsurePermission`, registered as the `permission` alias in
-  `bootstrap/app.php`) + seven support classes (`ArabicEncoding`, `PermissionCatalog`,
+- Eleven controllers + **two** middlewares (`EnsurePermission` as the `permission` alias, and
+  `AppendSessionExpiry` appended to the `api` group in `bootstrap/app.php`) + seven support classes
+  (`ArabicEncoding`, `PermissionCatalog`,
   `PermissionResolver`, `PermissionGrantSync`, `SessionPolicy`, `SettingsStore`, `ActivityLogger`).
   Still **no** Form Requests, **no** API Resources, **no** Policies. Logic is in controllers,
   validation is inline.
@@ -595,13 +614,13 @@ Conventions: `group()` + descriptive English names, no mocking library, no netwo
 are faked), no `integration_test/`. When you add a widget, extend `responsive_layout_test.dart` rather
 than inventing a new harness — overflow regressions are this project's recurring failure mode.
 
-### Laravel — `kyApp_API/tests/` (Pest 3, 114 tests)
+### Laravel — `kyApp_API/tests/` (Pest 3, 127 tests)
 
 | File | Covers |
 |---|---|
 | `tests/Feature/AuthTest.php` | login validation 422, bad credentials 401, `/auth/me` + `/auth/logout` reject unauthenticated |
 | `tests/Feature/TableQueryTest.php` | `/api/selectFromTable` shape, 404 unknown table, 422 on injection attempt, 422 on `limit > 1000`, plus the sealed/behaviour changes |
-| `tests/Feature/IbacCoreTest.php` | catalog integrity, resolver rules (admin bypass, `system.*`, literal, module wildcard, deny-by-default), session policy, middleware 401/403 |
+| `tests/Feature/IbacCoreTest.php` | catalog integrity, resolver rules (admin bypass, `system.*`, literal, module wildcard, deny-by-default), session policy, middleware 401/403, the **database clock** (`dbNow()` vs `SYSDATE`), the sweep (dead tokens deleted, live ones untouched), and `X-Session-Expires-At` with/without a session |
 | `tests/Feature/UsersAdminTest.php` | user administration: auth required, named-permission 403, validation, self-protection, last-admin guard, activity trail shape |
 | `tests/Feature/PermissionSyncTest.php` | `PUT /users/{id}/permissions` atomic replace, unknown codes 422, anti-escalation (cannot grant what you don't hold), session termination on change |
 | `tests/Feature/ActiveSessionsTest.php` | session listing shape, idle/expiry derivation, terminate by token and by user, self-session rules |
@@ -620,7 +639,9 @@ not your bug.
 ⚠️ **IBAC feature tests are deliberately read-only** against the live legacy schema: they never
 create or delete a user. Writing routes are covered by their *refusal* branches (422/403/404/409),
 which return before any `INSERT`. Do not add tests that write to `CUST`, `ENTRY_MAIN`, or any other
-ERP table without explicit user approval.
+ERP table without explicit user approval. The one exception is `PERSONAL_ACCESS_TOKENS` itself:
+the sweep test exercises a `DELETE` that is the behaviour under test, and the sliding-renewal path uses
+an **in-memory** token whose deadline already sits past the renewal horizon, so `slide()` skips its write.
 
 Nothing covers customers, workers, accounts, currencies, invoices, or biometrics. Adding Pest feature
 tests for any controller you touch is welcome — use `php artisan make:test --pest {Name}` (no
@@ -705,7 +726,7 @@ Match that style. Never commit unless the user asks. Never `--no-verify`. Never 
 | S1 | ~~All business routes were unauthenticated~~ **CLOSED (phase 7)** | Every business route now sits behind `auth:sanctum` + `permission:<code>`; only `POST /auth/login`, `POST /auth/biometric/login` and `GET /hello` are public, and 6 session-ownership routes are auth-only by design. `BusinessRoutesSealedTest` is the gate. `selectFromTable` additionally has a restricted-table deny list (11 tables) and redacts any column matching `PASSWORD`/`DEVICE_TOKEN`/`TOKEN`/`SECRET`/`KEY`. |
 | S2 | **Plaintext password comparison** | `AuthController@login` tries `$userPassword === $password` *before* `Hash::check`. Deliberate legacy support, but security-relevant — don't "fix" it silently, it will lock out real users. |
 | S3 | **Oracle credentials committed as config defaults** | `config/database.php:122-123` falls back to `ACCOUNTS` / `acc`. Real credentials belong in `.env` only. |
-| S4 | **Sanctum `expiration => null` — and it must stay null** | `Guard.php` compares that setting to `created_at`, so any value becomes a hard absolute age that kicks active users out. Lifetime is enforced by `SessionPolicy` on `EXPIRES_AT` (idle sliding renewal + `session_absolute_days`). The old "tokens never expire" hole is closed; do not re-open it by setting `expiration`. |
+| S4 | **Sanctum `expiration => null` — and it must stay null** | `Guard.php` compares that setting to `created_at`, so any value becomes a hard absolute age that kicks active users out. Lifetime is enforced by `SessionPolicy` on `EXPIRES_AT` (idle sliding renewal + `session_absolute_days`). The old "tokens never expire" hole is closed; do not re-open it by setting `expiration`. The same hole is re-opened by **leaving dead token rows behind**: a rejected token is now deleted (`discard()`) and `purgeExpired()` sweeps the leftovers on login and on the sessions screen — including `EXPIRES_AT IS NULL` rows idle beyond the window, which otherwise sit on that screen as "active" forever. |
 | S5 | **`WorkerController@store*/update*` has zero validation** | It does `$request->only([UPPERCASE Oracle columns])` and inserts directly. The Flutter client must send keys like `EMP_NAME`, `CUTTER_PHONE1`. Add validation before extending it. |
 | S6 | **Release APK has no `INTERNET` permission** | See [§9](#9-build--release). |
 | S7 | **Cache payload ceiling on Oracle: 3000 bytes** | The `CACHE` table writes `VALUE` through `merge … (select :value from dual)`, and Oracle refuses a bound string over 4000 bytes (`ORA-01461`). `PermissionResolver` (`MAX_CACHE_BYTES`) and `SettingsStore` cap themselves at 3000 and fall back to reading the table; Arabic never enters the cache. Raise a payload and you will 500 every authenticated request. |
@@ -726,6 +747,7 @@ Match that style. Never commit unless the user asks. Never `--no-verify`. Never 
 | C10 | **Non-functional settings stubs**: the dark-mode switch and font-size slider in `settings_section.dart` do nothing (no dark theme exists). Language is a locked "عربي (RTL)" badge. |
 | C11 | **Stale comment**: `AppColors.primary` is `0xFF7C2D12` (brown) but commented as royal navy. |
 | C12 | **`USER_ID` ≠ `USER_NO`** | The Oracle column and our PK is `USER_ID`; `USER_NO` (the legacy ERP number) was **dropped from `APP_USERS`** and is absent from `$fillable` on purpose — re-adding it makes inserts fail with `ORA-00904`. Biometric login and every IBAC lookup key on `USER_ID`. |
+| C13 | **Two clocks: PHP is UTC, `SYSDATE` is +03:00** | `config/app.php` `timezone => 'UTC'` while the Oracle instance runs at +03:00. Any session math that uses `now()` breaks in both directions at once: deadlines written by PHP look expired to the screen's `SYSDATE` comparison, and a `SYSDATE - 1` termination reads as a *future* expiry to `SessionPolicy`, so a cut session keeps working for three hours. **All session time goes through `SessionPolicy::dbNow()`** (offset measured once per request). Do not "fix" this by changing `app.timezone` — that re-dates every other module's timestamps. Any new code comparing `EXPIRES_AT`/`LAST_USED_AT` must use `dbNow()`, and the client compares the header text against device-local time. |
 
 ### Documentation drift
 
@@ -796,7 +818,9 @@ Default API     http://192.168.0.11:8000/api   (runtime-configurable, key ky_api
 Health probe    GET /api/hello
 Routes          71 in routes/api.php — 3 public, 6 auth-only, the rest auth:sanctum + permission:<code>
 Access          IBAC: APP_PERMISSIONS (93 codes / 17 modules) + APP_USERS_PERMISSIONS, IS_ADMIN bypass
-Sessions        SessionPolicy on PERSONAL_ACCESS_TOKENS.EXPIRES_AT (idle 240′ sliding, absolute 14d)
+Sessions        SessionPolicy on PERSONAL_ACCESS_TOKENS.EXPIRES_AT (idle 240′ sliding, absolute 14d) —
+                all time via SessionPolicy::dbNow() (Oracle clock), dead tokens deleted on rejection,
+                purgeExpired() on login + sessions screen, X-Session-Expires-At header + 30 s client watchdog
 Storage keys    ky_auth_token, ky_user_type, ky_user_data, ky_api_base_url,
                 ky_biometric_enabled, ky_biometric_user_id,
                 ky_user_permissions, ky_is_admin, ky_session_expires_at

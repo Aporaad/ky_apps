@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
@@ -55,8 +54,13 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     );
 
     if (confirm == true && mounted) {
+      // التوجيه لشاشة الدخول ليس هنا: `KyApp` يراقب الحالة، فأي خروج — عادي أو مُنهى أو بانتهاء
+      // المهلة — يسقط من «مُصادق» إلى غيره ويُوجَّه من مكان واحد. تكراره هنا كان يُخفي المسارين
+      // الآخرين ويُهدد تنقّلًا على سياق مُنفصَل بعد الحوار.
+      // This screen does not navigate: KyApp watches the auth state, so every exit — manual,
+      // terminated by an admin, or timed out — drops from signed-in to signed-out and routes in one
+      // place. Doing it here too hid the other two paths and risked navigating a disposed context.
       await ref.read(authNotifierProvider.notifier).logout();
-      if (mounted) context.go('/login');
     }
   }
 

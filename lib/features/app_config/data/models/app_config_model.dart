@@ -23,6 +23,8 @@ class AppConfigModel {
     required this.textPrimaryColor,
     required this.textSecondaryColor,
     required this.fontFamily,
+    this.companyNameEn = '',
+    this.companyAddressEn = '',
   });
 
   // ── معلومات الشركة / company info ────────────────────────
@@ -30,6 +32,16 @@ class AppConfigModel {
   final String companyAddress;
   final String companyWebsite;
   final String companyPhone;
+
+  /// النسخة الإنجليزية للاسم والعنوان — تُعرض يسار ترويسة التقارير.
+  /// تُقرأ من مفتاحي `company_name_en` / `company_address_en` إن أرسلهما الخادم، وإلا
+  /// تُعوَّض بالافتراضي المضمّن هنا؛ وأي عنوان إنجليزي فارغ تتكفل به الترويسة المطبوعة.
+  /// English name/address, shown on the left of the report letterhead. They come from the
+  /// `company_name_en` / `company_address_en` keys when the server sends them, otherwise from the
+  /// defaults baked into this model — and a blank English address makes the letterhead fall back to
+  /// the wording of the printed header.
+  final String companyNameEn;
+  final String companyAddressEn;
 
   /// اسم التطبيق الظاهر في الشريط العلوي/nice title
   final String appName;
@@ -53,6 +65,8 @@ class AppConfigModel {
       companyWebsite: '',
       companyPhone: '',
       appName: 'الكبودي للخياطة الرجاليه',
+      companyNameEn: "ALKABODI FOR MEN's TAILORING",
+      companyAddressEn: '',
       primaryColor: AppPalette.primary,
       secondaryColor: AppPalette.accent,
       backgroundColor: AppPalette.background,
@@ -80,6 +94,16 @@ class AppConfigModel {
       companyWebsite: _readString(src['company_website'], ''),
       companyPhone: _readString(src['company_phone'], ''),
       appName: _readString(src['app_name'], 'الكبودي للخياطة الرجاليه'),
+      // قراءة بفتحتي حالة كما في بقية النماذج: الخادم يمرّر صفوف أوراكل الخام
+      // Dual-case read like every other model: the API proxies raw Oracle rows.
+      companyNameEn: _readString(
+        src['company_name_en'] ?? src['COMPANY_NAME_EN'],
+        'ALKABODI FOR MEN\'s TAILORING',
+      ),
+      companyAddressEn: _readString(
+        src['company_address_en'] ?? src['COMPANY_ADDRESS_EN'],
+        '',
+      ),
       primaryColor: _parseHexColor(
         src['theme_primary_color'],
         AppPalette.primary,
@@ -112,6 +136,8 @@ class AppConfigModel {
       'company_address': companyAddress,
       'company_website': companyWebsite,
       'company_phone': companyPhone,
+      'company_name_en': companyNameEn,
+      'company_address_en': companyAddressEn,
       'app_name': appName,
       'theme_primary_color': _colorToHex(primaryColor),
       'theme_secondary_color': _colorToHex(secondaryColor),
@@ -130,6 +156,8 @@ class AppConfigModel {
     String? companyWebsite,
     String? companyPhone,
     String? appName,
+    String? companyNameEn,
+    String? companyAddressEn,
     Color? primaryColor,
     Color? secondaryColor,
     Color? backgroundColor,
@@ -143,6 +171,8 @@ class AppConfigModel {
       companyWebsite: companyWebsite ?? this.companyWebsite,
       companyPhone: companyPhone ?? this.companyPhone,
       appName: appName ?? this.appName,
+      companyNameEn: companyNameEn ?? this.companyNameEn,
+      companyAddressEn: companyAddressEn ?? this.companyAddressEn,
       primaryColor: primaryColor ?? this.primaryColor,
       secondaryColor: secondaryColor ?? this.secondaryColor,
       backgroundColor: backgroundColor ?? this.backgroundColor,

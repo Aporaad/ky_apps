@@ -910,3 +910,368 @@ SELECT SETTING_KEY, VALUE_TYPE FROM APP_SETTINGS
 **ملاحظة أمان:** `api_settings_password` لا يُخرج أبداً من `GET /app-config` (الحمولة بلا سرّ)،
 وتغييرها يمرّ عبر `PUT /app-config/api-password` خلف `permission:app_config.api_manage`. لم تُجر أي
 كتابة على جداول الأعمال (business tables) في هذه الجولة — الكتابات محصورة في جدولَي IBAC/الإعدادات.
+
+---
+
+## 2026-10-21 — SQL/فحص المخطط لتقارير الحسابات (Account Reports)
+
+**نموذج AI:** Qoder Agent · **التاريخ:** الأربعاء 21 أكتوبر 2026 · **الجلسة:** تنفيذ خطة `Account_Financial_Reports_1686e067.md`.
+
+**تنويه:** لا توجد أي كتابة/DDL داخل `ACCOUNTS` خلال هذه المهمة — كل ما يلي هو **استعلامات فحص للقراءة فقط** تم تنفيذها عبر `oracledb` MCP / `php artisan tinker` للتأكد من صحة المسارات قبل كتابة الكود.
+
+### 1) التأكيد على عدم وجود `ACC_TRXN`
+```sql
+SELECT COUNT(*) AS C
+  FROM ALL_TABLES
+ WHERE OWNER = 'ACCOUNTS'
+   AND TABLE_NAME = 'ACC_TRXN';
+-- النتيجة: 0 — الجدول غير موجود؛ يجب استخدام ENTRY_MAIN + ENTRY_SUB + ENTRY_TYPE
+```
+
+### 2) التحقّق من بنية `ENTRY_SUB` والربط بـ `CHART_ACC`
+```sql
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS'
+   AND TABLE_NAME = 'ENTRY_SUB'
+ ORDER BY COLUMN_ID;
+-- الأعمدة ذات الصلة: ENTRY_NO, DET_NO, ACC_NO, ENTRY_MNT, CUR_NO, DETAILS
+```
+
+### 3) معرفة العملة المحلية مقابل الأجنبية (للتقرير 2)
+```sql
+SELECT CUR_NO, CUR_NAME, CUR_SIGN
+  FROM ACCOUNTS.CURRENCY
+ ORDER BY CUR_NO;
+-- CUR_NO = 1  =>  "ريال يمني" / YR  (هي العملة المحلية)
+```
+
+### 4) اختبار تصنيف الرصيد المحلي/الأجنبي
+```sql
+SELECT s.ACC_NO,
+       s.CUR_NO,
+       SUM(CASE WHEN s.ENTRY_MNT > 0 AND s.CUR_NO = 1 THEN s.ENTRY_MNT ELSE 0 END) AS LOCAL_DEBIT,
+       SUM(CASE WHEN s.ENTRY_MNT < 0 AND s.CUR_NO = 1 THEN -s.ENTRY_MNT ELSE 0 END) AS LOCAL_CREDIT,
+       SUM(CASE WHEN s.ENTRY_MNT > 0 AND s.CUR_NO <> 1 THEN s.ENTRY_MNT ELSE 0 END) AS FOREIGN_DEBIT,
+       SUM(CASE WHEN s.ENTRY_MNT < 0 AND s.CUR_NO <> 1 THEN -s.ENTRY_MNT ELSE 0 END) AS FOREIGN_CREDIT
+  FROM ACCOUNTS.ENTRY_SUB s
+ WHERE s.ACC_NO IN (SELECT ACC_NO FROM ACCOUNTS.CHART_ACC WHERE ACC_SUB = :accSub)
+ GROUP BY s.ACC_NO, s.CUR_NO;
+```
+
+### 5) حساب آخر حركة لنافذة 15 يوماً الافتراضية
+```sql
+SELECT MAX(m.ENTRY_DATE) AS LAST_TRXN_DATE
+  FROM ACCOUNTS.ENTRY_MAIN m
+  JOIN ACCOUNTS.ENTRY_SUB s ON s.ENTRY_NO = m.ENTRY_NO
+ WHERE s.ACC_NO = :accNo;
+-- ثم في PHP: $from = subDays(lastTrxnDate, 15); $to = now();
+```
+
+### 6) فحص ترميز Windows-1256 للحقول العربيّة
+```sql
+SELECT RAWTOHEX(UTL_RAW.CAST_TO_RAW(TYPE_NAME)) AS HEX_BYTES,
+       TYPE_NAME
+  FROM ACCOUNTS.ENTRY_TYPE
+ WHERE ROWNUM <= 5;
+--Bytes 0xC0–0xFF => عربية CP-1256؛ تصل كـ Latin-1 mojibake وتُصحَّح في التطبيق.
+```
+
+### 7) حساب الرصيد الافتتاحي (قبل `:from`)
+```sql
+SELECT NVL(SUM(CASE WHEN s.ENTRY_MNT > 0 THEN s.ENTRY_MNT ELSE 0 END), 0)
+     - NVL(SUM(CASE WHEN s.ENTRY_MNT < 0 THEN -s.ENTRY_MNT ELSE 0 END), 0)
+       AS OPENING_BALANCE
+  FROM ACCOUNTS.ENTRY_MAIN m
+  JOIN ACCOUNTS.ENTRY_SUB s ON s.ENTRY_NO = m.ENTRY_NO
+ WHERE s.ACC_NO = :accNo
+   AND m.ENTRY_DATE < TO_DATE(:fromDate, 'YYYY-MM-DD');
+```
+
+### 8) استعلام الرصيد الجاري لكل سطر (window function)
+```sql
+SELECT m.ENTRY_NO, s.DET_NO, m.ENTRY_DATE, t.TYPE_NAME, s.DETAILS,
+       CASE WHEN s.ENTRY_MNT > 0 THEN  s.ENTRY_MNT ELSE 0 END AS DEBIT,
+       CASE WHEN s.ENTRY_MNT < 0 THEN -s.ENTRY_MNT ELSE 0 END AS CREDIT,
+       :openingBalance + SUM(s.ENTRY_MNT) OVER (
+           ORDER BY m.ENTRY_DATE, m.ENTRY_NO, s.DET_NO
+           ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+       ) AS RUNNING_BALANCE
+  FROM ACCOUNTS.ENTRY_MAIN m
+  JOIN ACCOUNTS.ENTRY_SUB  s ON s.ENTRY_NO = m.ENTRY_NO
+  LEFT JOIN ACCOUNTS.ENTRY_TYPE t ON t.TYPE_NO = s.TYPE_NO
+ WHERE s.ACC_NO = :accNo
+   AND m.ENTRY_DATE BETWEEN TO_DATE(:fromDate,'YYYY-MM-DD')
+                        AND TO_DATE(:toDate,'YYYY-MM-DD')
+ ORDER BY m.ENTRY_DATE, m.ENTRY_NO, s.DET_NO;
+```
+
+### 9) لا تغييرات على `APP_USERS_PERMISSIONS`
+الصلاحية `accounts.statement` (وكذلك `accounts.print` / `accounts.export`) **كانت مُهيّأة مسبقاً** في `APP_PERMISSIONS` — لم يضف هذا العمل أي codes جديدة، وأي مستخدم يملكها يستطيع الوصول للمسارين الجديدين مباشرة.
+
+### 10) لا DDL
+- لم تُنشَأ جداول، لم تُضَف أعمدة، لم تُنشَأ sequences أو triggers.
+- جميع التعديلات على طبقة الاستعلام داخل Laravel (`AccountController`) وطبقة العرض داخل Flutter.
+
+---
+
+# [2026-10-21 06:17] دورة حياة الجلسات — كنس المنتهي وتوحيد الساعة على `SYSDATE`
+
+**النموذج المنفذ / AI Model:** Qoder Agent · **الاتصال:** `oracle` MCP (ACCOUNTS) للقراءات · **الكتابات:** `DELETE` واحد على `ACCOUNTS.PERSONAL_ACCESS_TOKENS` (بنية التوكنات، لا جدول أعمال) صادر من `SessionPolicy::purgeExpired()` ومن اختباره.
+
+### 1) قياس الانقسام بين ساعتي PHP وأوراكل (قراءة)
+```sql
+SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS')                AS DB_SYSDATE,
+       TO_CHAR(CURRENT_TIMESTAMP,'YYYY-MM-DD HH24:MI:SS')      AS DB_TIMESTAMP,
+       TO_CHAR(SYSTIMESTAMP AT TIME ZONE 'UTC','YYYY-MM-DD HH24:MI:SS') AS DB_UTC,
+       COUNT(*)                                                AS TOKENS,
+       SUM(CASE WHEN EXPIRES_AT IS NULL THEN 1 ELSE 0 END)                       AS NO_EXPIRY,
+       SUM(CASE WHEN EXPIRES_AT IS NOT NULL AND EXPIRES_AT <= SYSDATE THEN 1 ELSE 0 END) AS EXPIRED_NOW,
+       SUM(CASE WHEN EXPIRES_AT IS NOT NULL AND EXPIRES_AT >  SYSDATE THEN 1 ELSE 0 END) AS LIVE_NOW
+  FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;
+```
+الناتج: `DB_SYSDATE 2026-10-21 03:49:46` · `DB_UTC 2026-10-21 00:49:46` (فارق **3 ساعات**) · `TOKENS 22` · `NO_EXPIRY 20` · `EXPIRED_NOW 2` · `LIVE_NOW 0`.
+
+### 2) أنواع أعمدة التوكن (قراءة مخطط)
+```sql
+SELECT COLUMN_NAME, DATA_TYPE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='PERSONAL_ACCESS_TOKENS'
+ ORDER BY COLUMN_ID;
+```
+`EXPIRES_AT`/`LAST_USED_AT`/`CREATED_AT`/`UPDATED_AT` جميعها `TIMESTAMP(6)` — لا حاجة لأي تغيير مخطط.
+
+### 3) الصفوف صفًّا صفاً — إثبات أن الموعد مكتوب بتوقيت UTC (قراءة)
+```sql
+SELECT * FROM (
+  SELECT ID, TOKENABLE_ID, DBMS_LOB.SUBSTR(NAME,28,1) AS NM,
+         TO_CHAR(CREATED_AT,'MM-DD HH24:MI') AS CREATED,
+         TO_CHAR(EXPIRES_AT,'MM-DD HH24:MI') AS EXPIRES,
+         TO_CHAR(UPDATED_AT,'MM-DD HH24:MI') AS UPDATED,
+         ROUND((CAST(EXPIRES_AT AS DATE) - SYSDATE)*24*60)                       AS MIN_VS_SYSDATE,
+         ROUND((CAST(EXPIRES_AT AS DATE) - CAST(SYS_EXTRACT_UTC(SYSTIMESTAMP) AS DATE))*24*60) AS MIN_VS_UTC
+    FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS ORDER BY ID DESC
+) WHERE ROWNUM <= 25;
+```
+الصفان 161 و162: `EXPIRES 10-21 00:40` مقابل `MIN_VS_SYSDATE = -213` و`MIN_VS_UTC = -33` — أي أن الموعد مكتوب على ساعة UTC ويبدو أمام `SYSDATE` منتهيًا منذ 3 ساعات و21 دقيقة، بينما لم يمضِ على انتهيته الحقيقي 33 دقيقة. هذا نصّ العطل.
+
+### 4) عبارة الحذف التي يولّدها `purgeExpired()` (الكتابة الوحيدة)
+Laravel Eloquent — `PersonalAccessToken::query()-> … ->delete()` المولّد من `SessionPolicy::purgeExpired()` (الاستعلام المعروض بـ`toSql()` قبل استبدال `select *` بـ`delete`):
+```sql
+delete from "PERSONAL_ACCESS_TOKENS"
+ where (("EXPIRES_AT" is not null and "EXPIRES_AT" < :db_now)
+     or ("EXPIRES_AT" is null and COALESCE(last_used_at, created_at) < :idle_threshold));
+```
+المربوطات: `:db_now` = `SessionPolicy::dbNow()` (زمن `SYSDATE`) و`:idle_threshold` = `dbNow - session_idle_minutes` (240 من `APP_SETTINGS`). لا اسم مخطط صراحة: الاتصال يسجّل كمستخدم `ACCOUNTS` فيُحلّ الاسم إلى `ACCOUNTS.PERSONAL_ACCESS_TOKENS`.
+
+### 5) التحقق بعد الكنس (قراءة)
+```sql
+SELECT COUNT(*)                                                   AS TOKENS,
+       SUM(CASE WHEN EXPIRES_AT IS NULL THEN 1 ELSE 0 END)        AS NO_DEADLINE,
+       SUM(CASE WHEN EXPIRES_AT IS NOT NULL AND EXPIRES_AT <= SYSDATE THEN 1 ELSE 0 END) AS DATED_EXPIRED,
+       SUM(CASE WHEN EXPIRES_AT > SYSDATE THEN 1 ELSE 0 END)       AS LIVE
+  FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;
+```
+الناتج: `TOKENS 1` · `NO_DEADLINE 0` · `DATED_EXPIRED 0` · `LIVE 1` — من 22 إلى 1، والباقي جلسة حيّة لم يمسّها الكنس.
+
+### 6) ملاحظات تنفيذية
+- استعلامان أوليان فشلا ثم صُحّحا، وكلاهما خطأ 11g معروف ولا يُسجَّل كنتيجة: `ORA-00933` من `FETCH FIRST 25 ROWS ONLY` (11g لا تعرفها — المستبدلة بـ`ROWNUM` في طبقة خارجية)، و`ORA-00932` من `EXPIRES_AT - SYSDATE` على عمود `TIMESTAMP` (يرجّع `INTERVAL` لا `NUMBER` — صُحّح بـ`CAST(... AS DATE)`).
+- لا `UPDATE` ولا `DDL` ولا كتابة على أي جدول ERP.
+- `SESSION_TOUCH_THRESHOLD`/`SESSION_IDLE_MINUTES` لم تُعدَّل في `APP_SETTINGS`؛ قراءة فقط عبر `SettingsStore`.
+
+
+---
+
+## 2026-10-21 — SQL فحص انهيار كشف الحساب (قراءة فقط، بلا كتابة)
+
+**نموذج AI:** Qoder Agent · **الأداة:** oracledb MCP — تشخيص انهيار `showDatePicker` (سنة 93422).
+
+### 1) تواريخ حساب 11010001 (سليمة)
+```sql
+SELECT * FROM (SELECT em.ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'DD/MM/YYYY') AS ENTRY_DATE_FMT,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE,
+       DUMP(em.ENTRY_DATE) AS DATE_DUMP
+  FROM ENTRY_MAIN em JOIN ENTRY_SUB es ON es.ENTRY_NO = em.ENTRY_NO
+ WHERE es.ACC_NO = 11010001
+ ORDER BY em.ENTRY_DATE DESC) WHERE ROWNUM <= 5;
+-- نتيجتان: 15/04/2025 و 27/03/2025 (DUMP: Typ=12 Len=7 سليم)
+```
+
+### 2) الصفوف الفاسدة عبر كل ENTRY_MAIN
+```sql
+SELECT * FROM (SELECT em.ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE, em.ENTRY_DATE
+  FROM ENTRY_MAIN em
+ WHERE em.ENTRY_DATE > TO_DATE('9999-12-31','YYYY-MM-DD')
+    OR em.ENTRY_DATE < TO_DATE('1900-01-01','YYYY-MM-DD')
+ ORDER BY em.ENTRY_DATE DESC) WHERE ROWNUM <= 10;
+-- وُجدت صفوف بسنة 0025 (مثل ENTRY_NO 4250019965 بتاريخ 0025-06-18)
+-- القرار: لا تُصلَح البيانات يدوياً؛ طبقة الحماية الجديدة في التطبيق تتجاهلها.
+```
+
+### ملاحظات
+- لا `FETCH FIRST n ROWS ONLY` على Oracle 11g (ORA-00933) — استُخدم `WHERE ROWNUM <= n`.
+- لم تُنفَّذ أي كتابة/DDL — كلا الاستعلامين SELECT للقراءة فقط.
+
+---
+
+## [2026-10-21 07:32] — حصر الجلسات بعد تشغيل `purgeExpired()` (قراءة فقط)
+**المنفّذ:** Qoder Agent · **الغرض:** تأكيد أن جدول التوكنات لا يحمل صفوفًا ميّتة، وتشخيص فشل اختبار بنية قائمة الجلسات.
+
+```sql
+-- حصر مباشر بنفس فرعي `SessionPolicy::purgeExpired()`
+SELECT COUNT(*)                                                        AS TOKENS,
+       SUM(CASE WHEN EXPIRES_AT IS NULL THEN 1 ELSE 0 END)             AS NO_DEADLINE,
+       SUM(CASE WHEN EXPIRES_AT IS NOT NULL AND EXPIRES_AT < SYSDATE
+                THEN 1 ELSE 0 END)                                     AS DATED_EXPIRED,
+       SUM(CASE WHEN EXPIRES_AT IS NULL
+                 AND COALESCE(LAST_USED_AT, CREATED_AT) < SYSDATE - 240/1440
+                THEN 1 ELSE 0 END)                                     AS LEGACY_IDLE
+  FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;
+-- النتيجة: TOKENS = 0، NO_DEADLINE = NULL، DATED_EXPIRED = NULL، LEGACY_IDLE = NULL
+-- أي أن الجدول خالٍ تماماً: لا أحد مسجّل الدخول في توقيت الفحص (بعد أن كانت 22 صفاً ميّتاً).
+```
+
+### ملاحظات
+- `SUM(CASE …)` على مجموعة فارغة يُرجع `NULL` لا `0` — ولهذا ظهرت العدّادات الثلاث `NULL` مع `COUNT(*) = 0`.
+- لا كتابة ولا DDL: استعلام قراءة واحد.
+- من هذه الحالة وُلّد تعديل `ActiveSessionsTest` (تخطٍّ لطيف عند جدول فارغ) بدل الاعتماد على صف حقيقي كـ fixture.
+
+---
+
+## [2026-10-21 08:00] — تشخيص `ORA-03115` عند `SELECT * FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS` (قراءة فقط)
+**المنفّذ:** Qoder Agent · **الأداة:** خادم MCP الخاص بأوراكل + اتصال Laravel (`oci8`) · **الغرض:** تحديد سبب الخطأ الذي يراه المستخدم في أداته.
+
+```sql
+-- (1) أنواع أعمدة الجدول: هنا يظهر السبب
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, DATA_PRECISION, DATA_SCALE, NULLABLE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'PERSONAL_ACCESS_TOKENS'
+ ORDER BY COLUMN_ID;
+-- ID NUMBER(19,0) · TOKENABLE_TYPE VARCHAR2(255) · TOKENABLE_ID NUMBER(19,0)
+-- NAME CLOB · TOKEN VARCHAR2(64) · ABILITIES CLOB
+-- LAST_USED_AT / EXPIRES_AT / CREATED_AT / UPDATED_AT  = TIMESTAMP(6) scale 6
+
+-- (2) نسخة الخادم
+SELECT banner FROM V$VERSION WHERE ROWNUM <= 2;
+-- Oracle Database 11g Enterprise Edition Release 11.2.0.1.0 - 64bit Production
+
+-- (3) عزل الأعمدة: أعمدة VARCHAR2/NUMBER وحدها
+SELECT ID, TOKENABLE_ID, TOKEN, TOKENABLE_TYPE FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;      -- يعمل
+-- (4) أعمدة TIMESTAMP(6) وحدها
+SELECT EXPIRES_AT, CREATED_AT, LAST_USED_AT, UPDATED_AT FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS; -- يعمل
+-- (5) عمودا CLOB وحدهما
+SELECT NAME, ABILITIES FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;                                -- يعمل
+-- (6) النجمة كاملة من مسار MCP ومن اتصال التطبيق (PDO/oci8 19.32) — يعمل في الاثنين
+SELECT * FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;
+
+-- (7) صيغة العمل الآمنة للعملاء القدماء: تحويل LOB والتواريخ إلى نص
+SELECT ID, TOKENABLE_TYPE, TOKENABLE_ID,
+       DBMS_LOB.SUBSTR(NAME, 4000, 1)                       AS NAME_TXT,
+       TOKEN,
+       DBMS_LOB.SUBSTR(ABILITIES, 4000, 1)                  AS ABILITIES_TXT,
+       TO_CHAR(CREATED_AT, 'YYYY-MM-DD HH24:MI:SS')         AS CREATED_TXT,
+       TO_CHAR(EXPIRES_AT, 'YYYY-MM-DD HH24:MI:SS')         AS EXPIRES_TXT
+  FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS;
+```
+
+### الخلاصة
+- الخطأ **من جهة عميل/تعريف (describe) لا من القاعدة**: `SELECT *` يصف عمودَي `CLOB` وأربعة `TIMESTAMP(6)`، والعملاء القدامى (oci.dll 10g/11g، ojdbc5/ojdbc6 في SQL/PL-SQL Developer أو DBeaver) لا يعرفون التمثيل الشبكي لهذه الأنواع على **11.2.0.1** فيرمون `ORA-03115` — ويظهر حتى لو كان الجدول فارغاً لأنه فشل وصف لا فشل جلب.
+- مسار العمل الحديث سليم: خادم MCP (node-oracledb) و`oci8 3.3.0` مع Instant Client **19.32** رجعا الصف كاملاً بلا خطأ.
+- لم تُنفَّذ أي كتابة أو DDL — كل ما سبق `SELECT` للقراءة فقط.
+
+
+
+---
+
+## [2026-10-21 11:07] — مفتاحا الترويسة الإنجليزية في `APP_SETTINGS` (company_name_en / company_address_en)
+
+**المنفِّذ / Executor:** Qoder Agent
+**الطريق / Channel:** موصل `oracledb MCP` — تنفيذ مباشر على مخطط `ACCOUNTS` (لا `migrations`؛ القاعدة تراثية).
+**الغرض / Purpose:** جعل العمود الأيسر من ترويسة التقارير الثلاثية (اسم الشركة + العنوان بالإنجليزية) قابلاً للتحكم من الإعدادات بدل نص ثابت في الكود.
+
+### 1) الاستعلامات التشخيصية (قراءة فقط) / read-only probes
+
+```sql
+-- (أ) بنية الجدول — لا عمود مجموعة؛ التجميع يتم في PHP
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE, COLUMN_ID
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'APP_SETTINGS'
+ ORDER BY COLUMN_ID;
+-- SETTING_ID NUMBER(N) · SETTING_KEY VARCHAR2(60) · SETTING_VALUE VARCHAR2(500)
+-- VALUE_TYPE VARCHAR2(20) · NAME_AR VARCHAR2(150) · DESCRIPTION_AR VARCHAR2(500)
+-- MIN_VALUE/MAX_VALUE NUMBER · IS_LOCKABLE NUMBER(N) · SORT_ORDER NUMBER
+-- UPDATED_BY NUMBER · UPDATED_ON DATE
+
+-- (ب) صفوف العلامة التجارية القائمة (11..14) وأسمائها العربية المخزنة بايتات CP-1256
+SELECT SETTING_ID, SETTING_KEY, SETTING_VALUE, VALUE_TYPE, NAME_AR, SORT_ORDER, IS_LOCKABLE
+  FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY LIKE 'company%' ORDER BY SORT_ORDER;
+-- 11 company_name · 12 company_address · 13 company_website · 14 company_phone
+
+-- (ج) مصدر المعرّف التلقائي + آخر قيمة من المتتالية
+SELECT TRIGGER_NAME, TRIGGER_TYPE, TRIGGERING_EVENT, STATUS FROM ALL_TRIGGERS
+ WHERE TABLE_NAME = 'APP_SETTINGS' AND TABLE_OWNER = 'ACCOUNTS';
+-- TRG_APP_SETTINGS · BEFORE EACH ROW · INSERT · ENABLED  (:NEW.SETTING_ID := SEQ_APP_SETTINGS.NEXTVAL)
+SELECT MAX(SETTING_ID) FROM ACCOUNTS.APP_SETTINGS;                  -- 22
+SELECT LAST_NUMBER FROM ALL_SEQUENCES
+ WHERE SEQUENCE_OWNER = 'ACCOUNTS' AND SEQUENCE_NAME = 'SEQ_APP_SETTINGS';  -- 23  ⇒ آمن بلا تصادم
+
+-- (د) اختبار ترميز: العميل لا ينقل العربية الحرفية (كلها 0xFD) لكنه ينقل بايتات CP-1256 كما هي
+SELECT DUMP('اسم الشركة بالإنجليزي', 1016) FROM DUAL;   -- fd,fd,fd…  ⇒ لا تُرسل العربية حرفياً
+SELECT DUMP('ÇÓã', 1016) FROM DUAL;                     -- c7,d3,e3   ⇒ الصيغة المموّهة تُرسَل سليمة
+```
+
+**القرار الترميزي / encoding decision:** التسميات العربية كُتبت بايتات Windows-1256 العربية
+مستعرضة كأحرف لاتينية — نفس أسلوب الصفوف 11..22 — لتصل مطابقة حرفياً كما في التحقّق (د).
+وليد التحقق المحلي قورن بـ `DUMP` قبل التنفيذ وبعده.
+
+### 2) الكتابة / the writes
+
+```sql
+INSERT INTO ACCOUNTS.APP_SETTINGS
+  (SETTING_KEY, SETTING_VALUE, VALUE_TYPE, NAME_AR, DESCRIPTION_AR,
+   MIN_VALUE, MAX_VALUE, IS_LOCKABLE, SORT_ORDER, UPDATED_ON)
+VALUES
+  ('company_name_en', 'ALKABODI FOR MEN''s TAILORING', 'string',
+   'ÇÓã ÇáÔÑßÉ ÈÇáÅäÌáíÒí',
+   'ÇÓã ÇáÔÑßÉ ÇáãÚÑæÖ ÈÇáÅäÌáíÒíÉ Ýí ÊÑæíÓÉ ÇáÊÞÇÑíÑ',
+   NULL, NULL, 0, 115, SYSDATE);
+
+INSERT INTO ACCOUNTS.APP_SETTINGS
+  (SETTING_KEY, SETTING_VALUE, VALUE_TYPE, NAME_AR, DESCRIPTION_AR,
+   MIN_VALUE, MAX_VALUE, IS_LOCKABLE, SORT_ORDER, UPDATED_ON)
+VALUES
+  ('company_address_en', 'Airport Street - Next to Al-shayef House', 'string',
+   'ÚäæÇä ÇáÔÑßÉ ÈÇáÅäÌáíÒí',
+   'ÚäæÇä ÇáÔÑßÉ ÇáãÚÑæÖ ÈÇáÅäÌáíÒíÉ Ýí ÊÑæíÓÉ ÇáÊÞÇÑíÑ',
+   NULL, NULL, 0, 125, SYSDATE);
+
+COMMIT;
+```
+
+- `SETTING_ID` لم يُذكر صراحةً — يمنحه `TRG_APP_SETTINGS` ⇒ الناتج 23 ثم 24 تماماً كما توقّع `LAST_NUMBER`.
+- `SORT_ORDER` = 115 و125 ليظهر كل مفتاح ملاصقاً لنظيره العربي في شاشة «إعدادات الأمان» (110 ← 115 ← 120 ← 125).
+- `IS_LOCKABLE = 0` (قابل للتحرير من الواجهة) و`VALUE_TYPE = 'string'` وحدود NUMBER فارغة — نفس نمط `company_*`.
+
+### 3) التحقّق بعد التنفيذ / post-apply verification
+
+```sql
+SELECT SETTING_ID, SETTING_KEY, SETTING_VALUE, NAME_AR, DESCRIPTION_AR, SORT_ORDER, VALUE_TYPE, IS_LOCKABLE
+  FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY IN ('company_name_en', 'company_address_en') ORDER BY SORT_ORDER;
+-- 23 company_name_en    ALKABODI FOR MEN's TAILORING        … 115 string 0
+-- 24 company_address_en Airport Street - Next to Al-shayef House  125 string 0
+
+SELECT DUMP(NAME_AR, 1016) FROM ACCOUNTS.APP_SETTINGS WHERE SETTING_KEY = 'company_name_en';
+-- c7,d3,e3,20,c7,e1,d4,d1,df,c9,20,c8,c7,e1,c5,e4,cc,e1,ed,d2,ed  ⇒ مطابق للمحسوب مسبقاً
+
+SELECT NVL(DBMS_TRANSACTION.LOCAL_TRANSACTION_ID,'NONE') FROM DUAL;   -- NONE ⇒ الأمر كُرِّس فعلاً
+```
+
+### 4) ما لم يُمَسّ / untouched
+
+- لا `UPDATE` ولا `DELETE` على أي صف قائم؛ العدد من 22 إلى 24 صفاً.
+- لا أعمدة جديدة ولا جدول جديد — `APP_SETTINGS` key-value كما هو.
+- الملف المكافئ للتكرار لاحقاً: `kyApp_API/database/oracle/05_app_settings_company_en.sql`.

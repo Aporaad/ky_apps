@@ -899,3 +899,192 @@ ORDER BY entry_date
 أُكمل التوثيق (t16) وتُحقِّق الحالة الحالية بالأدلة: `flutter analyze` = **No issues found!**،
 `flutter test` = **60 ناجحة**، واختبارات الخلفية `AppConfig` + `BusinessRoutesSealed` = **15 ناجحة
 (101 تحقّقاً)**، والبذر الحيّ أنتج **97 صلاحية / 22 إعداداً**.
+
+---
+
+## 2026-10-21 — أمر المهمة: تنفيذ خطّة تقارير الحسابات المالية
+
+**النموذج المنفّذ:** Qoder Agent
+**الخطة المرجعية:** `C:\Users\Mujeeb\AppData\Roaming\Qoder\SharedClientCache\cache\plans\Account_Financial_Reports_1686e067.md`
+
+### نصّ الأمر الأصلي للمستخدم (كما ورد)
+> «Implement the plan as specified, it is attached for your reference. Do NOT edit the plan file itself.»
+
+ثم متابعات قصيرة لتنفيذ المهام تباعاً بعد كل انقطاع سياق:
+> «اكمل تنفيذ الخطه»
+
+(×3 مرات — المرة الأولى بعد تلخيص الجلسة، والثانية بعد إضافة بلاطة لوحة التحكم، والثالثة بعد إعادة كتابة widget test).
+
+### تفاصيل زمنية موجزة
+- **البداية**: تنفيذ المهام t1–t3 (Backend) في جلسة سابقة (تم تلخيصها).
+- **استئناف t4–t9** (Flutter: تبعيات، نماذج، مستودع، شاشات، widgets، PDF builders) — تمّت في هذه الجلسة.
+- **t10 Testing**: `flutter analyze` نظيف · `flutter test` 80/80 · `pint` نظيف · Pest `BusinessRoutesSealedTest` 6/6 · 71 تأكيد.
+- **t11 Docs**: هذا القسم + `todo.md` + `devloping_history.md` + `DBdevloping_history.md` + `db_commends.md` + النسخة الفرعيّة داخل `kyApp_API/`.
+
+### نطاق التغيير
+- **Backend (kyApp_API/)**: `AccountController::getAccountStatement` (rewrite) + `getGroupStatement` (new) + route + test.
+- **Flutter (lib/)**: `printing`+`pdf` in `pubspec.yaml`؛ 3 موديلات؛ 1 repo؛ 4 utils؛ 3 widgets؛ 2 شاشات؛ تحديث dashboard؛ 3 ملفات اختبار جديدة.
+- **Oracle**: **لا تغييرات DDL** — فقط استعلامات فحص للمخطط.
+
+### المخرجات النهائية
+كل المهام t1–t11 ✓ مكتملة. الخطة لم تُحرَّر (احترام «Do NOT edit the plan file itself»).
+
+---
+
+## [2026-10-21 04:20 → 06:17] تراكم الجلسات وعدم خروج المستخدم عند انتهائها
+
+**النموذج المنفّذ:** Qoder Agent · **الوقت:** ابتداءً من 04:20 حتى 06:17 (2026-10-21) · **النطاق:** سياسة الجلسات + شاشة الجلسات + حلقة auth في العميل.
+
+### الأمر كما ورد (1) — 04:20
+> اولا هناك المشكله ان الجلسات تتراكم وتضل مسجله
+> ثانيا لايتم تسجيل خروج المستخدم عند انتهاء جلسته
+> @oracle
+> لذالك
+> يجب حذف الجلسه المنتهيه فور انتهائها
+> يجب عند انهاء جلسه مستخدم او انتهاء مهله الخمول او انتهاء الجلسه يتم تسجيل خروج المستخدم من التطبيق فورا وتوجيهه الى شاشه تسجيل الدخول
+
+### الأمر كما ورد (2) — 05:02
+> اكمل حل المشكله ياحيوان
+> وايبضا كل الجلسات الان تظهر على انها منتهيه
+> اكمل الحل بحذر وركز على التغييرات لان هناك مهمه اخرى تعمل داخل المشروع وتطور قسم الحسابات
+> @oracle
+
+### الأمر كما ورد (3) — 05:40
+> ماذا تبقى الم تكمل كل شي
+
+### الأمر كما ورد (4 و5) — 05:58 و06:05
+> اكمل حل المشكله
+> اكمل حل المشكله واعتمد على توقيت قاعده البيانات
+
+### ما كشفه التنفيذ (أصل الشكاوى الثلاث)
+انقسام مرجع الوقت بين PHP (`app.timezone = UTC`) وأوراكل (`SYSDATE` على `+03:00`) — مقاس لا مستنتج:
+- `SessionPolicy` يكتب `EXPIRES_AT` بـ`now()` UTC ⇒ الشاشة التي تقارن بـ`SYSDATE` تعرض **كل جلسة منتهية** (الأمر 2).
+- `expireTokens()` يكتب `SYSDATE - 1` ⇒ يُقرأ في PHP **في المستقبل ~3 ساعات** ⇒ الجلسة التي تُنهى من الإدارة **لا تُرفض** ولا يسقط صاحبها (الأمر 1/ثانياً).
+- 20 صفاً قديماً `EXPIRES_AT IS NULL` لم تُمسّ منذ عمل السياسة ⇒ **التراكم** الذي يظهر «نشطاً» إلى الأبد (الأمر 1/أولاً).
+
+### ما بُني
+`SessionPolicy::dbNow()` (كل حساب زمني على ساعة القاعدة) · `discard()` عند الرفض · `purgeExpired()` بفرعيه عند الدخول وفتح الشاشة · ترويسة `X-Session-Expires-At` (`AppendSessionExpiry`) · `AuthInterceptor.onResponse` → `AuthNotifier.updateSessionDeadline` · كلب حراسة محلي 30 ثانية بلا شبكة · `forceLogout()` يمسح التخزين · `checkAuthStatus` يفحص الموعد عند البداية · توجيه مركزي في `KyApp` إلى `/login` وإزالة التنقل اليدوي من `employee_main_layout`.
+
+### البوابات (قيست في نهاية المهمة لا موروثة)
+- `vendor/bin/pest` → **127 passed (685 assertions)** · `vendor/bin/pint --dirty` → passed.
+- `flutter test` → **80 passed**.
+- `flutter analyze` → **تحذير واحد خارج النطاق**: `lib/features/auth/presentation/widgets/biometric_login_button.dart:24` — `unused_local_variable 'label'`، وهو من تعديل جارٍ على مسار آخر داخل نفس المشروع؛ تُرك دون مساس التزاماً بتعليمات الحذر الواردة في الأمر (2).
+
+### أثر على البيانات
+`ACCOUNTS.PERSONAL_ACCESS_TOKENS` من 22 صفاً (2 منتهية + 20 بلا موعد) إلى **1 حيّ فقط** — التفاصيل نصّ العبارة في `db_commends.md` بنفس الوقت.
+
+
+---
+
+## 2026-10-21 — إصلاح: انهيار منتقي التاريخ في كشف الحساب المالي (سنة 93422)
+
+**نموذج AI:** Qoder Agent · **الأمر:** «هناك مشكله في عرض كشف حساب مالي قم بحلها».
+
+### السبب الجذري (مُتحقَّق منه بمسبار حي)
+1. **خطأ PHP في الخادم** — `AccountController.php:502-503` استخدم `format('YYYY-MM-DD')`. في PHP كل `Y` تُخرِج السنة كاملة، و`M` اسم الشهر، و`D` اسم اليوم — فنتجت `"2025202520252025-MarMar-SatSat"` بدل `"2025-03-16"`. نفس الخطأ كان في `CustomerController.php:446`.
+2. **تطبيع Dart على العميل** — `_parseServerDate` حلّل السلسلة المشوهة إلى `DateTime(0, 1, 2025202520252025)` التي يطبّعها Dart إلى **سنة 93422** (تم إثبات ذلك بمسبار `dart run` أعاد `93422-12-11 01:12:58`).
+3. **انهيار الـ assertion** — `showDatePicker(initialDate: 93422, lastDate: 2030)` → `'initialDate == null || !initialDate.isAfter(lastDate)'` ينكسر.
+
+### الإصلاحات
+- **الخادم** (`AccountController` + `CustomerController`): `format('Y-m-d')` + تحقق نطاق (سنة 1900–2100، شهر 1–12، يوم 1–31) داخل `parseStatementDateToIso`/`parseDateToIso` — أي تاريخ مشوه من عميل قديم يُرفض ويُعامَل كغائب.
+- **العميل**: ملف مشترك جديد `lib/features/accounts/presentation/utils/statement_date_parser.dart`:
+  - `parseStatementServerDate()` — يرفض أي تاريخ خارج 1900–2100 (يُرجع null)؛ التعبئة التلقائية للفلاتر لا تحدث إلا إذا نجح تحليل التاريخين معاً.
+  - `clampToDatePickerRange()` — حارس صلب يقصّ initialDate داخل [firstDate, lastDate] قبل `showDatePicker` في كلتا الشاشتين.
+- **اختبارات انحدار**: `test/features/accounts/statement_date_parser_test.dart` — 11 اختباراً تغطي السلسلة المشوهة الحرفية، السنة 93422، صفوف Oracle الفاسدة (سنة 0025)، والتقصّص.
+
+### اكتشاف قاعدة البيانات (قراءة فقط)
+- `ENTRY_MAIN` يحتوي صفوفاً بتواريخ فاسدة (سنة 0025) — الحارس الجديد يتجاهلها بدل تسميم الفلاتر.
+- استعلامات الفحص موثّقة في `db_commends.md` (بلا أي كتابة).
+
+### التحقق
+- `flutter analyze` = نظيف (تحذير واحد قديم غير متصل) · `flutter test` = **91/91** (كانت 80) · `php -l` = سليم · `pint --dirty` = PASS · `php artisan test` = **127 ناجحاً (683 تأكيداً)**.
+
+
+
+---
+
+## 2026-10-21 — كلمة سر إعدادات API: تحقّق محلي بالكامل (إصلاح تعذّر الاتصال)
+## 2026-10-21 — API-settings password: fully local verification (offline-unreachable fix)
+
+**المشكلة / Problem:** كان التحقق من كلمة سر إعدادات API يحاول الخادم أولاً
+(`POST /app-config/verify-api-password`). عند تغيّر رابط الـ API أو انقطاعه تتعذّر
+الوصول إليه (connection timeout)، فلا يستطيع المستخدم فتح شاشة إعدادات API لإصلاح
+الرابط — وهو تناقض منطقي. كان يظهر خطأ RenderFlex overflow أيضاً في الحوار.
+Verification hit the server first; when the URL changed or the server was down the call
+timed out, so the user could not open the API-settings screen to fix the URL. A dialog
+RenderFlex overflow was reported too.
+
+**الحل / Fix (offline-unreachable):**
+- [x] جعل التحقق محلياً بالكامل داخل التطبيق — لا يلمس الشبكة إطلاقاً.
+      Fully local verification — never touches the network.
+- [x] كلمة السر الافتراضية المضمّنة `A1.b2.c3.d4`؛ تُستخدم ما لم يُخزَّن تجزئة مخصّصة.
+      Embedded default `A1.b2.c3.d4`, used until a custom hash is stored.
+- [x] تغيير الكلمة يحفظ تجزئة SHA-256 مملّحة محلياً في `flutter_secure_storage` فقط.
+      Password change stores a salted SHA-256 hash locally only.
+- [x] إزالة ثوابت المسارين `appConfigVerifyApiPassword`/`appConfigApiPassword` من العميل.
+      Removed the two endpoint constants from the client.
+- [x] إصلاح الفيضان: `SingleChildScrollView` حول محتوى `ApiPasswordDialog`.
+      Overflow fixed with a scrollable dialog body.
+
+**الملفات / Files (client only — no DB, no backend route removed):**
+`api_constants.dart` · `app_config_repository.dart` · `app_config_notifier.dart` ·
+`api_password_dialog.dart`.
+
+**التحقق / Verification:** `flutter analyze` نظيف (تحذير واحد سابق غير متعلق) ·
+`flutter test` app_config + api_config ناجح.
+
+---
+
+## 2026-10-21 — كشف حساب مجموعة حسابات جزئية (ميزان المراجعة) — تأكيد اكتمال
+## 2026-10-21 — Sub-group accounts statement (trial balance) — status confirmed
+
+**المتطلب / Requirement:** خيارات تحديد القسم/المجموعة أربعة (حساب رئيسي – فرعي –
+جزئي – مجموعات الحساب الجزئي) + فترة من/إلى تاريخ، مطابق لـ `TRIAL_BALANCE_REPORT.RDF`
+والقالب مطابق لـ `TRIAL_BALANCE_REPORT.pdf`.
+
+**الحالة / Status:** مُنفَّذ بالكامل سابقاً ولا تغيير مطلوب — تم التحقّق فقط.
+Already fully implemented; verified only.
+- Backend: `AccountController::getGroupStatement` — حلّ نطاق رباعي المستويات + فصل
+  عملة محلية (CUR_NO=1) عن أجنبية + فترة اختيارية داخل شرط الربط.
+  Route `GET /accounts/group-statement` behind `permission:accounts.statement`, sealed test.
+- Flutter: `AccountGroupStatementScreen` (4 قوائم متسلسلة + من/إلى تاريخ + طباعة/PDF)،
+  `AccountGroupStatementReportTable` (رأس مزدوج محلي/أجنبي)،
+  `buildAccountGroupStatementPdf` (A4 عرضي، خط Cairo)، مطابق للقالب.
+
+
+---
+
+### أمر المستخدم (نصه الحرفي) [2026-10-21 07:45] · Qoder Agent
+
+> لا ياحيوان الترويسه تكون كالتالي
+> من جهه اليمين اسم الشركه وتحتها العنوان وارقام التواصل
+> المنتصف : شعار الشركه
+> اليسار :  اسم الشركه وتحتها العنوان وارقام التواصل   بالانجليزي
+> كما في الصوره
+
+**النموذج المنفّذ:** Qoder Agent
+**المهمة:** إعادة تصميم ترويسة التقريرَين الماليَّين (كشف حساب مالي + كشف حساب مجموعة
+حسابات جزئية) إلى شريط من ثلاثة أعمدة، بعد رفض الكتلة الموسّطة أحادية السطر.
+**النطاق:** عميل Flutter فقط — 4 ملفات تنفيذ + 2 نموذج بيانات + 2 ملفات اختبار.
+**النتيجة:** `flutter analyze` نظيف · `flutter test` 105/105 · لا تغيير في أوراكل أو الـ API.
+**التوثيق:** التفاصيل في `devloping_history.md` و`todo.md` (قسم 2026-10-21 — ترويسة التقارير).
+
+
+---
+
+### أمر المستخدم (نصه الحرفي) [2026-10-21 11:07] · Qoder Agent
+
+> قم باضافه حقلي company_name_en, company_address_en الى جدول APP_SETTINGS وقم باضافه حقلين لهما
+> في شاشه الاعدادات وقم بتطبيق ترويسه التقرير لتقرير العملاء والعاملين ايضا customer_statement_screen
+> and the worker statements وقم بالاتصال بقاعده البيانات باستخدام موصل `oracledb mcp`
+
+**النموذج المنفّذ:** Qoder Agent
+**المهمة:** (١) إضافة مفتاحي الشركة بالإنجليزية إلى `APP_SETTINGS` عبر موصل `oracledb MCP`؛
+(٢) حقلا إدخال لهما في شاشة إعدادات التطبيق؛ (٣) تطبيق شريط الترويسة الثلاثي الأعمدة على
+شاشة كشف حساب العميل وشاشات كشف حساب العاملين.
+**النطاق:** قاعدة أوراكل (2 صفاً بياناتي، بلا DDL) + الخادم (`AppConfig`/controller/test) + عميل
+Flutter (نقل الترويسة إلى `lib/core` + شاشة الإعدادات + شاشتا الكشفين + الاختبارات).
+**النتيجة:** `flutter analyze` نظيف (تحذير سابق واحد) · `flutter test` **108/108** ·
+`pint --dirty` PASS · `php artisan test` **127/683** · صفا القاعدة 23/24 مُكرَّسان وموثَّقان بالـ`DUMP`.
+**التوثيق:** `db_commends.md` و`DBdevloping_history.md` (القاعدة)، `devloping_history.md` و`todo.md`
+(العميل)، `kyApp_API/devloping_history.md` (الخادم).

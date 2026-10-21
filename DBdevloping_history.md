@@ -508,3 +508,169 @@ SELECT USER_ID, USER_NAME_EN, USER_TYPE, IS_ACTIVATED, IS_ADMIN FROM ACCOUNTS.AP
 **التحقق الحي (قراءة فقط):** بعد تشغيل `php artisan tinker database/oracle/02_ibac_seed.php` أُحصيت
 الكتالوجات: `SELECT COUNT(*) FROM APP_PERMISSIONS` ⇒ **97**، و`SELECT COUNT(*) FROM APP_SETTINGS`
 ⇒ **22**. لم تُجر أي كتابة يدوية على الجدول business في هذه الجولة خارج سكربت البذر المعتمد.
+
+---
+
+## 2026-10-21 — Oracle: فحص مخطّط تقارير الحسابات (Account Reports Schema Findings)
+
+**نموذج AI:** Qoder Agent · **الأداة:** `oracledb` MCP + `oci8` عبر `yajra/laravel-oci8`.
+
+### اكتشافات المخطّط الحاسمة (لم تكن موثّقة سابقاً)
+1. **جدول `ACC_TRXN` غير موجود** داخل `ACCOUNTS`. المحاولة الأولى لكشف الحساب بنيت على `ACC_TRXN` وواجهت `ORA-00942: table or view does not exist`. **المسار الحقيقي** هو:
+   ```
+   ENTRY_MAIN  ─┐
+                ├─►  ENTRY_SUB (DET_NO = ENTRY_NO) ─► ACC_NO ─► CHART_ACC
+   ENTRY_SUB   ─┘
+   ENTRY_TYPE  ─► كود النوع العربي (TYPE_NAME بعد fixMojibake)
+   ```
+   أي أن الحركات اليومية تسكن `ENTRY_SUB` لا جدول اختصارات منفصل؛ و`ENTRY_MAIN` يعطي التاريخ ورقم السند الرئيسي.
+
+2. **`CURRENCY` هو جدول رموز العملات، وليس `CUR_CODE` وحده** — `CUR_CODE` يمثّل أزواج أسعار الصرف، بينما `CURRENCY(CUR_NO, CUR_NAME, CUR_SIGN)` هو المرجع. **`CUR_NO = 1` هو اليمنـي المحلي (YR)** — هذا هو الأساس لتصنيف محلي/أجنبي داخل `getGroupStatement`.
+
+3. **`CUR_PRICE.SEQ_PRICE` قد يكون `NULL` للحركات المحلية**. الاعتماد على «هل يوجد سعر صرف؟» لتصنيف محلية/أجنبية يُنتج أخطاءً. **القاعدة الصحيحة**: `CASE WHEN s.CUR_NO = 1 THEN local ELSE foreign END`.
+
+4. **`NLS_CHARACTERSET = WE8MSWIN1252`** (تمّت إعادة التأكيد). كل الحقول النصّية العربية (`DETAILS`, `TYPE_NAME`, `ACC_NAME`, `SUB_NAME`, `PART_NAME`, `ACC_GROUP_NAME`) تعود كـ mojibake Latin-1، ويجب تمريرها عبر `ArabicEncoding::fixMojibake` على الخادم و`ArabicEncodingUtils.fix` على العميل.
+
+### استعلامات الفحص التي تم تنفيذها
+```sql
+-- للتأكد من وجود ENTRY_SUB والربط مع CHART_ACC
+SELECT COUNT(*) FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='ENTRY_SUB';
+
+-- لتأكيد عدم وجود ACC_TRXN
+SELECT COUNT(*) FROM ALL_TABLES
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='ACC_TRXN';  -- 0 rows
+
+-- لمعرفة عملة الحسابات المحلية مقابل الأجنبية
+SELECT CUR_NO, CUR_NAME, CUR_SIGN FROM ACCOUNTS.CURRENCY ORDER BY CUR_NO;
+-- CUR_NO=1 => اليمني المحلي
+
+-- عيّنات لفحص ترميز الحقول
+SELECT RAWTOHEX(UTL_RAW.CAST_TO_RAW(TYPE_NAME)) FROM ACCOUNTS.ENTRY_TYPE WHERE ROWNUM<=3;
+```
+
+### قرار تصميمي بشأن نافذة كشف الحساب الافتراضية
+- **التقرير 1 (مفرد)**: نافذة 15 يوماً **خلف آخر حركة فعلية** للحساب. SQL: `SELECT MAX(ENTRY_DATE) FROM ENTRY_SUB WHERE ACC_NO = :accNo` ثم `:from = MAX - 15d`, `:to = TODAY`. عند عدم وجود حركات → `defaulted=false` والفلاتر فارغة.
+- **التقرير 2 (ميزان المجموعة)**: **بلا** نافذة افتراضية — كل السجل التاريخي حتى يُحدّد المستخدم من/إلى. يعكس هذا سلوك `TRIAL_BALANCE_REPORT.RDF` الأصلي.
+
+### ملاحظات الأداء
+- استعلام كشف الحساب الفردي يبقي `FETCH FIRST :limit ROWS ONLY` (1000 افتراضياً) لأن `CHART_ACC` المفرد قد يضمّ مئات الآلاف من الحركات عبر سنوات.
+- استعلام المجموعة يستخدم `GROUP BY s.ACC_NO, s.CUR_NO` مع `SUM(CASE ...)` للفصل بين العملات، مع `WHERE` تسلسلي يعتمد على أعمق نطاق محدد (`:group_id` → `:acc_part` → `:acc_sub` → `:acc_no`).
+
+### لا تغييرات DDL
+هذه المهمة **لم تُنشئ جداول** ولم تُضِف أعمدة — كل التعديلات كانت على طبقة الاستعلام داخل Laravel/Flutter فقط. سجل `db_commends.md` يحتوي على استعلامات SELECT/فحص المخطط فقط.
+
+---
+
+## [2026-10-21 06:17] دورة حياة الجلسات — سلوك كتابة/حذف جديد على `ACCOUNTS.PERSONAL_ACCESS_TOKENS`
+
+**المنفِّذ:** Qoder Agent · **DDL:** لا شيء (لا جدول، لا عمود، لا sequence، لا trigger) · **كتابة:** `DELETE` على البنية التحتية للتوكنات فقط، لا على أي جدول أعمال ERP.
+
+### الجدول المتأثر: `ACCOUNTS.PERSONAL_ACCESS_TOKENS`
+الأعمدة المسؤولة عن الجلسة كلها قائمة أصلاً: `EXPIRES_AT`، `LAST_USED_AT`، `CREATED_AT`، `UPDATED_AT` (جميعها `TIMESTAMP(6)`) — لم يُضَف عمود واحد.
+
+### التغير السلوكي (الأهم للقاعدة)
+1. **`EXPIRES_AT` يُكتب ويُقارَن الآن على ساعة القاعدة.** سابقاً كان `SessionPolicy` يكتب بتوقيت PHP (`app.timezone = UTC`) بينما `SYSDATE` على `+03:00`، فكل موعد مخزّن كان يبدو متأخراً ثلاث ساعات عند مقارنة القاعدة، وكل إنهاء بـ`SYSDATE - 1` كان يبدو في المستقبل عند قراءة PHP. `SessionPolicy::dbNow()` يقيس الإزاحة من `SELECT TO_CHAR(SYSDATE,'YYYY-MM-DD HH24:MI:SS') FROM DUAL` مرة واحدة في الطلب ويطبّقها.
+2. **الصف المنتهي يُحذف، لا يُترك.** `validate()` يمسح التوكن الذي رُفض بانتهاء خمول أو بتجاوز العمر المطلق، و`purgeExpired()` يكنس: (أ) `EXPIRES_AT IS NOT NULL AND EXPIRES_AT < dbNow`، (ب) `EXPIRES_AT IS NULL AND COALESCE(LAST_USED_AT, CREATED_AT) < dbNow - session_idle_minutes`.
+3. **فرع (ب) هو علاج التراكم المرصود:** صفّ بلا `EXPIRES_AT` لا يمكن أن «ينتهي» بحساب الموعد، وقد بقي ظاهراً «نشطاً» للأبد. كون الجلسة الحيّة تحصل على موعد من `slide()` في أول طلب بعد عمل السياسة يجعل الصفّ بلا موعد دليلاً على عدم استخدام منذ ذلك الحين.
+
+### حالة البيانات قبل وبعد (قياس مباشر)
+| القراءة | قبل | بعد |
+|---|---|---|
+| إجمالي الصفوف | 22 | 1 |
+| `EXPIRES_AT IS NULL` | 20 | 0 |
+| منتهية الموعد (`<= SYSDATE`) | 2 | 0 |
+| حيّة (`> SYSDATE`) | 0 | 1 |
+
+### ملاحظة تشغيلية لمن يقرأ هذه السطور
+الكنس يُجري `DELETE` حقيقياً على بيئة حيّة مشاركة مع النظام القديم — لكنه لا يمسّ إلا ترويسات ميتة (أو خاملة تتجاوز `session_idle_minutes`)، ويُجرى من داخل `SessionPolicy` بأفضل جهد: أي فشل فيه لا يمنع الدخول ولا يُفجّر شاشة الجلسات. جهازٌ لا يزال يحمل توكنًا محذوفًا يستقبل 401 في أول طلب فيمسح تخزينه ويذهب لشاشة الدخول — وهو المسار القائم في العميل، لا مسار جديد.
+
+### لا تغيير على بقية الجداول
+`APP_USERS`، `APP_PERMISSIONS`، `APP_USERS_PERMISSIONS`، `APP_SETTINGS`، `APP_USER_ACTIVITY`، `CACHE` — لم تُمَسّ. لا `UPDATE` ولا `INSERT` تنفيذي من هذه المهمة (الكتابة الوحيدة هي `DELETE` التوكنات الميتة الذي هو جوهر الطلب).
+
+
+---
+
+## 2026-10-21 — SQL فحص انهيار كشف الحساب (قراءة فقط، بلا كتابة)
+
+**نموذج AI:** Qoder Agent · **الأداة:** oracledb MCP — تشخيص انهيار `showDatePicker` (سنة 93422).
+
+### 1) تواريخ حساب 11010001 (سليمة)
+```sql
+SELECT * FROM (SELECT em.ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'DD/MM/YYYY') AS ENTRY_DATE_FMT,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE,
+       DUMP(em.ENTRY_DATE) AS DATE_DUMP
+  FROM ENTRY_MAIN em JOIN ENTRY_SUB es ON es.ENTRY_NO = em.ENTRY_NO
+ WHERE es.ACC_NO = 11010001
+ ORDER BY em.ENTRY_DATE DESC) WHERE ROWNUM <= 5;
+-- نتيجتان: 15/04/2025 و 27/03/2025 (DUMP: Typ=12 Len=7 سليم)
+```
+
+### 2) الصفوف الفاسدة عبر كل ENTRY_MAIN
+```sql
+SELECT * FROM (SELECT em.ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE, em.ENTRY_DATE
+  FROM ENTRY_MAIN em
+ WHERE em.ENTRY_DATE > TO_DATE('9999-12-31','YYYY-MM-DD')
+    OR em.ENTRY_DATE < TO_DATE('1900-01-01','YYYY-MM-DD')
+ ORDER BY em.ENTRY_DATE DESC) WHERE ROWNUM <= 10;
+-- وُجدت صفوف بسنة 0025 (مثل ENTRY_NO 4250019965 بتاريخ 0025-06-18)
+-- القرار: لا تُصلَح البيانات يدوياً؛ طبقة الحماية الجديدة في التطبيق تتجاهلها.
+```
+
+### ملاحظات
+- لا `FETCH FIRST n ROWS ONLY` على Oracle 11g (ORA-00933) — استُخدم `WHERE ROWNUM <= n`.
+- لم تُنفَّذ أي كتابة/DDL — كلا الاستعلامين SELECT للقراءة فقط.
+
+---
+
+## [2026-10-21 07:32] — حالة `PERSONAL_ACCESS_TOKENS` بعد تفعيل الحذف التلقائي (بلا DDL)
+**المنفّذ:** Qoder Agent · **النوع:** behaviour/data observation، لا تغيير مخطط ولا تنفيذ SQL يدوي.
+
+### ما تغيّر في السلوك على القاعدة
+- `SessionPolicy::validate()` صار **يحذف** صف التوكن عند الرفض (خمول منتهٍ أو سقف مطلق منتهٍ) بدل تركه `EXPIRES_AT` في الماضي.
+- `SessionPolicy::purgeExpired()` يمسح الصفوف الميّتة في فرعين: `EXPIRES_AT < dbNow()`، و`EXPIRES_AT IS NULL AND COALESCE(LAST_USED_AT, CREATED_AT) < dbNow() - idle`. يُستدعى بعد كل دخول (كلمة مرور/بصمة) وفي رأس `SessionAdminController@index`.
+- كل حساب الوقت يمر عبر `SessionPolicy::dbNow()` (ساعة أوراكل) — لا `Carbon::now()` — لأن `app.timezone = UTC` مقابل `SYSDATE = +03:00`.
+
+### إحصاء الجدول (قراءة فقط، SQL في `db_commends.md`)
+| الوقت | `TOKENS` | بلا موعد | منتهية التاريخ | تراثية خاملة |
+|---|---|---|---|---|
+| قبل الإصلاح | 22 | 20 | 2 | 0 |
+| بعد أول كنس (06:17) | 1 | 0 | 0 | 0 |
+| فحص 07:32 | 0 | — | — | — |
+
+الصفوف صفر عند 07:32 لأن لا مستخدم متصلاً الآن — وهذا هو **المؤمل**: الجدول لم يعد يتراكم.
+ملاحظة اختبارية: `SUM(CASE …)` فوق مجموعة فارغة يُرجع `NULL` لا `0`.
+
+### الأثر على الاختبارات
+`ActiveSessionsTest` كان يفترض وجود صف حقيقي في `PERSONAL_ACCESS_TOKENS` كـ fixture؛ بعد الكنس لم يعد كذلك،
+فصار فحص بنية كل صف يُطبَّق على الصفوف الموجودة مع تخطٍّ لطيف عند الجدول الفارغ (نفس نمط اختبار الأسماء العربية).
+
+
+
+---
+
+## [2026-10-21 11:07] — مفتاحا الترويسة الإنجليزية في `APP_SETTINGS` (بيانات، بلا DDL)
+**المنفِّذ / Executor:** Qoder Agent · **النوع:** إدراج صفوف بيانات في جدول موجود (key-value)، لا تغيير مخطط.
+**الطريق / Channel:** موصل `oracledb MCP` مباشرةً على مخطط `ACCOUNTS`.
+
+### ما أُضيف
+| `SETTING_ID` | `SETTING_KEY` | `VALUE_TYPE` | `SORT_ORDER` | `IS_LOCKABLE` | `SETTING_VALUE` |
+|---|---|---|---|---|---|
+| 23 | `company_name_en` | string | 115 | 0 | `ALKABODI FOR MEN's TAILORING` |
+| 24 | `company_address_en` | string | 125 | 0 | `Airport Street - Next to Al-shayef House` |
+
+- لا أعمدة جديدة ولا جدول جديد — `APP_SETTINGS` key-value كما هو؛ العدد من **22 إلى 24 صفاً**.
+- `SETTING_ID` لم يُذكر صراحةً: `TRG_APP_SETTINGS` (BEFORE INSERT) يمنحه من `SEQ_APP_SETTINGS`؛
+  `LAST_NUMBER` كان 23 فلا تصادم.
+- `SORT_ORDER` 115/125 لجعل كل مفتاح إنجليزي ملاصقاً لنظيره العربي في شاشة الإعدادات (110←115←120←125).
+- التسميات العربية (`NAME_AR`/`DESCRIPTION_AR`) خُزِّنت بايتات Windows-1256 مستعرضة كأحرف لاتينية —
+  نفس أسلوب الصفوف 11..22 — وتُصلَح عند القراءة عبر `ArabicEncoding::fixMojibake()`.
+- لا `UPDATE` ولا `DELETE` على أي صف قائم.
+
+### الأثر على طبقة التطبيق
+- المفتاحان أُضيفا إلى `AppConfig::WRITABLE_KEYS` + `DEFAULTS` على الخادم، و`SettingsStore::set()`
+  صار يجد لهما صفاً (وإلا رمى «الإعداد غير معروف»).
+- الملف المكافئ القابل للتكرار: `kyApp_API/database/oracle/05_app_settings_company_en.sql`.
+- كل SQL (تشخيصي وكاتبي) موثّق حرفياً في `db_commends.md` بنفس الوقت.

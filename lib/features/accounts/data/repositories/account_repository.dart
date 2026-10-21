@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
+import '../models/account_group_statement_model.dart';
 import '../models/account_model.dart';
 import '../models/chart_account_model.dart';
 
@@ -306,6 +307,45 @@ class AccountRepository {
       return body;
     } catch (e) {
       if (e is DioException && CancelToken.isCancel(e)) return {};
+      rethrow;
+    }
+  }
+
+  /// كشف حساب مجموعة حسابات جزئية (ميزان المراجعة)
+  /// GET /accounts/group-statement — same try/cancel-token/error pattern as the
+  /// adjacent statement/detail methods above; scope params are all optional and
+  /// the server resolves the deepest one present (see AccountController::getGroupStatement).
+  Future<TrialBalanceReport> fetchGroupStatement({
+    int? accNo,
+    int? accSub,
+    int? accPart,
+    int? groupId,
+    String? fromDate,
+    String? toDate,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final resp = await client.dio.get(
+        '/accounts/group-statement',
+        queryParameters: {
+          if (accNo != null) 'acc_no': accNo,
+          if (accSub != null) 'acc_sub': accSub,
+          if (accPart != null) 'acc_part': accPart,
+          if (groupId != null) 'group_id': groupId,
+          if (fromDate != null) 'from_date': fromDate,
+          if (toDate != null) 'to_date': toDate,
+        },
+        cancelToken: cancelToken,
+      );
+      final body = resp.data as Map<String, dynamic>;
+      if (body['success'] == true) {
+        return TrialBalanceReport.fromJson(body);
+      }
+      return TrialBalanceReport.empty;
+    } catch (e) {
+      if (e is DioException && CancelToken.isCancel(e)) {
+        return TrialBalanceReport.empty;
+      }
       rethrow;
     }
   }

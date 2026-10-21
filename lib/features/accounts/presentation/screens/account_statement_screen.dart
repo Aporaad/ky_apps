@@ -1,16 +1,25 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/permission_gate.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/chart_account_model.dart';
 import '../providers/accounts_provider.dart';
+import '../utils/account_statement_pdf_builder.dart';
+import '../utils/statement_date_parser.dart';
+import '../widgets/account_statement_report_footer.dart';
+import '../widgets/account_statement_report_table.dart';
 
 String _formatDateDash(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 String _formatDateSlash(DateTime d) =>
     '${d.year}/${d.month.toString().padLeft(2, '0')}/${d.day.toString().padLeft(2, '0')}';
 
-/// شاشة كشف حساب مالي - تصميم منظم وعصري
+/// شاشة كشف حساب مالي - قالب تقرير أوراكل acc_report.pdf
 class AccountStatementScreen extends ConsumerStatefulWidget {
   final int? initialAccNo;
   final String? initialAccName;
@@ -26,8 +35,7 @@ class AccountStatementScreen extends ConsumerStatefulWidget {
       _AccountStatementScreenState();
 }
 
-class _AccountStatementScreenState
-    extends ConsumerState<AccountStatementScreen> {
+class _AccountStatementScreenState extends ConsumerState<AccountStatementScreen> {
   int? _selectedAccNo;
   String _selectedAccName = '';
 
@@ -35,7 +43,9 @@ class _AccountStatementScreenState
   DateTime? _toDate;
 
   bool _isLoading = false;
+  bool _filtersVisible = true;
   AccountStatementData _statementData = const AccountStatementData();
+  ChartAccountModel? _selectedAccount;
 
   @override
   void initState() {
@@ -60,6 +70,18 @@ class _AccountStatementScreenState
       setState(() {
         _statementData = res;
         _isLoading = false;
+        // الخادم يحسب النافذة الافتراضية (آخر 30 يوم قبل آخر حركة) عند غياب
+        // التواريخ - تُعرض هنا ليتمكن المستخدم من رؤيتها/تعديلها يدوياً بعد ذلك.
+        // لا نعبّئ إلا إذا نجح تحليل التاريخين معاً حتى لا يبقى أحدهما معلّقاً.
+        // Only auto-fill when BOTH dates parse — avoids half-set filter state.
+        if (res.defaulted && res.fromDate != null && res.toDate != null) {
+          final parsedFrom = _parseServerDate(res.fromDate!);
+          final parsedTo = _parseServerDate(res.toDate!);
+          if (parsedFrom != null && parsedTo != null) {
+            _fromDate = parsedFrom;
+            _toDate = parsedTo;
+          }
+        }
       });
     } catch (e) {
       setState(() => _isLoading = false);
@@ -74,12 +96,28 @@ class _AccountStatementScreenState
     }
   }
 
+  /// حدود السنوات المقبولة — انظر `statement_date_parser.dart` للمنطق المشترك.
+  /// See `statement_date_parser.dart` for the shared bounds logic.
+  DateTime? _parseServerDate(String raw) => parseStatementServerDate(raw);
+
   Future<void> _pickDate({required bool isFrom}) async {
+    // نقصّ initialDate داخل نطاق الـ picker احتياطاً — الـ assertion الخاص
+    // بـ Material ينهار إذا تجاوز التاريخ المبدئي firstDate/lastDate.
+    // Clamp the initial date into the picker's legal range as a hard guard:
+    // Material asserts initialDate ∈ [firstDate, lastDate].
+    final firstDate = DateTime(2020);
+    final lastDate = DateTime(2030);
+    final initial = clampToDatePickerRange(
+      (isFrom ? _fromDate : _toDate) ?? DateTime.now(),
+      firstDate: firstDate,
+      lastDate: lastDate,
+    );
+
     final picked = await showDatePicker(
       context: context,
-      initialDate: (isFrom ? _fromDate : _toDate) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      initialDate: initial,
+      firstDate: firstDate,
+      lastDate: lastDate,
     );
     if (picked != null) {
       setState(() {
@@ -107,6 +145,7 @@ class _AccountStatementScreenState
           setState(() {
             _selectedAccNo = acc.accNo;
             _selectedAccName = acc.accName;
+            _selectedAccount = acc;
           });
           _loadStatement();
         },
@@ -114,15 +153,52 @@ class _AccountStatementScreenState
     );
   }
 
+  /// هوية ترويسة التقرير من إعدادات التطبيق (اسم الشركة/العنوان/التواصل) — تُقرأ عند
+  /// الطباعة/التصدير، أما الشاشة فتراقب نفس المزود في `build`.
+  /// Report letterhead identity from app config, read imperatively for print/export.
+  ReportLetterheadInfo _letterheadInfo() => ReportLetterheadInfo.fromConfig(
+        ref.read(appConfigNotifierProvider).config,
+      );
+
+  Future<void> _printReport() async {
+    final bytes = await buildAccountStatementPdf(
+      letterhead: _letterheadInfo(),
+      account: _selectedAccount,
+      statement: _statementData,
+    );
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
+  }
+
+  Future<void> _exportPdf() async {
+    final bytes = await buildAccountStatementPdf(
+      letterhead: _letterheadInfo(),
+      account: _selectedAccount,
+      statement: _statementData,
+    );
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'account-$_selectedAccNo-statement.pdf',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final double totalDebit = _statementData.transactions
-        .fold(0, (sum, t) => sum + (t.debit ?? 0));
-    final double totalCredit = _statementData.transactions
-        .fold(0, (sum, t) => sum + (t.credit ?? 0));
-    final double netBalance =
-        _statementData.currentBalance ?? (totalDebit - totalCredit);
-    final txCount = _statementData.transactions.length;
+    final hasData = _selectedAccNo != null &&
+        !_isLoading &&
+        _statementData.transactions.isNotEmpty;
+
+    // تراقب الشركة كما تُعدَّل من شاشة التهيئة، فتنعكس على الترويسة فوراً
+    // Watches the configured identity so a branding edit repaints the letterhead at once.
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.watch(appConfigNotifierProvider.select((s) => s.config)),
+    );
+
+    final fromDateLabel = _fromDate != null
+        ? _formatDateSlash(_fromDate!)
+        : (_statementData.fromDate ?? 'من تاريخ');
+    final toDateLabel = _toDate != null
+        ? _formatDateSlash(_toDate!)
+        : (_statementData.toDate ?? 'إلى تاريخ');
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -135,6 +211,29 @@ class _AccountStatementScreenState
         elevation: 0.5,
         actions: [
           IconButton(
+            icon: Icon(_filtersVisible ? Icons.filter_alt : Icons.filter_alt_outlined, size: 20),
+            tooltip: _filtersVisible ? 'إخفاء الفلترة' : 'إظهار الفلترة',
+            onPressed: () => setState(() => _filtersVisible = !_filtersVisible),
+          ),
+          if (hasData) ...[
+            PermissionGate(
+              code: Perm.accountsPrint,
+              child: IconButton(
+                icon: const Icon(Icons.print_outlined, size: 20),
+                tooltip: 'طباعة',
+                onPressed: _printReport,
+              ),
+            ),
+            PermissionGate(
+              code: Perm.accountsExport,
+              child: IconButton(
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                tooltip: 'تصدير PDF',
+                onPressed: _exportPdf,
+              ),
+            ),
+          ],
+          IconButton(
             icon: const Icon(Icons.refresh, size: 20),
             tooltip: 'تحديث',
             onPressed: _loadStatement,
@@ -143,173 +242,8 @@ class _AccountStatementScreenState
       ),
       body: Column(
         children: [
-          // ─── شريط الفلتر المدمج ───
-          Container(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
-            color: AppColors.surface,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // اختيار الحساب
-                InkWell(
-                  onTap: _showAccountPickerDialog,
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      border: Border.all(
-                        color: _selectedAccNo != null
-                            ? AppColors.primary.withValues(alpha: 0.5)
-                            : AppColors.border,
-                      ),
-                      borderRadius: BorderRadius.circular(10),
-                      color: _selectedAccNo != null
-                          ? AppColors.primary.withValues(alpha: 0.04)
-                          : AppColors.background,
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.account_balance_wallet_outlined,
-                          color: _selectedAccNo != null
-                              ? AppColors.primary
-                              : AppColors.textMuted,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            _selectedAccNo != null
-                                ? '[$_selectedAccNo] $_selectedAccName'
-                                : 'اضغط لاختيار الحساب المالي...',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: _selectedAccNo != null
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              color: _selectedAccNo != null
-                                  ? AppColors.textPrimary
-                                  : AppColors.textMuted,
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_drop_down_rounded,
-                          color: _selectedAccNo != null
-                              ? AppColors.primary
-                              : AppColors.textMuted,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+          if (_filtersVisible) _buildFilterBar(fromDateLabel, toDateLabel),
 
-                const SizedBox(height: 8),
-
-                // نطاق التاريخ
-                Row(
-                  children: [
-                    Expanded(
-                      child: _buildDateButton(
-                        label: _fromDate != null
-                            ? _formatDateSlash(_fromDate!)
-                            : 'من تاريخ',
-                        hasValue: _fromDate != null,
-                        icon: Icons.calendar_today,
-                        onTap: () => _pickDate(isFrom: true),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _buildDateButton(
-                        label: _toDate != null
-                            ? _formatDateSlash(_toDate!)
-                            : 'إلى تاريخ',
-                        hasValue: _toDate != null,
-                        icon: Icons.event_outlined,
-                        onTap: () => _pickDate(isFrom: false),
-                      ),
-                    ),
-                    if (_fromDate != null || _toDate != null) ...[
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: () {
-                          setState(() {
-                            _fromDate = null;
-                            _toDate = null;
-                          });
-                          _loadStatement();
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: AppColors.error.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.clear_rounded,
-                            color: AppColors.error,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // ─── شريط ملخص الأرقام (يظهر عند اختيار الحساب) ───
-          if (_selectedAccNo != null)
-            Container(
-              padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
-              color: AppColors.background,
-              child: Row(
-                children: [
-                  _buildSummaryChip(
-                    label: 'إجمالي المدين',
-                    value: totalDebit.toStringAsFixed(2),
-                    color: const Color(0xFF1565C0),
-                    icon: Icons.arrow_circle_up_outlined,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildSummaryChip(
-                    label: 'إجمالي الدائن',
-                    value: totalCredit.toStringAsFixed(2),
-                    color: const Color(0xFFE65100),
-                    icon: Icons.arrow_circle_down_outlined,
-                  ),
-                  const SizedBox(width: 6),
-                  _buildSummaryChip(
-                    label: 'الرصيد',
-                    value: netBalance.toStringAsFixed(2),
-                    color: netBalance >= 0
-                        ? const Color(0xFF2E7D32)
-                        : AppColors.error,
-                    icon: Icons.account_balance_outlined,
-                    isBold: true,
-                  ),
-                  if (txCount > 0) ...[
-                    const SizedBox(width: 6),
-                    _buildSummaryChip(
-                      label: 'عدد الحركات',
-                      value: '$txCount',
-                      color: const Color(0xFF6A1B9A),
-                      icon: Icons.list_alt_outlined,
-                    ),
-                  ],
-                ],
-              ),
-            ),
-
-          // ─── قائمة الحركات ───
           Expanded(
             child: _selectedAccNo == null
                 ? _buildEmptyState(
@@ -323,114 +257,158 @@ class _AccountStatementScreenState
                 ? _buildEmptyState(
                     icon: Icons.receipt_long_outlined,
                     title: 'لا توجد حركات',
-                    subtitle:
-                        'لا توجد حركات مسجلة لهذا الحساب في الفترة المحددة',
+                    subtitle: 'لا توجد حركات مسجلة لهذا الحساب في الفترة المحددة',
                   )
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                    itemCount: _statementData.transactions.length,
-                    itemBuilder: (context, index) {
-                      final tx = _statementData.transactions[index];
-                      final isDebit =
-                          (tx.debit ?? 0) > 0;
-                      final txColor = isDebit
-                          ? const Color(0xFF1565C0)
-                          : const Color(0xFFE65100);
-                      final txAmount = isDebit
-                          ? tx.debit!
-                          : (tx.credit ?? 0);
-                      final balance = tx.balance ?? 0;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.border.withValues(alpha: 0.7),
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(vertical: 8,horizontal: 5),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 900),
+                        child: Card(
+                          // padding: const EdgeInsets.symmetric(horizontal: 3),
+                          margin: const EdgeInsets.symmetric(horizontal: 1),
+                          color: Colors.white,
+                          child: InteractiveViewer(
+                            minScale: 0.5,
+                            maxScale: 3,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                AccountStatementLetterhead(
+                                  letterhead: letterhead,
+                                  accName: _selectedAccName,
+                                  accNo: _selectedAccNo!,
+                                  currency: _statementData.currency,
+                                  fromDate: fromDateLabel,
+                                  toDate: toDateLabel,
+                                ),
+                                AccountStatementReportTable(
+                                  transactions: _statementData.transactions,
+                                  openingBalance: _statementData.openingBalance ?? 0,
+                                  finalBalance: _statementData.finalBalance ?? 0,
+                                  totalDebit: _statementData.totalDebit ?? 0,
+                                  totalCredit: _statementData.totalCredit ?? 0,
+                                ),
+                                AccountStatementReportFooter(
+                                  openingBalance: _statementData.openingBalance ?? 0,
+                                  totalDebit: _statementData.totalDebit ?? 0,
+                                  totalCredit: _statementData.totalCredit ?? 0,
+                                  finalBalance: _statementData.finalBalance ?? 0,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 9,
-                          ),
-                          child: Row(
-                            children: [
-                              // أيقونة نوع الحركة
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: txColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  isDebit
-                                      ? Icons.arrow_circle_up_rounded
-                                      : Icons.arrow_circle_down_rounded,
-                                  color: txColor,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              // البيان والتاريخ
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      tx.description ?? '-',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      tx.date ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              // المبلغ والرصيد
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    '${isDebit ? '+' : '-'}${txAmount.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: txColor,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'رصيد: ${balance.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: balance >= 0
-                                          ? const Color(0xFF2E7D32)
-                                          : AppColors.error,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                      ),
+                    ),
                   ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterBar(String fromDateLabel, String toDateLabel) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+      color: AppColors.surface,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: _showAccountPickerDialog,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: _selectedAccNo != null
+                      ? AppColors.primary.withValues(alpha: 0.5)
+                      : AppColors.border,
+                ),
+                borderRadius: BorderRadius.circular(10),
+                color: _selectedAccNo != null
+                    ? AppColors.primary.withValues(alpha: 0.04)
+                    : AppColors.background,
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.account_balance_wallet_outlined,
+                    color: _selectedAccNo != null ? AppColors.primary : AppColors.textMuted,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _selectedAccNo != null
+                          ? '[$_selectedAccNo] $_selectedAccName'
+                          : 'اضغط لاختيار الحساب المالي...',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight:
+                            _selectedAccNo != null ? FontWeight.bold : FontWeight.normal,
+                        color:
+                            _selectedAccNo != null ? AppColors.textPrimary : AppColors.textMuted,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  Icon(
+                    Icons.arrow_drop_down_rounded,
+                    color: _selectedAccNo != null ? AppColors.primary : AppColors.textMuted,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _buildDateButton(
+                  label: fromDateLabel,
+                  hasValue: _fromDate != null,
+                  icon: Icons.calendar_today,
+                  onTap: () => _pickDate(isFrom: true),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildDateButton(
+                  label: toDateLabel,
+                  hasValue: _toDate != null,
+                  icon: Icons.event_outlined,
+                  onTap: () => _pickDate(isFrom: false),
+                ),
+              ),
+              if (_fromDate != null || _toDate != null) ...[
+                const SizedBox(width: 6),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _fromDate = null;
+                      _toDate = null;
+                    });
+                    _loadStatement();
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.all(7),
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.clear_rounded,
+                      color: AppColors.error,
+                      size: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),
@@ -449,9 +427,7 @@ class _AccountStatementScreenState
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: hasValue
-              ? AppColors.primary.withValues(alpha: 0.06)
-              : AppColors.background,
+          color: hasValue ? AppColors.primary.withValues(alpha: 0.06) : AppColors.background,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
             color: hasValue ? AppColors.primary.withValues(alpha: 0.4) : AppColors.border,
@@ -466,61 +442,14 @@ class _AccountStatementScreenState
               color: hasValue ? AppColors.primary : AppColors.textMuted,
             ),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: hasValue ? AppColors.primary : AppColors.textMuted,
-                fontWeight: hasValue ? FontWeight.w600 : FontWeight.normal,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSummaryChip({
-    required String label,
-    required String value,
-    required Color color,
-    required IconData icon,
-    bool isBold = false,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.07),
-          borderRadius: BorderRadius.circular(9),
-          border: Border.all(color: color.withValues(alpha: 0.25)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, size: 12, color: color),
-                const SizedBox(width: 3),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    color: color,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-            const SizedBox(height: 3),
             FittedBox(
+              fit: BoxFit.scaleDown,
               child: Text(
-                value,
+                label,
                 style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: isBold ? FontWeight.bold : FontWeight.w700,
-                  color: color,
+                  fontSize: 12.5,
+                  color: hasValue ? AppColors.primary : AppColors.textMuted,
+                  fontWeight: hasValue ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
             ),
@@ -586,8 +515,7 @@ class _AccountPickerBottomSheet extends ConsumerStatefulWidget {
       _AccountPickerBottomSheetState();
 }
 
-class _AccountPickerBottomSheetState
-    extends ConsumerState<_AccountPickerBottomSheet> {
+class _AccountPickerBottomSheetState extends ConsumerState<_AccountPickerBottomSheet> {
   final TextEditingController _searchCtrl = TextEditingController();
   Timer? _debounce;
 
@@ -608,7 +536,6 @@ class _AccountPickerBottomSheetState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // رأس القائمة
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -628,7 +555,6 @@ class _AccountPickerBottomSheetState
           ),
           const SizedBox(height: 10),
 
-          // بحث
           TextField(
             controller: _searchCtrl,
             onChanged: (val) {
@@ -643,10 +569,7 @@ class _AccountPickerBottomSheetState
               prefixIcon: const Icon(Icons.search, size: 18),
               filled: true,
               fillColor: AppColors.background,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 10,
-              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(10),
                 borderSide: BorderSide(color: AppColors.border),
@@ -659,7 +582,6 @@ class _AccountPickerBottomSheetState
           ),
           const SizedBox(height: 10),
 
-          // القائمة
           Expanded(
             child: chartState.isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -672,15 +594,12 @@ class _AccountPickerBottomSheetState
                   )
                 : ListView.separated(
                     itemCount: chartState.accounts.length,
-                    separatorBuilder: (_, __) =>
-                        const Divider(height: 1),
+                    separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (ctx, idx) {
                       final acc = chartState.accounts[idx];
                       return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
+                        contentPadding:
+                            const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                         leading: Container(
                           width: 36,
                           height: 36,

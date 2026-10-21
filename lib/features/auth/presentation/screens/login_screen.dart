@@ -116,7 +116,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           // dragStartBehavior:  DragStartBehavior.down,
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 440,minHeight: 600,maxHeight: 700),
+            constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
               elevation: 0,
               shape: RoundedRectangleBorder(
@@ -247,7 +247,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           labelText: 'كلمة المرور',
                           hintText: '••••••••',
                           prefixIcon: const Icon(Icons.lock_outline_rounded),
-                          suffixIcon: IconButton(
+                          
+                          suffixIcon: (authState.isBiometricEnabled && authState.biometricCapability != BiometricCapability.notSupported && authState.biometricCapability != BiometricCapability.notEnrolled)
+                              ? BiometricLoginButton(
+                                    capability: authState.biometricCapability,
+                                    isLoading: authState.isBiometricLoading,
+                                    onPressed: authState.isLoading
+                                        ? null
+                                        : _handleBiometricLogin
+                                  )
+                              : null,
+                        suffix: IconButton(
                             icon: Icon(
                               _obscurePassword
                                   ? Icons.visibility_off_outlined
@@ -288,38 +298,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             : const Text('دخول'),
                       ),
 
-                      // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز
-                      if (authState.isBiometricEnabled &&
-                          authState.biometricCapability !=
-                              BiometricCapability.notSupported &&
-                          authState.biometricCapability !=
-                              BiometricCapability.notEnrolled) ...[
-                        const SizedBox(height: 20),
-                        Row(
-                          children: [
-                            Expanded(child: Divider()),
-                            Padding(
-                              padding: EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                'أو عبر البصمة',
-                                style: TextStyle(
-                                  color: AppColors.textSecondary,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                            Expanded(child: Divider()),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        BiometricLoginButton(
-                          capability: authState.biometricCapability,
-                          isLoading: authState.isBiometricLoading,
-                          onPressed: authState.isLoading
-                              ? null
-                              : _handleBiometricLogin,
-                        ),
-                      ],
+                      // // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز
+                      // if (authState.isBiometricEnabled &&
+                      //     authState.biometricCapability !=
+                      //         BiometricCapability.notSupported &&
+                      //     authState.biometricCapability !=
+                      //         BiometricCapability.notEnrolled) ...[
+                      //   const SizedBox(height: 20),
+                      //   // Row(
+                      //   //   children: [
+                      //   //     Expanded(child: Divider()),
+                      //   //     Padding(
+                      //   //       padding: EdgeInsets.symmetric(horizontal: 16),
+                      //   //       child: Text(
+                      //   //         'أو عبر البصمة',
+                      //   //         style: TextStyle(
+                      //   //           color: AppColors.textSecondary,
+                      //   //           fontSize: 12,
+                      //   //         ),
+                      //   //       ),
+                      //   //     ),
+                      //   //     Expanded(child: Divider()),
+                      //   //   ],
+                      //   // ),
+                      //   // const SizedBox(height: 20),
+                      //   // BiometricLoginButton(
+                      //   //   capability: authState.biometricCapability,
+                      //   //   isLoading: authState.isBiometricLoading,
+                      //   //   onPressed: authState.isLoading
+                      //   //       ? null
+                      //   //       : _handleBiometricLogin,
+                      //   // ),
+                      // ],
                     ],
                   ),
                 ),
