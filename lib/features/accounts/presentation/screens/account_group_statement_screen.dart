@@ -125,7 +125,11 @@ class _AccountGroupStatementScreenState
 
   void _onGroupChanged(int? value) {
     setState(() => _groupId = value);
-    if (value != null) _loadReport();
+    // إعادة التحميل دائماً حتى عند التفرير (null) — يجب أن يعود التقرير
+    // لمستوى الحساب الجزئي إذا لم تُختر مجموعة
+    // Always reload — even when clearing to null, the report must fall back
+    // to the accPart-level scope when no group is selected.
+    _loadReport();
   }
 
   Future<void> _pickDate({required bool isFrom}) async {

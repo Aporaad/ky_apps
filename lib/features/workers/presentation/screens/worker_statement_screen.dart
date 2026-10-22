@@ -1,14 +1,19 @@
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../../data/models/worker_statement_model.dart';
 import '../providers/workers_provider.dart';
+import '../utils/worker_statement_pdf_builder.dart';
 
 /// شاشة كشف حساب العامل (موظف / قصاص / خياط)
 /// مصممة ومطابقة تماماً لنموذج كشف الحساب المعتمد ومتجاوبة بالكامل بدون تمرير أفقي
@@ -113,131 +118,66 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
     _loadData();
   }
 
-  void _showExportOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder:
-          (ctx) => SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.print_rounded, color: Color(0xFF6B2D1B)),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'خيارات طباعة وتصدير الكشف',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE0F2FE),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.picture_as_pdf_rounded,
-                        color: Color(0xFF0284C7),
-                      ),
-                    ),
-                    title: const Text(
-                      'تصدير كـ PDF',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text(
-                      'تجهيز ملف PDF قابل للحفظ والطباعة المباشرة',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('جاري إنشاء وتصدير ملف PDF...'),
-                          backgroundColor: Color(0xFF0284C7),
-                        ),
-                      );
-                    },
-                  ),
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFDCFCE7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.table_chart_rounded,
-                        color: Color(0xFF16A34A),
-                      ),
-                    ),
-                    title: const Text(
-                      'تصدير كـ Excel / CSV',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text(
-                      'تصدير جدول الحركات إلى ملف جداول بيانات',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('تم تصدير الجدول بصيغة Excel بنجاح'),
-                          backgroundColor: Color(0xFF16A34A),
-                        ),
-                      );
-                    },
-                  ),
-                  ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(
-                        Icons.print_rounded,
-                        color: Color(0xFFD97706),
-                      ),
-                    ),
-                    title: const Text(
-                      'طباعة فورية',
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: const Text(
-                      'إرسال أمر الطباعة إلى الطابعة الافتراضية',
-                      style: TextStyle(fontSize: 12),
-                    ),
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('تم إرسال الكشف لأمر الطباعة'),
-                          backgroundColor: Color(0xFFD97706),
-                        ),
-                      );
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ),
+  /// هوية ترويسة التقرير من إعدادات التطبيق (تُقرأ أمراً للطباعة/التصدير)
+  /// Report letterhead identity from app config (read imperatively for print/export).
+  ReportLetterheadInfo _letterheadInfo() => ReportLetterheadInfo.fromConfig(
+        ref.read(appConfigNotifierProvider).config,
+      );
+
+  /// يجمع بيانات الكشف الحالية من الـ provider لبناء ملف PDF.
+  /// Gathers the current statement data from the provider to build the PDF.
+  Future<Uint8List> _buildPdfBytes() async {
+    final state = ref.read(workerStatementProvider);
+    final summary = state.summary ?? {};
+    final workerInfo = state.worker ?? {};
+    final name = ArabicEncodingUtils.fix(
+      workerInfo['name']?.toString() ?? widget.workerName,
+    );
+    final accNo =
+        workerInfo['acc_no']?.toString() ??
+        widget.accNo?.toString() ??
+        '';
+    final currency = (summary['currency'] ?? 'يمني YR').toString();
+    final fromDate = (summary['from_date'] ?? '').toString();
+    final toDate = (summary['to_date'] ?? '').toString();
+    final openingBalance = (summary['opening_balance'] as num? ?? 0.0)
+        .toDouble();
+    final totalDebit = (summary['total_debit'] as num? ?? 0.0).toDouble();
+    final totalCredit = (summary['total_credit'] as num? ?? 0.0).toDouble();
+    final finalBalance = (summary['final_balance'] as num? ?? 0.0).toDouble();
+
+    return buildWorkerStatementPdf(
+      letterhead: _letterheadInfo(),
+      workerName: name,
+      workerTypeLabel: widget.workerType.label,
+      accNo: accNo,
+      currency: currency,
+      fromDate: fromDate,
+      toDate: toDate,
+      rows: state.rows,
+      openingBalance: openingBalance,
+      totalDebit: totalDebit,
+      totalCredit: totalCredit,
+      finalBalance: finalBalance,
+    );
+  }
+
+  Future<void> _printReport() async {
+    final bytes = await _buildPdfBytes();
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
+  }
+
+  Future<void> _exportPdf() async {
+    final state = ref.read(workerStatementProvider);
+    final workerInfo = state.worker ?? {};
+    final accNo =
+        workerInfo['acc_no']?.toString() ??
+        widget.accNo?.toString() ??
+        widget.workerId.toString();
+    final bytes = await _buildPdfBytes();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'worker-$accNo-statement.pdf',
     );
   }
 
@@ -284,11 +224,23 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
           ],
         ),
         actions: [
-          // زر خيارات الطباعة والتصدير
-          IconButton(
-            onPressed: () => _showExportOptions(context),
-            icon: const Icon(Icons.print_outlined, color: Color(0xFF6B2D1B)),
-            tooltip: 'طباعة وتصدير الكشف',
+          // زرّا الطباعة والتصدير — يظهران فقط لمن يحمل الصلاحية
+          // Print/export buttons — rendered only for permitted users.
+          PermissionGate(
+            code: Perm.accountsPrint,
+            child: IconButton(
+              icon: const Icon(Icons.print_outlined, size: 20),
+              tooltip: 'طباعة',
+              onPressed: _printReport,
+            ),
+          ),
+          PermissionGate(
+            code: Perm.accountsExport,
+            child: IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'تصدير PDF',
+              onPressed: _exportPdf,
+            ),
           ),
           // زر إظهار/إخفاء فلتر التواريخ
           IconButton(
@@ -621,64 +573,68 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
             ? rows.sublist(startIndex, endIndex)
             : <WorkerStatementModel>[];
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. الترويسة — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
-              _buildReportHeader(),
-              const SizedBox(height: 7),
-
-              // 2. شريط بيانات العامل ورقم الحساب ونطاق التاريخ
-              _buildWorkerMetaBar(
-                workerName: displayName,
-                accNo: displayAccNo,
-                currency: currency,
-                fromDate: fromDateStr,
-                toDate: toDateStr,
-              ),
-              const SizedBox(height: 16),
-
-              // 3. جدول كشف الحساب المتجاوب بالكامل (بدون تمرير أفقي)
-              _buildStatementTableLayout(
-                rows: pageRows,
-                isFirstPage: effectivePage == 1,
-                totalDebit: totalDebit,
-                totalCredit: totalCredit,
-                openingBalance: openingBalance,
-                finalBalance: finalBalance,
-              ),
-
-              // 4. عناصر التنقل بين الصفحات (عند وجود أكثر من 15 حركة)
-              if (totalPages > 1) ...[
-                const SizedBox(height: 12),
-                _buildPaginationBar(effectivePage, totalPages, totalRows),
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 3,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 1000),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(8),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
               ],
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 1. الترويسة — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
+                _buildReportHeader(),
+                const SizedBox(height: 7),
 
-              const SizedBox(height: 16),
+                // 2. شريط بيانات العامل ورقم الحساب ونطاق التاريخ
+                _buildWorkerMetaBar(
+                  workerName: displayName,
+                  accNo: displayAccNo,
+                  currency: currency,
+                  fromDate: fromDateStr,
+                  toDate: toDateStr,
+                ),
+                const SizedBox(height: 16),
 
-              // 5. صناديق ملخص الرصيد الافتتاحي والنهائي المطابقة للصورة
-              _buildSummaryFooter(
-                openingBalance: openingBalance,
-                finalBalance: finalBalance,
-              ),
-            ],
+                // 3. جدول كشف الحساب المتجاوب بالكامل (بدون تمرير أفقي)
+                _buildStatementTableLayout(
+                  rows: pageRows,
+                  isFirstPage: effectivePage == 1,
+                  totalDebit: totalDebit,
+                  totalCredit: totalCredit,
+                  openingBalance: openingBalance,
+                  finalBalance: finalBalance,
+                ),
+
+                // 4. عناصر التنقل بين الصفحات (عند وجود أكثر من 15 حركة)
+                if (totalPages > 1) ...[
+                  const SizedBox(height: 12),
+                  _buildPaginationBar(effectivePage, totalPages, totalRows),
+                ],
+
+                const SizedBox(height: 16),
+
+                // 5. صناديق ملخص الرصيد الافتتاحي والنهائي المطابقة للصورة
+                _buildSummaryFooter(
+                  openingBalance: openingBalance,
+                  finalBalance: finalBalance,
+                ),
+              ],
+            ),
           ),
         ),
       ),

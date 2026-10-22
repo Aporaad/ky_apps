@@ -9,7 +9,7 @@ import 'delete_customer_screen.dart';
 import 'all_customers_screen.dart';
 import 'customer_statement_screen.dart';
 
-/// واجهة قسم العملاء الرئيسية - تعرض بطاقات العمليات
+/// واجهة قسم العملاء الرئيسية - بطاقات عمليات مرتبة بألوان وأحجام التطبيق الرسمية
 class CustomersDashboardScreen extends StatelessWidget {
   const CustomersDashboardScreen({super.key});
 
@@ -18,7 +18,7 @@ class CustomersDashboardScreen extends StatelessWidget {
     final isMobile = Responsive.isMobile(context);
     final padding = isMobile ? 16.0 : 24.0;
 
-    final cards = _buildActionCards(context);
+    final actions = _buildActions(context);
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(padding),
@@ -27,7 +27,7 @@ class CustomersDashboardScreen extends StatelessWidget {
         children: [
           // رأس القسم
           _buildHeader(context),
-          SizedBox(height: isMobile ? 20 : 28),
+          SizedBox(height: isMobile ? 18 : 24),
 
           // شبكة البطاقات
           LayoutBuilder(
@@ -35,20 +35,21 @@ class CustomersDashboardScreen extends StatelessWidget {
               final crossAxisCount =
                   constraints.maxWidth < 480
                       ? 1
-                      : constraints.maxWidth < 800
+                      : constraints.maxWidth < 820
                       ? 2
                       : 3;
               return GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                itemCount: cards.length,
+                itemCount: actions.length,
                 gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: crossAxisCount,
-                  crossAxisSpacing: 16,
-                  mainAxisSpacing: 16,
-                  childAspectRatio: crossAxisCount == 1 ? 2.8 : 1.55,
+                  crossAxisSpacing: 14,
+                  mainAxisSpacing: 14,
+                  childAspectRatio:
+                      crossAxisCount == 1 ? 3.6 : (crossAxisCount == 2 ? 2.7 : 2.4),
                 ),
-                itemBuilder: (_, i) => cards[i],
+                itemBuilder: (_, i) => actions[i],
               );
             },
           ),
@@ -58,65 +59,76 @@ class CustomersDashboardScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(BuildContext context) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [AppColors.primary, AppColors.accent],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.primary.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border.withValues(alpha: 0.6)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
-          child: const Icon(
-            Icons.people_rounded,
-            color: Colors.white,
-            size: 26,
-          ),
-        ),
-        const SizedBox(width: 14),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'إدارة العملاء',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [AppColors.primary, AppColors.accent],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
               ),
+              borderRadius: BorderRadius.circular(12),
             ),
-            SizedBox(height: 3),
-            Text(
-              'سجل وإدارة بيانات العملاء وأرصدتهم',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            child: const Icon(
+              Icons.people_rounded,
+              color: Colors.white,
+              size: 24,
             ),
-          ],
-        ),
-      ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'إدارة العملاء',
+                  style: TextStyle(
+                    fontSize: 16.5,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'سجل وإدارة بيانات العملاء وأرصدتهم',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  List<Widget> _buildActionCards(BuildContext context) {
+  List<Widget> _buildActions(BuildContext context) {
     return [
       _CustomerActionCard(
         title: 'إضافة عميل',
         subtitle: 'تسجيل عميل جديد في النظام',
         icon: Icons.person_add_rounded,
-        gradient: const LinearGradient(
-          colors: [Color.fromARGB(255, 247, 247, 249), Color(0xFF3B82F6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        badge: 'إضافة',
+        accent: AppColors.success,
         onTap:
             () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
@@ -126,11 +138,8 @@ class CustomersDashboardScreen extends StatelessWidget {
         title: 'تعديل عميل',
         subtitle: 'تحديث بيانات عميل موجود',
         icon: Icons.edit_rounded,
-        gradient: const LinearGradient(
-          colors: [Color(0xFF0D9488), Color(0xFF14B8A6)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        badge: 'تعديل',
+        accent: AppColors.info,
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
@@ -155,11 +164,8 @@ class CustomersDashboardScreen extends StatelessWidget {
         title: 'حذف عميل',
         subtitle: 'إزالة عميل من النظام',
         icon: Icons.person_remove_rounded,
-        gradient: const LinearGradient(
-          colors: [Color(0xFFDC2626), Color(0xFFEF4444)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        badge: 'حذف',
+        accent: AppColors.error,
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
@@ -184,11 +190,8 @@ class CustomersDashboardScreen extends StatelessWidget {
         title: 'كشف حساب',
         subtitle: 'عرض حركات وأرصدة العميل',
         icon: Icons.account_balance_wallet_rounded,
-        gradient: const LinearGradient(
-          colors: [Color(0xFF7C3AED), Color(0xFFA78BFA)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        badge: 'تقرير',
+        accent: AppColors.accent,
         onTap: () async {
           final picked = await Navigator.of(context).push<CustomerModel>(
             MaterialPageRoute(
@@ -218,11 +221,8 @@ class CustomersDashboardScreen extends StatelessWidget {
         title: 'كل العملاء',
         subtitle: 'استعراض قائمة العملاء كاملة',
         icon: Icons.people_alt_rounded,
-        gradient: const LinearGradient(
-          colors: [Color(0xFFD97706), Color(0xFFF59E0B)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        badge: 'استعراض',
+        accent: AppColors.primary,
         onTap:
             () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AllCustomersScreen()),
@@ -232,151 +232,110 @@ class CustomersDashboardScreen extends StatelessWidget {
   }
 }
 
-/// بطاقة عملية العميل
-class _CustomerActionCard extends StatefulWidget {
+/// بطاقة عملية العميل — تصميم مسطح أنيق يعتمد لوناً دلالياً من لوحة التطبيق الرسمية
+class _CustomerActionCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final IconData icon;
-  final Gradient gradient;
+  final String badge;
+  final Color accent;
   final VoidCallback onTap;
 
   const _CustomerActionCard({
     required this.title,
     required this.subtitle,
     required this.icon,
-    required this.gradient,
+    required this.badge,
+    required this.accent,
     required this.onTap,
   });
 
   @override
-  State<_CustomerActionCard> createState() => _CustomerActionCardState();
-}
-
-class _CustomerActionCardState extends State<_CustomerActionCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  late Animation<double> _scaleAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 180),
-    );
-    _scaleAnimation = Tween<double>(
-      begin: 1.0,
-      end: 0.965,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeOut));
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTapDown: (_) => _controller.forward(),
-      onTapUp: (_) {
-        _controller.reverse();
-        widget.onTap();
-      },
-      onTapCancel: () => _controller.reverse(),
-      child: AnimatedBuilder(
-        animation: _controller,
-        builder: (_, child) {
-          return Transform.scale(scale: _scaleAnimation.value, child: child);
-        },
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
-            gradient: widget.gradient,
-            borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.15),
-                blurRadius: 12,
-                offset: const Offset(0, 5),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
           ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.22),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Icon(widget.icon, color: Colors.white, size: 24),
-                    ),
-
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        widget.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.arrow_forward_ios_rounded,
-                        color: Colors.white,
-                        size: 14,
-                      ),
-                    ),
-                  ],
+          child: Row(
+            children: [
+              Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                // شريط الوصف مرّن بطبيعته: عرض البطاقة يتغيّر بين أعمدة الشبكة، والنص قد يطول
-                // عن دائرته — فكان يتجاوز حدود البطاقة (42 بكسل على المكتب في اختبار الانحدار)
-                // The subtitle pill is inherently stretchy: card width varies across grid columns and
-                // the text can be longer than the pill, so it overflowed its card (42 px on desktop).
-                Row(
+                child: Icon(icon, color: accent, size: 24),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          widget.subtitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 12,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.bold,
+                              color: accent,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(width: 6),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 14,
+                color: accent.withValues(alpha: 0.6),
+              ),
+            ],
           ),
         ),
       ),

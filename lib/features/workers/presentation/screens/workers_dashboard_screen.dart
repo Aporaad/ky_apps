@@ -4,7 +4,7 @@ import '../screens/employees_list_screen.dart';
 import '../screens/cutters_list_screen.dart';
 import '../screens/tailors_list_screen.dart';
 
-/// لوحة تحكم "جاري العاملين" - تعرض 3 بطاقات رئيسية
+/// لوحة تحكم "جاري العاملين" - بطاقات فئات مرتبة بألوان وأحجام التطبيق الرسمية
 class WorkersDashboardScreen extends StatelessWidget {
   const WorkersDashboardScreen({super.key});
 
@@ -26,12 +26,8 @@ class WorkersDashboardScreen extends StatelessWidget {
                 ),
                 title: Row(
                   children: [
-                    Icon(
-                      Icons.groups_2_rounded,
-                      color: Color(0xFF6B21A8),
-                      size: 22,
-                    ),
-                    SizedBox(width: 10),
+                    Icon(Icons.groups_2_rounded, color: AppColors.primary, size: 22),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -46,7 +42,7 @@ class WorkersDashboardScreen extends StatelessWidget {
                           ),
                           Text(
                             'إدارة الموظفين والقصاصين والخياطين',
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 11,
                               color: AppColors.textMuted,
                             ),
@@ -60,34 +56,48 @@ class WorkersDashboardScreen extends StatelessWidget {
               )
               : null,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ترويسة القسم
+            // ترويسة القسم — بطاقة مسطحة بألوان السمة الرسمية
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF6B21A8), Color(0xFF9333EA)],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: AppColors.border.withValues(alpha: 0.6),
                 ),
-                borderRadius: BorderRadius.circular(16),
                 boxShadow: [
                   BoxShadow(
-                    color: const Color(0xFF6B21A8).withValues(alpha: 0.25),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
+                    color: Colors.black.withValues(alpha: 0.02),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              //'جاري العاملين'
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.groups_2_rounded, color: Colors.white, size: 36),
-                  SizedBox(width: 16),
+                  Container(
+                    width: 46,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [AppColors.primary, AppColors.accent],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(
+                      Icons.groups_2_rounded,
+                      color: Colors.white,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -95,15 +105,18 @@ class WorkersDashboardScreen extends StatelessWidget {
                         Text(
                           'جاري العاملين',
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: 16.5,
                             fontWeight: FontWeight.bold,
-                            color: Colors.white,
+                            color: AppColors.textPrimary,
                           ),
                         ),
-                        SizedBox(height: 4),
+                        const SizedBox(height: 2),
                         Text(
                           'إدارة شاملة للموظفين والقصاصين والخياطين',
-                          style: TextStyle(fontSize: 12, color: Colors.white70),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textMuted,
+                          ),
                         ),
                       ],
                     ),
@@ -112,26 +125,34 @@ class WorkersDashboardScreen extends StatelessWidget {
               ),
             ),
 
-            const SizedBox(height: 28),
+            const SizedBox(height: 20),
 
             // عنوان البطاقات
-            Text(
-              'اختر الفئة',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+            Padding(
+              padding: const EdgeInsets.only(right: 2, bottom: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.category_outlined, size: 16, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'اختر الفئة',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 14),
 
             // بطاقة الموظفين
             _WorkerCategoryCard(
               icon: Icons.badge_rounded,
               title: 'الموظفين',
               subtitle: 'إدارة بيانات الموظفين وكشف الحضور والحساب',
-              color: const Color(0xFF1E3A8A),
-              lightColor: const Color(0xFF3B82F6),
+              badge: 'موظفون',
+              accent: AppColors.info,
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -140,15 +161,15 @@ class WorkersDashboardScreen extends StatelessWidget {
                   ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // بطاقة القصاصين
             _WorkerCategoryCard(
               icon: Icons.content_cut_rounded,
               title: 'القصاصين',
               subtitle: 'إدارة بيانات القصاصين وكشف العمل والحساب',
-              color: const Color(0xFF065F46),
-              lightColor: const Color(0xFF10B981),
+              badge: 'قصاصون',
+              accent: AppColors.success,
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -157,15 +178,15 @@ class WorkersDashboardScreen extends StatelessWidget {
                   ),
             ),
 
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
 
             // بطاقة الخياطين
             _WorkerCategoryCard(
               icon: Icons.checkroom_rounded,
               title: 'الخياطين',
               subtitle: 'إدارة بيانات الخياطين وكشف العمل والحساب',
-              color: const Color(0xFF7C2D12),
-              lightColor: const Color(0xFFF97316),
+              badge: 'خياطون',
+              accent: AppColors.warning,
               onTap:
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -174,7 +195,7 @@ class WorkersDashboardScreen extends StatelessWidget {
                   ),
             ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 28),
           ],
         ),
       ),
@@ -182,130 +203,105 @@ class WorkersDashboardScreen extends StatelessWidget {
   }
 }
 
-/// بطاقة فئة العاملين
-class _WorkerCategoryCard extends StatefulWidget {
+/// بطاقة فئة العاملين — تصميم مسطح موحد يعتمد لوناً دلالياً من لوحة التطبيق الرسمية
+class _WorkerCategoryCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String subtitle;
-  final Color color;
-  final Color lightColor;
+  final String badge;
+  final Color accent;
   final VoidCallback onTap;
 
   const _WorkerCategoryCard({
     required this.icon,
     required this.title,
     required this.subtitle,
-    required this.color,
-    required this.lightColor,
+    required this.badge,
+    required this.accent,
     required this.onTap,
   });
 
   @override
-  State<_WorkerCategoryCard> createState() => _WorkerCategoryCardState();
-}
-
-class _WorkerCategoryCardState extends State<_WorkerCategoryCard>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _scaleAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 120),
-      lowerBound: 0.97,
-      upperBound: 1.0,
-    )..value = 1.0;
-    _scaleAnim = _ctrl;
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnim,
-      child: GestureDetector(
-        onTapDown: (_) => _ctrl.reverse(),
-        onTapUp: (_) {
-          _ctrl.forward();
-          widget.onTap();
-        },
-        onTapCancel: () => _ctrl.forward(),
+    return Material(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
         child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
           decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.border),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppColors.border.withValues(alpha: 0.7)),
           ),
           child: Row(
             children: [
-              // أيقونة الفئة
               Container(
-                width: 58,
-                height: 58,
+                width: 52,
+                height: 52,
                 decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [widget.color, widget.lightColor],
-                    begin: Alignment.topRight,
-                    end: Alignment.bottomLeft,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: widget.color.withValues(alpha: 0.3),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
+                  color: accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(13),
                 ),
-                child: Icon(widget.icon, color: Colors.white, size: 28),
+                child: Icon(icon, color: accent, size: 26),
               ),
-              const SizedBox(width: 16),
-              // النص
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      widget.title,
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                        color: widget.color,
-                      ),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badge,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: accent,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      widget.subtitle,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textSecondary,
+                      subtitle,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        color: AppColors.textMuted,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
               ),
-              // سهم التنقل
+              const SizedBox(width: 8),
               Icon(
                 Icons.arrow_forward_ios_rounded,
-                size: 16,
-                color: widget.color.withValues(alpha: 0.5),
+                size: 15,
+                color: accent.withValues(alpha: 0.6),
               ),
             ],
           ),

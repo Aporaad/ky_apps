@@ -1,16 +1,19 @@
 import 'package:printing/printing.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-/// Helper shared by both account report PDF builders.
+/// Helper shared by all report PDF builders (account statement, group trial balance,
+/// customer statement, worker statement).
 ///
 /// `printing`'s [PdfGoogleFonts] already persists the downloaded TTF in its own
 /// on-disk cache (`PdfBaseCache`), so "load once, reuse" only needs to avoid
 /// re-issuing the same resolution Future on every print/export tap within the
 /// same app run — hence the static cached Futures below rather than a
-/// hand-rolled `Uint8List` cache, which the plan called for but turns out to be
-/// unnecessary now that `printing` bundles this exact Cairo variant lookup
-/// (cairoRegular/cairoBold) that matches the app's on-screen GoogleFonts Cairo
-/// theme, so the exported PDF shaping/ligatures match what the user sees.
+/// hand-rolled `Uint8List` cache. The `printing` bundle includes this exact
+/// Cairo variant lookup (cairoRegular/cairoBold) that matches the app's on-screen
+/// GoogleFonts Cairo theme, so the exported PDF shaping/ligatures match what the
+/// user sees.
+///
+/// يُستخدم من كل مولّدات PDF — يحمّل خط Cairo مرة واحدة ويخزّنه.
 class ReportPdfFonts {
   ReportPdfFonts._();
 
@@ -21,10 +24,8 @@ class ReportPdfFonts {
 
   static Future<pw.Font> get bold => _bold ??= PdfGoogleFonts.cairoBold();
 
-  /// Builds a `pw.ThemeData` with the Cairo regular/bold pair already loaded —
-  /// used as `Document(theme: ...)` so every `pw.Text`/`pw.Table` in both report
-  /// builders renders Arabic correctly (RTL glyph shaping) without Helvetica
-  /// fallback (the known-hard point for client-side Arabic PDF generation).
+  /// يبني `pw.ThemeData` مع خط Cairo عادي وعريض — يُستخدم كـ `Document(theme: ...)`
+  /// لضمان تشكيل العربية بشكل صحيح في كل التقارير بدون fallback لـ Helvetica.
   static Future<pw.ThemeData> theme() async {
     return pw.ThemeData.withFont(
       base: await regular,

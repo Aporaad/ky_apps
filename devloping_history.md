@@ -1220,3 +1220,35 @@ Already fully implemented; verified only.
 - `test/app_config_model_test.dart` += قراءة ثنائية المفتاح للاسم الإنجليزي و`toJsonForUpdate` يحمل المفتاحين.
 - `flutter analyze` = نظيف (تحذير واحد سابق في `biometric_login_button.dart:24`) ·
   `flutter test` = **108/108** (كانت 105).
+
+
+---
+
+## [2026-10-22 09:30] توحيد ترويسة/تذييل PDF وإصلاح انعكاس الأعمدة وربط تقارير العملاء/العاملين
+**النموذج:** Qoder Agent
+
+### 1) إصلاح انعكاس اتجاه جدول PDF (RTL)
+- الجذر: `pw.Table` في حزمة `pdf` يرسم أطفاله يسار→يمين دائماً بغض النظر عن `MultiPage.textDirection: rtl`، بينما جدول Flutter على الشاشة RTL (العمود 0 يميناً). لذلك ظهر السند يساراً في PDF.
+- الحل: عكس قوائم `pw.TableRow.children` وإعادة فهرسة `columnWidths` في البنّائين، عبر مساعد موحّد `reversedCells()` في `core/utils/report_pdf_page.dart`.
+- `account_statement_pdf_builder.dart`: 7 أعمدة معكوسة `{0:1.4 الرصيد … 6:0.9 السند}`.
+- `account_group_statement_pdf_builder.dart`: 8 أعمدة معكوسة `{0:1.5 الرصيد … 7:1.2 رقم}`.
+
+### 2) إصلاح كشف المجموعة الجزئي
+- `account_group_statement_screen.dart`: `_onGroupChanged(int? value)` كان يستدعي `_loadReport()` لغير null فقط؛ الآن يستدعيه دائماً فيعود التقرير لمستوى الحساب الجزئي عند اختيار «— بدون اختيار —». (المنطق الخلفي `resolveStatementScope` كان سليماً.)
+
+### 3) وحدة ترويسة/تذييل PDF موحّدة
+- ملف جديد `lib/core/utils/report_pdf_page.dart`: `buildReportPdfHeader` (شريط الترويسة الثلاثي + العنوان + صف بيانات التقرير + حد سفلي)، `buildReportPdfFooter` (العملة + صفحة N/M)، ومساعدي الجدول `reversedCells`/`pdfTh`/`pdfTd` و`pdfDateRangeRow`/`pdfSignatures` و`ReportPdfColors` (ذهبي/رمادي مصدر واحد للحقيقة).
+- نُقل `report_pdf_fonts.dart` من `features/accounts` إلى `core/utils` ليُستخدم عابراً للوحدات؛ حُدّثت استعارات البنّائين الأربعة ورتّبت حسب `directives_ordering`.
+
+### 4) بنّاءا PDF لتقارير العملاء والعاملين
+- جديد `customer_statement_pdf_builder.dart`: `buildCustomerStatementPdf(...)` بنفس الجدول السباعي والترويسة/التذييل الموحّدين وكتلة التواقيع؛ يعمل بـ `CustomerStatementModel`.
+- جديد `worker_statement_pdf_builder.dart`: `buildWorkerStatementPdf(...)` يعرض اسم العامل ونوعه (مقاول/خياط/قاطع) ورقم الحساب؛ يعمل بـ `WorkerStatementModel`.
+- كلاهما يستورد `formatStatementAmount` من ودجت تقارير الحسابات (سابقة الاستيراد العابر للوحدات نفسها المتبعة مع الترويسة).
+
+### 5) ربط الطباعة/التصدير + التكبير على الشاشتين
+- `customer_statement_screen.dart`: استعارات `printing` + `PermissionGate` + `permission_codes` + البنّاء؛ توابع `_letterheadInfo`/`_printReport`/`_exportPdf`؛ زرا AppBar داخل `PermissionGate(Perm.customersPrint/customersExport)`؛ لفّ المحتوى بـ `InteractiveViewer(minScale:0.5, maxScale:3)`؛ وإزالة معقوفتي `${}` الزائدتين (lint).
+- `worker_statement_screen.dart`: حُذفت نافذة `_showExportOptions` الوهمية (كانت تعرض SnackBar فقط) واستُبدلت بـ `_letterheadInfo`/`_buildPdfBytes`/`_printReport`/`_exportPdf` حقيقيين؛ زرا AppBar داخل `PermissionGate(Perm.accountsPrint/accountsExport)` (لا أكواد طباعة خاصة بالعامل)؛ و`InteractiveViewer` حول الجدول؛ وإضافة `import 'dart:typed_data'`.
+
+### الاختبارات / التحقق
+- `flutter analyze` على workers/customers/accounts/core = **لا مشاكل**.
+- `flutter test` = **108/108** (بدون تغيير عدد الاختبارات؛ لم تُضف حزم).

@@ -719,3 +719,20 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 **التحقق / Verification:** `flutter analyze` نظيف (تحذير سابق واحد) · `flutter test` **108/108** ·
 `php -l` سليم · `pint --dirty` **PASS** · `php artisan test` **127/683**.
 **لم يَمَسّ:** لا أعمدة/جداول جديدة، لا `UPDATE`/`DELETE`، لا مسارات API جديدة.
+
+
+---
+
+### [2026-10-22 09:30] — توحيد ترويسة/تذييل PDF + إصلاح انعكاس أعمدة الجدول + طباعة/تصدير تقارير العملاء والعاملين
+**النموذج المنفّذ:** Qoder Agent
+**المطلب / Requirement:** آ«أولاً: عند طباعة/تصدير التقرير PDF ينعكس اتجاه جدول التقرير وهذا غلط، وكذلك في كشف حسابات المجموعات الجزئية: عند اختيار حساب جزئي وعدم اختيار مجموعة لا يجلب التقرير. ثانياً: بدلاً من إنشاء ترويسة وتذييل في كل تقرير، أنشئ ترويسة وتذييلين موحّدين لكل التقارير، وتأكد من وجود (الترويسة/التذييل الرسمية – خيارات الطباعة والتصدير – التكبير والتصغير) في كل التقاريرآ».
+
+- [x] **انعكاس أعمدة الجدول (RTL):** `pw.Table` يرسم أطفاله يسار→يمين دائماً بغض النظر عن `textDirection`؛ تم عكس قوائم `TableRow.children` وإعادة ترتيب `columnWidths` في `account_statement_pdf_builder.dart` (7 أعمدة) و`account_group_statement_pdf_builder.dart` (8 أعمدة) عبر مساعد `reversedCells()` الموحد — فتصبح السند يميناً والرصيد يساراً مطابقةً للشاشة.
+- [x] **إصلاح عدم تحميل كشف المجموعة:** في `account_group_statement_screen.dart` كان `_onGroupChanged(null)` لا يستدعي `_loadReport()`؛ الآن يُعاد التحميل دائماً ليعود التقرير لمستوى الحساب الجزئي عند إفراغ القائمة.
+- [x] **وحدة PDF موحّدة:** ملف جديد `lib/core/utils/report_pdf_page.dart` يوفّر `buildReportPdfHeader` / `buildReportPdfFooter` / `reversedCells` / `pdfTh` / `pdfTd` / `pdfDateRangeRow` / `pdfSignatures` / `ReportPdfColors`؛ ونُقل `report_pdf_fonts.dart` إلى `lib/core/utils`.
+- [x] **إعادة هيكلة البنّائين:** `account_statement_pdf_builder.dart` و`account_group_statement_pdf_builder.dart` يستدعيان الترويسة/التذييل الموحّدين (حُذف `_letterhead`/`_pageFooter` المكرّرة).
+- [x] **بنّاءان جديدان:** `customer_statement_pdf_builder.dart` و`worker_statement_pdf_builder.dart` بنفس الجدول السباعي والترويسة/التذييل الموحّدين.
+- [x] **ربط الطباعة/التصدير + التكبير:** `customer_statement_screen.dart` و`worker_statement_screen.dart` — زرا طباعة/تصدير PDF داخل `PermissionGate` (customers.print/export للملف العميل، accounts.print/export للعامل لعدم وجود أكواد خاصة)، واستبدال نافذة التصدير الوهمية للعامل باستدعاءات حقيقية، ولفّ المحتوى بـ `InteractiveViewer(minScale:0.5, maxScale:3)`.
+
+**التحقق / Verification:** `flutter analyze` (workers/customers/accounts/core) = لا مشاكل · `flutter test` **108/108**.
+**لم يَمَسّ:** لا تغييرات قاعدة بيانات، لا حزم جديدة (`printing`/`pdf` موجودان)، لا تعديل ملف الخطة.

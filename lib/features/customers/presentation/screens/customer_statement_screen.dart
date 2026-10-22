@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/customer_statement_model.dart';
 import '../providers/customers_provider.dart';
+import '../utils/customer_statement_pdf_builder.dart';
 import '../widgets/customer_picker_screen.dart';
 
 // ================================================================
@@ -253,6 +257,78 @@ class _CustomerStatementScreenState
     _loadData();
   }
 
+  /// هوية ترويسة التقرير من إعدادات التطبيق (تُقرأ أمراً للطباعة/التصدير)
+  /// Report letterhead identity from app config (read imperatively for print/export).
+  ReportLetterheadInfo _letterheadInfo() => ReportLetterheadInfo.fromConfig(
+        ref.read(appConfigNotifierProvider).config,
+      );
+
+  Future<void> _printReport() async {
+    final state = ref.read(customerStatementProvider);
+    final summary = state.summary ?? {};
+    final custData = state.customer ?? {};
+    final name = ArabicEncodingUtils.fix(
+      widget.custName ??
+          (custData['CUST_NAME'] ?? custData['cust_name'] ?? '').toString(),
+    );
+    final code = (custData['CUST_NO'] ?? custData['cust_no'] ?? widget.custNo).toString();
+    final currency = (summary['currency'] ?? 'يمني YR').toString();
+    final fromDate = (summary['from_date'] ?? '16/03/2026').toString();
+    final toDate = (summary['to_date'] ?? '07/06/2026').toString();
+    final openingBalance = (summary['opening_balance'] ?? 0.0) as num;
+    final totalDebit = (summary['total_debit'] ?? 0.0) as num;
+    final totalCredit = (summary['total_credit'] ?? 0.0) as num;
+    final finalBalance = (summary['final_balance'] ?? 0.0) as num;
+
+    final bytes = await buildCustomerStatementPdf(
+      letterhead: _letterheadInfo(),
+      customerName: name,
+      customerCode: code,
+      currency: currency,
+      fromDate: fromDate,
+      toDate: toDate,
+      rows: state.rows,
+      openingBalance: openingBalance.toDouble(),
+      totalDebit: totalDebit.toDouble(),
+      totalCredit: totalCredit.toDouble(),
+      finalBalance: finalBalance.toDouble(),
+    );
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
+  }
+
+  Future<void> _exportPdf() async {
+    final state = ref.read(customerStatementProvider);
+    final summary = state.summary ?? {};
+    final custData = state.customer ?? {};
+    final name = ArabicEncodingUtils.fix(
+      widget.custName ??
+          (custData['CUST_NAME'] ?? custData['cust_no'] ?? '').toString(),
+    );
+    final code = (custData['CUST_NO'] ?? custData['cust_no'] ?? widget.custNo).toString();
+    final currency = (summary['currency'] ?? 'يمني YR').toString();
+    final fromDate = (summary['from_date'] ?? '16/03/2026').toString();
+    final toDate = (summary['to_date'] ?? '07/06/2026').toString();
+    final openingBalance = (summary['opening_balance'] ?? 0.0) as num;
+    final totalDebit = (summary['total_debit'] ?? 0.0) as num;
+    final totalCredit = (summary['total_credit'] ?? 0.0) as num;
+    final finalBalance = (summary['final_balance'] ?? 0.0) as num;
+
+    final bytes = await buildCustomerStatementPdf(
+      letterhead: _letterheadInfo(),
+      customerName: name,
+      customerCode: code,
+      currency: currency,
+      fromDate: fromDate,
+      toDate: toDate,
+      rows: state.rows,
+      openingBalance: openingBalance.toDouble(),
+      totalDebit: totalDebit.toDouble(),
+      totalCredit: totalCredit.toDouble(),
+      finalBalance: finalBalance.toDouble(),
+    );
+    await Printing.sharePdf(bytes: bytes, filename: 'customer-$code-statement.pdf');
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(customerStatementProvider);
@@ -298,6 +374,24 @@ class _CustomerStatementScreenState
           ],
         ),
         actions: [
+          // زرّا الطباعة والتصدير — يظهران فقط لمن يحمل الصلاحية
+          // Print/export buttons — rendered only for permitted users.
+          PermissionGate(
+            code: Perm.customersPrint,
+            child: IconButton(
+              icon: const Icon(Icons.print_outlined, size: 20),
+              tooltip: 'طباعة',
+              onPressed: _printReport,
+            ),
+          ),
+          PermissionGate(
+            code: Perm.customersExport,
+            child: IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'تصدير PDF',
+              onPressed: _exportPdf,
+            ),
+          ),
           IconButton(
             onPressed:
                 () => setState(() => _showFilterPanel = !_showFilterPanel),
@@ -594,59 +688,63 @@ class _CustomerStatementScreenState
     final openingBalance = (summary['opening_balance'] ?? 0.0) as num;
     final finalBalance = (summary['final_balance'] ?? 0.0) as num;
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-      child: Center(
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 980),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFFD0D5DD), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
-              ),
-            ],
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
-              _buildOfficialHeader(),
-              const SizedBox(height: 14),
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 3,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
+        child: Center(
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 980),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: const Color(0xFFD0D5DD), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
+                _buildOfficialHeader(),
+                const SizedBox(height: 14),
 
-              // 2. شريط بيانات العميل والحساب والتواريخ
-              _buildCustomerMetaBar(
-                customerName: displayName,
-                customerCode: displayCode,
-                currency: currency,
-                accountTitle: accountTitle,
-                fromDate: fromDate,
-                toDate: toDate,
-              ),
-              const SizedBox(height: 12),
+                // 2. شريط بيانات العميل والحساب والتواريخ
+                _buildCustomerMetaBar(
+                  customerName: displayName,
+                  customerCode: displayCode,
+                  currency: currency,
+                  accountTitle: accountTitle,
+                  fromDate: fromDate,
+                  toDate: toDate,
+                ),
+                const SizedBox(height: 12),
 
-              // 3. جدول كشف الحساب مع شريط التمرير الأفقي لمنع أي تجاوز
-              _buildStatementTableLayout(
-                rows: state.rows,
-                totalDebit: totalDebit.toDouble(),
-                totalCredit: totalCredit.toDouble(),
-                openingBalance: openingBalance.toDouble(),
-                finalBalance: finalBalance.toDouble(),
-              ),
+                // 3. جدول كشف الحساب
+                _buildStatementTableLayout(
+                  rows: state.rows,
+                  totalDebit: totalDebit.toDouble(),
+                  totalCredit: totalCredit.toDouble(),
+                  openingBalance: openingBalance.toDouble(),
+                  finalBalance: finalBalance.toDouble(),
+                ),
 
-              const SizedBox(height: 16),
+                const SizedBox(height: 16),
 
-              // 4. ملخص الأرصدة أسفل الجدول (الرصيد الافتتاحي والنهائي)
-              _buildBottomBalanceSummary(
-                openingBalance: openingBalance.toDouble(),
-                finalBalance: finalBalance.toDouble(),
-              ),
-            ],
+                // 4. ملخص الأرصدة أسفل الجدول
+                _buildBottomBalanceSummary(
+                  openingBalance: openingBalance.toDouble(),
+                  finalBalance: finalBalance.toDouble(),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -754,7 +852,7 @@ class _CustomerStatementScreenState
           // نطاق التاريخ
           Center(
             child: Text(
-              'من تاريخ: ${fromDate}   إلى تاريخ: ${toDate}',
+              'من تاريخ: $fromDate   إلى تاريخ: $toDate',
              style: TextStyle(
                fontSize: 7.5,
                fontWeight: FontWeight.w600,
