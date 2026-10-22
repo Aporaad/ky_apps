@@ -411,7 +411,7 @@ class _InfoCard extends StatelessWidget {
             child: Text(              
               'اكتب الرابط بالصيغة: http://ip:port/api\nمثال: http://192.168.1.1:8000/api',
               style: TextStyle(
-                fontSize: scaledText,
+                fontSize: scaledText-5,
                 height: 1.6,
                 color: AppColors.textPrimary,
               ),

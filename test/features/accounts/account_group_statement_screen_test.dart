@@ -125,15 +125,20 @@ Future<void> _pumpScreen(
 
 void main() {
   group('AccountGroupStatementScreen', () {
-    testWidgets('renders empty state before any scope is chosen',
+    testWidgets('auto-selects the first main/sub and loads the default report',
         (WidgetTester tester) async {
       await _pumpScreen(tester, repo: _FakeRepo());
 
-      expect(find.text('كشف حساب مجموعة حسابات جزئية'), findsOneWidget);
-      expect(find.text('لم يُختر نطاق بعد'), findsOneWidget);
-      // Print/export buttons are hidden while there is no data on screen.
-      expect(find.byIcon(Icons.print_outlined), findsNothing);
-      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsNothing);
+      // The title appears both in the AppBar and in the loaded report header.
+      expect(find.text('كشف حساب مجموعة حسابات جزئية'), findsWidgets);
+      // The screen now defaults to the first main account then the first sub
+      // account, so it loads immediately instead of showing the "no scope"
+      // placeholder.
+      expect(find.text('لم يُختر نطاق بعد'), findsNothing);
+      expect(find.text('موظف تجريبي'), findsOneWidget);
+      // With data on screen, print/export buttons appear.
+      expect(find.byIcon(Icons.print_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
     });
 
     testWidgets('collapsible filter bar toggles via the appbar icon',
@@ -161,10 +166,12 @@ void main() {
         (WidgetTester tester) async {
       await _pumpScreen(tester, repo: _FakeRepo());
 
-      // Open the account dropdown and pick the fake entry.
-      await tester.tap(find.text('حساب رئيسي'));
+      // The screen already auto-selected the first main + sub. Open the main
+      // dropdown by its widget (the first DropdownButtonFormField) and re-pick
+      // the fake entry from the menu overlay (`.last` targets the open list).
+      await tester.tap(find.byType(DropdownButtonFormField<int>).first);
       await tester.pumpAndSettle();
-      await tester.tap(find.text('5 - قسم الأمانة').first);
+      await tester.tap(find.text('5 - قسم الأمانة').last);
       await tester.pumpAndSettle();
 
       // The stub returns a fixed TrialBalanceReport — its row label should now

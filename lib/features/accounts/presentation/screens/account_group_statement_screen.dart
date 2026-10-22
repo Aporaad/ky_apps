@@ -47,6 +47,13 @@ class _AccountGroupStatementScreenState
   TrialBalanceReport _report = TrialBalanceReport.empty;
   String? _error;
 
+  // علمَا التهيئة التلقائية للاختيار الافتراضي (أول حساب رئيسي ثم أول حساب فرعي)
+  // مرة واحدة فقط حتى لا يُفرض الاختيار مجدداً بعد تدخّل المستخدم.
+  // One-shot flags for the initial auto-selection (first main, then first sub)
+  // so the default is never re-imposed after the user interacts.
+  bool _autoSelectedAccNo = false;
+  bool _autoSelectedAccSub = false;
+
   Future<void> _loadReport() async {
     final scope = resolveStatementScope(
       accNo: _accNo,
@@ -130,6 +137,44 @@ class _AccountGroupStatementScreenState
     // Always reload — even when clearing to null, the report must fall back
     // to the accPart-level scope when no group is selected.
     _loadReport();
+  }
+
+  /// يطبّق الاختيار الافتراضي مرة واحدة عند تحميل القوائم: أول حساب رئيسي، ثم
+  /// أول حساب فرعي تابعه، وبعدها يُجلب التقرير لمستوى الفرعي مباشرة.
+  /// Applies the one-shot default selection: first main account, then first
+  /// sub account under it, then loads the report at the sub scope directly.
+  void _maybeApplyDefaults(
+    AsyncValue<List<AccountModel>> accountsAsync,
+    AsyncValue<List<AccMainModel>>? accMainAsync,
+  ) {
+    // المرحلة 1: اختيار أول حساب رئيسي دون جلب بعد (ننتظر اكتمال الفرعي).
+    // Stage 1: pick the first main without loading yet — we wait for the sub.
+    if (!_autoSelectedAccNo) {
+      final list = accountsAsync.asData?.value;
+      if (list == null) return; // ما يزال يُحمَّل / still loading
+      _autoSelectedAccNo = true;
+      if (list.isNotEmpty && _accNo == null) {
+        final firstAccNo = list.first.accNo;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _accNo = firstAccNo);
+        });
+      }
+      return;
+    }
+
+    // المرحلة 2: اختيار أول حساب فرعي ثم جلب التقرير مرة واحدة.
+    // Stage 2: pick the first sub then load the report once.
+    if (!_autoSelectedAccSub && _accNo != null && accMainAsync != null) {
+      final list = accMainAsync.asData?.value;
+      if (list == null) return; // ما يزال يُحمَّل / still loading
+      _autoSelectedAccSub = true;
+      final firstSub = list.isNotEmpty ? list[1].accSub : null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _accSub = firstSub);
+        _loadReport();
+      });
+    }
   }
 
   Future<void> _pickDate({required bool isFrom}) async {
@@ -316,6 +361,10 @@ class _AccountGroupStatementScreenState
     final accSubAsync = _accSub != null ? ref.watch(parentAccSubProvider(_accSub)) : null;
     final accGroupAsync =
         _accPart != null ? ref.watch(parentAccSubGroupProvider(_accPart)) : null;
+
+    // اختيار افتراضي لأول حساب رئيسي ثم أول حساب فرعي عند التحميل الأولي
+    // Default-select the first main then the first sub on first load.
+    _maybeApplyDefaults(accountsAsync, accMainAsync);
 
     return Wrap(
       spacing: 8,
