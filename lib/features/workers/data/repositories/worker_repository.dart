@@ -3,6 +3,7 @@ import '../../../../core/network/dio_client.dart';
 import '../models/worker_model.dart';
 import '../models/worker_statement_model.dart';
 import '../models/worker_work_report_model.dart';
+import '../models/worker_group_work_report_model.dart';
 
 /// نتيجة عملية العامل
 class WorkerResult {
@@ -190,6 +191,34 @@ class WorkerRepository {
       final body = resp.data as Map<String, dynamic>;
       if (body['success'] == true) {
         return WorkerWorkReport.fromJson(body);
+      }
+      return null;
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return null;
+      rethrow;
+    }
+  }
+
+  /// كشف عمل المجموعة — جميع العمال في مجموعة (قصاصين/خياطين) بفترة زمنية
+  /// Group work report — all workers in a group (cutters/tailors) within a date range.
+  Future<WorkerGroupWorkReport?> fetchGroupWorkReport(
+    WorkerType type, {
+    String? fromDate,
+    String? toDate,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final resp = await client.dio.get(
+        '/workers/${type.apiPath}/group-work-report',
+        queryParameters: {
+          if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+          if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+        },
+        cancelToken: cancelToken,
+      );
+      final body = resp.data as Map<String, dynamic>;
+      if (body['success'] == true) {
+        return WorkerGroupWorkReport.fromJson(body);
       }
       return null;
     } on DioException catch (e) {

@@ -3,6 +3,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../screens/employees_list_screen.dart';
 import '../screens/cutters_list_screen.dart';
 import '../screens/tailors_list_screen.dart';
+import '../screens/worker_group_work_report_screen.dart';
 
 /// لوحة تحكم "جاري العاملين" - بطاقات فئات مرتبة بألوان وأحجام التطبيق الرسمية
 class WorkersDashboardScreen extends StatelessWidget {
@@ -191,6 +192,23 @@ class WorkersDashboardScreen extends StatelessWidget {
                   () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const TailorsListScreen(),
+                    ),
+                  ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // بطاقة كشف عمل مجموعة
+            _WorkerCategoryCard(
+              icon: Icons.summarize_rounded,
+              title: 'كشف عمل مجموعة',
+              subtitle: 'عرض أعمال جميع القصاصين أو الخياطين لفترة محددة',
+              badge: 'تقارير',
+              accent: AppColors.primary,
+              onTap:
+                  () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const WorkerGroupWorkReportScreen(),
                     ),
                   ),
             ),

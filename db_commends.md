@@ -1337,3 +1337,47 @@ SELECT tl.ACC_NO, TO_CHAR(MAX(t.TAILOR_DATE),'YYYY-MM-DD') LAST_DATE
 ## [2026-10-22] لا استعلامات جدیدة — الإصلاح واجهة/شبكة
 - لا تغییرات SQL في هذا الإصلاح؛ یتعلّق بتخطيط Flutter (إزالة التجاوز) وبإعدادات Dio HTTP (تقليل preflight على GET).
 - التحقق الوظيفي تمّ عبر استدعاء `work-report` (القصاص id=1، الخیاط id=2) الذي أعاد success:true مع أسطر یوم 16/08/2026.
+
+---
+
+## [2026-10-22 19:00] استعلام التحقق من تقرير كشف عمل مجموعة (قراءة فقط)
+
+**الغرض:** التأكد من صحة SQL تقرير "كشف عمل مجموعة" (FOR_CUTTER_CALC) مقابل PDF المرفق قبل الاعتماد.
+**النموذج المنفذ:** Qoder Agent
+**الاتصال:** oracledb MCP → ACCOUNTS.CUTTER_FROM_CALC + ACCOUNTS.CUTTER
+
+```sql
+-- مجموعة القصاصين — الفترة المطابقة لـ FOR_CUTTER_CALC.pdf (22/06/2026..25/06/2026)
+SELECT r.CUTTER_NAME AS WORKER_NAME,
+       TO_CHAR(w.CUTTING_DATE, 'DD/MM/YYYY') AS WORK_DATE,
+       w.STYLE_NAME,
+       NVL(w.POST, 0) AS QTY,
+       NVL(w.AMT, 0)  AS TOTAL
+  FROM ACCOUNTS.CUTTER_FROM_CALC w, ACCOUNTS.CUTTER r
+ WHERE w.CUTTER_NO = r.CUTTER_NO
+   AND w.CUTTING_DATE BETWEEN TO_DATE('22/06/2026','DD/MM/YYYY')
+                          AND TO_DATE('25/06/2026','DD/MM/YYYY') + 1 - 1/86400
+ ORDER BY r.CUTTER_NAME, w.CUTTING_DATE, w.STYLE_NAME;
+
+-- النتيجة: 24 سطراً
+--   SUM(QTY)   = 236   ✓ مطابق لسطر "إجــمالي العدد 236" داخل PDF
+--   SUM(TOTAL) = 71050 ✓ مطابق لسطر "الإجــمالي لكم 71050" داخل PDF
+--   أسماء العمال الأربعة في PDF (اصيل مجيب الشميري / قصاص الديرمان /
+--     مجيب الشميري - قصاص / العزي شرهان) كلها ظهرت بالترتيب نفسه.
+```
+
+**ملاحظة الترميز:** `CUTTER_NAME` و `STYLE_NAME` يصلان من أوراكل كـ Windows-1256 bytes
+(مثال: `ÞØÑí` = قطري، `ÇÕíá ãÌíÈ ÇáÔãíÑí` = أصيل مجيب الشميري) — الخادم يمرّهما على
+`ArabicEncoding::fixMojibake()`، العميل يمرّهما على `ArabicEncodingUtils.fix()`.
+
+**ملاحظة DDL:** لا إنشاء / لا تعديل / لا حذف — التقرير قراءة فقط.
+
+
+-- [2026-10-22 09:15] Qoder Agent — تجميع كشف عمل مجموعة (CUTTERS) للتحقق
+SELECT r.CUTTER_NAME, w.STYLE_NAME, SUM(NVL(w.POST,0)) QTY, SUM(NVL(w.AMT,0)) TOTAL
+FROM ACCOUNTS.CUTTER_FROM_CALC w, ACCOUNTS.CUTTER r
+WHERE w.CUTTER_NO = r.CUTTER_NO
+  AND w.CUTTING_DATE BETWEEN TO_DATE('2026-06-22','YYYY-MM-DD') AND TO_DATE('2026-06-25','YYYY-MM-DD') + 1 - 1/86400
+GROUP BY r.CUTTER_NAME, w.STYLE_NAME
+ORDER BY r.CUTTER_NAME, w.STYLE_NAME;
+-- Result: 10 rows, QTY total 236, TOTAL 71050

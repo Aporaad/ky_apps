@@ -125,13 +125,14 @@ Future<void> _pumpScreen(
 
 void main() {
   group('AccountGroupStatementScreen', () {
-    testWidgets('auto-selects the first main/sub and loads the default report',
+    testWidgets(
+        'auto-selects the first main/sub/part and loads the default report',
         (WidgetTester tester) async {
       await _pumpScreen(tester, repo: _FakeRepo());
 
       // The title appears both in the AppBar and in the loaded report header.
       expect(find.text('كشف حساب مجموعة حسابات جزئية'), findsWidgets);
-      // The screen now defaults to the first main account then the first sub
+      // The screen now defaults to the first main → first sub → first part
       // account, so it loads immediately instead of showing the "no scope"
       // placeholder.
       expect(find.text('لم يُختر نطاق بعد'), findsNothing);

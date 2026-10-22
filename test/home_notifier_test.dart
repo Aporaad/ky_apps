@@ -7,6 +7,8 @@ import 'package:ky_apps/core/storage/secure_storage_service.dart';
 import 'package:ky_apps/features/auth/data/models/permission_snapshot_model.dart';
 import 'package:ky_apps/features/auth/data/models/user_model.dart';
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
+import 'package:ky_apps/features/home/data/models/home_layout.dart';
+import 'package:ky_apps/features/home/domain/home_card_size.dart';
 import 'package:ky_apps/features/home/presentation/providers/home_layout_notifier.dart';
 
 /// مخزن في الذاكرة: لا قناة منصة ولا قرص
@@ -171,6 +173,31 @@ void main() {
         );
       },
     );
+
+    test('size and column preferences are written to the blob', () async {
+      final harness = _harness();
+      final notifier = harness.container.read(
+        homeLayoutNotifierProvider.notifier,
+      );
+      await notifier.load();
+
+      await notifier.setSize(HomeCardSize.large);
+      await notifier.setColumns(4);
+
+      var layout = harness.container.read(homeLayoutNotifierProvider).layout;
+      expect(layout.size, HomeCardSize.large);
+      expect(layout.columns, 4);
+
+      final saved = jsonDecode(harness.storage.blob!) as Map<String, dynamic>;
+      expect(saved['size'], 'large');
+      expect(saved['cols'], 4);
+
+      // قيمة خارج المدى تعود «تلقائي» بدل أن تكسر الشبكة
+      // An out-of-range value returns to automatic instead of breaking the grid.
+      await notifier.setColumns(9);
+      layout = harness.container.read(homeLayoutNotifierProvider).layout;
+      expect(layout.columns, HomeLayout.autoColumns);
+    });
 
     test('reset clears order, shown, and hidden', () async {
       final harness = _harness();

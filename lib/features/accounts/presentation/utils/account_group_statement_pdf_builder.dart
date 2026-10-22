@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/utils/report_pdf_arabic.dart';
 import '../../../../core/utils/report_pdf_fonts.dart';
 import '../../../../core/utils/report_pdf_letterhead.dart';
 import '../../../../core/utils/report_pdf_page.dart';
@@ -36,7 +37,14 @@ Future<Uint8List> buildAccountGroupStatementPdf({
         metaSection: _metaSection(report),
       ),
       footer: (context) => buildReportPdfFooter(context),
-      build: (context) => [_table(report), pw.SizedBox(height: 10), _totalRow(report)],
+      build: (context) => [
+        _table(report),
+        pw.SizedBox(height: 10),
+        _totalRow(report),
+        // تذييل التوقيعات الموحّد — كان مفقوداً في هذا التقرير
+        // Unified signature footer — previously missing on this report.
+        pdfSignatures(),
+      ],
     ),
   );
 
@@ -53,9 +61,9 @@ pw.Widget _metaSection(TrialBalanceReport report) {
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
     children: [
       pw.Text(
-        scopeLabel,
+        pdfArabic(scopeLabel),
         style: const pw.TextStyle(fontSize: 11),
-        textDirection: pw.TextDirection.rtl,
+        textDirection: kPdfShapedTextDirection,
       ),
       pw.SizedBox(height: 2),
       pdfDateRangeRow(
@@ -154,25 +162,27 @@ pw.Widget _totalRow(TrialBalanceReport report) {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text(
-          'إجمالي حسابات ${report.asOfDate}',
+          pdfArabic('إجمالي حسابات ${report.asOfDate}'),
           style: style.copyWith(fontWeight: pw.FontWeight.bold),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          'محلي: مدين ${formatStatementAmount(report.totals.localDebit)} / دائن ${formatStatementAmount(report.totals.localCredit)}',
+          pdfArabic(
+              'محلي: مدين ${formatStatementAmount(report.totals.localDebit)} / دائن ${formatStatementAmount(report.totals.localCredit)}'),
           style: style,
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          'أجنبي: مدين ${formatStatementAmount(report.totals.foreignDebit)} / دائن ${formatStatementAmount(report.totals.foreignCredit)}',
+          pdfArabic(
+              'أجنبي: مدين ${formatStatementAmount(report.totals.foreignDebit)} / دائن ${formatStatementAmount(report.totals.foreignCredit)}'),
           style: style,
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          'الرصيد: ${formatStatementAmount(report.totals.balance)}',
+          pdfArabic('الرصيد: ${formatStatementAmount(report.totals.balance)}'),
           style: style.copyWith(
               fontWeight: pw.FontWeight.bold, color: ReportPdfColors.dangerRed),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
       ],
     ),

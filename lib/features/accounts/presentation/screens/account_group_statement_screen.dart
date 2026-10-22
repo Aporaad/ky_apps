@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/account_group_statement_model.dart';
 import '../../data/models/account_model.dart';
@@ -47,12 +49,13 @@ class _AccountGroupStatementScreenState
   TrialBalanceReport _report = TrialBalanceReport.empty;
   String? _error;
 
-  // علمَا التهيئة التلقائية للاختيار الافتراضي (أول حساب رئيسي ثم أول حساب فرعي)
-  // مرة واحدة فقط حتى لا يُفرض الاختيار مجدداً بعد تدخّل المستخدم.
-  // One-shot flags for the initial auto-selection (first main, then first sub)
-  // so the default is never re-imposed after the user interacts.
+  // أعلام التهيئة التلقائية للاختيار الافتراضي (أول حساب رئيسي ثم أول فرعي ثم أول
+  // جزئي) مرة واحدة فقط حتى لا يُفرض الاختيار مجدداً بعد تدخّل المستخدم.
+  // One-shot flags for the initial auto-selection (first main → first sub → first
+  // part) so the default is never re-imposed after the user interacts.
   bool _autoSelectedAccNo = false;
   bool _autoSelectedAccSub = false;
+  bool _autoSelectedAccPart = false;
 
   Future<void> _loadReport() async {
     final scope = resolveStatementScope(
@@ -140,15 +143,18 @@ class _AccountGroupStatementScreenState
   }
 
   /// يطبّق الاختيار الافتراضي مرة واحدة عند تحميل القوائم: أول حساب رئيسي، ثم
-  /// أول حساب فرعي تابعه، وبعدها يُجلب التقرير لمستوى الفرعي مباشرة.
-  /// Applies the one-shot default selection: first main account, then first
-  /// sub account under it, then loads the report at the sub scope directly.
+  /// أول حساب فرعي تابعه، ثم أول حساب جزئي تابعه، وبعدها يُجلب التقرير لمستوى
+  /// الجزئي مباشرة.
+  /// Applies the one-shot default selection: first main account → first sub
+  /// account under it → first partial account under that, then loads the report
+  /// at the partial scope.
   void _maybeApplyDefaults(
     AsyncValue<List<AccountModel>> accountsAsync,
     AsyncValue<List<AccMainModel>>? accMainAsync,
+    AsyncValue<List<AccSubModel>>? accSubAsync,
   ) {
-    // المرحلة 1: اختيار أول حساب رئيسي دون جلب بعد (ننتظر اكتمال الفرعي).
-    // Stage 1: pick the first main without loading yet — we wait for the sub.
+    // المرحلة 1: اختيار أول حساب رئيسي دون جلب بعد (ننتظر الفرعي ثم الجزئي).
+    // Stage 1: pick the first main without loading yet — we wait for sub, then part.
     if (!_autoSelectedAccNo) {
       final list = accountsAsync.asData?.value;
       if (list == null) return; // ما يزال يُحمَّل / still loading
@@ -162,8 +168,8 @@ class _AccountGroupStatementScreenState
       return;
     }
 
-    // المرحلة 2: اختيار أول حساب فرعي ثم جلب التقرير مرة واحدة.
-    // Stage 2: pick the first sub then load the report once.
+    // المرحلة 2: اختيار أول حساب فرعي (بدون جلب — ننتظر الجزئي).
+    // Stage 2: pick the first sub without loading yet — we wait for the part.
     if (!_autoSelectedAccSub && _accNo != null && accMainAsync != null) {
       final list = accMainAsync.asData?.value;
       if (list == null) return; // ما يزال يُحمَّل / still loading
@@ -172,6 +178,23 @@ class _AccountGroupStatementScreenState
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() => _accSub = firstSub);
+        // إن لم توجد حسابات فرعية، لا يوجد مستوى جزئي نُجلب له — نجلب فوراً.
+        // No sub accounts exist, so there is no part to wait for — load now.
+        if (firstSub == null) _loadReport();
+      });
+      return;
+    }
+
+    // المرحلة 3: اختيار أول حساب جزئي ثم جلب التقرير مرة واحدة.
+    // Stage 3: pick the first partial account then load the report once.
+    if (!_autoSelectedAccPart && _accSub != null && accSubAsync != null) {
+      final list = accSubAsync.asData?.value;
+      if (list == null) return; // ما يزال يُحمَّل / still loading
+      _autoSelectedAccPart = true;
+      final firstPart = list.isNotEmpty ? list[1].accPart : null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        setState(() => _accPart = firstPart);
         _loadReport();
       });
     }
@@ -362,9 +385,9 @@ class _AccountGroupStatementScreenState
     final accGroupAsync =
         _accPart != null ? ref.watch(parentAccSubGroupProvider(_accPart)) : null;
 
-    // اختيار افتراضي لأول حساب رئيسي ثم أول حساب فرعي عند التحميل الأولي
-    // Default-select the first main then the first sub on first load.
-    _maybeApplyDefaults(accountsAsync, accMainAsync);
+    // اختيار افتراضي لأول حساب رئيسي ثم أول فرعي ثم أول جزئي عند التحميل الأولي
+    // Default-select the first main, then the first sub, then the first part on load.
+    _maybeApplyDefaults(accountsAsync, accMainAsync, accSubAsync);
 
     return Wrap(
       spacing: 8,
@@ -490,20 +513,20 @@ class _AccountGroupStatementScreenState
       );
     }
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1000),
-          child: Card(
-            margin: const EdgeInsets.symmetric(horizontal: 10),
-            color: Colors.white,
-            child: InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 3,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
+    return InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 3,
+      // تمرير طبيعي للصفحة كاملة مع تذييل في نهاية المحتوى (لا A4 على الشاشة)
+      // Natural full-page scroll with the footer at content end (no on-screen A4).
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.landscape,
+          maxPageWidth: 1100,
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                   Container(
                     padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
                     decoration: const BoxDecoration(
@@ -564,10 +587,10 @@ class _AccountGroupStatementScreenState
                 ],
               ),
             ),
+            footer: const ReportSignatureFooter(),
           ),
         ),
-      ),
-    );
+      );
   }
 
   Widget _buildDateButton({

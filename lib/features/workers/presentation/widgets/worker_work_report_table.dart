@@ -93,7 +93,7 @@ class WorkerWorkReportTable extends StatelessWidget {
             // سطر الإجمالي لكم (المبلغ) - مطابق للصورة
             if (rows.isNotEmpty)
               _totalRow(
-                label: 'الإجمــالي لكم',
+                label: 'الإجمــالي',
                 value: _formatNumber(totalAmount),
                 size: dataSize,
                 vPad: vPad,

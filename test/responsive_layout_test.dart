@@ -35,6 +35,7 @@ import 'package:ky_apps/features/employee_portal/domain/portal_sections.dart';
 import 'package:ky_apps/features/employee_portal/presentation/screens/employee_main_layout.dart';
 import 'package:ky_apps/features/employee_portal/presentation/widgets/portal_section_scope.dart';
 import 'package:ky_apps/features/home/data/models/home_layout.dart';
+import 'package:ky_apps/features/home/domain/home_card_size.dart';
 import 'package:ky_apps/features/home/domain/home_shortcut_catalog.dart';
 import 'package:ky_apps/features/home/presentation/providers/home_layout_notifier.dart';
 import 'package:ky_apps/features/home/presentation/screens/home_dashboard_screen.dart';
@@ -383,7 +384,9 @@ class _FakeSessionRepo extends SessionRepository {
   }
 
   @override
-  Future<AdminResult<Map<String, dynamic>>> terminateSession(int tokenId) async {
+  Future<AdminResult<Map<String, dynamic>>> terminateSession(
+    int tokenId,
+  ) async {
     return const AdminResult<Map<String, dynamic>>(
       success: true,
       message: 'أُنهيت الجلسة / Session terminated',
@@ -414,7 +417,9 @@ class _FakeSettingRepo extends SecuritySettingRepository {
   }
 
   @override
-  Future<AdminResult<int>> saveSettings(Map<String, dynamic> valuesByKey) async {
+  Future<AdminResult<int>> saveSettings(
+    Map<String, dynamic> valuesByKey,
+  ) async {
     return AdminResult<int>(
       success: true,
       message: 'حُفظت الإعدادات / Settings saved',
@@ -444,7 +449,9 @@ Future<void> _pumpAdmin(
           () => _StubAuthNotifier(_stateWith(codes: const [], isAdmin: true)),
         ),
         adminUserRepositoryProvider.overrideWith((ref) => _FakeUserRepo()),
-        permissionRepositoryProvider.overrideWith((ref) => _FakePermissionRepo()),
+        permissionRepositoryProvider.overrideWith(
+          (ref) => _FakePermissionRepo(),
+        ),
         sessionRepositoryProvider.overrideWith((ref) => _FakeSessionRepo()),
         securitySettingRepositoryProvider.overrideWith(
           (ref) => _FakeSettingRepo(),
@@ -458,7 +465,9 @@ Future<void> _pumpAdmin(
 
 void main() {
   group('Responsive Breakpoints Tests', () {
-    testWidgets('Responsive correctly identifies mobile breakpoint', (tester) async {
+    testWidgets('Responsive correctly identifies mobile breakpoint', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(360, 640);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -477,7 +486,9 @@ void main() {
       );
     });
 
-    testWidgets('Responsive correctly identifies desktop breakpoint', (tester) async {
+    testWidgets('Responsive correctly identifies desktop breakpoint', (
+      tester,
+    ) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -495,44 +506,42 @@ void main() {
       );
     });
 
-    testWidgets('EmployeeMainLayout renders without overflow on mobile screen (360x640)', (tester) async {
-      tester.view.physicalSize = const Size(360, 640);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'EmployeeMainLayout renders without overflow on mobile screen (360x640)',
+      (tester) async {
+        tester.view.physicalSize = const Size(360, 640);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: EmployeeMainLayout(),
-          ),
-        ),
-      );
+        await tester.pumpWidget(
+          const ProviderScope(child: MaterialApp(home: EmployeeMainLayout())),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      // لا يوجد أي استثناء في الـ layout أو RenderFlex overflow
-      expect(tester.takeException(), isNull);
-      expect(find.text('بوابة الموظف'), findsOneWidget);
-    });
+        // لا يوجد أي استثناء في الـ layout أو RenderFlex overflow
+        expect(tester.takeException(), isNull);
+        expect(find.text('بوابة الموظف'), findsOneWidget);
+      },
+    );
 
-    testWidgets('EmployeeMainLayout renders without overflow on desktop screen (1280x800)', (tester) async {
-      tester.view.physicalSize = const Size(1280, 800);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
+    testWidgets(
+      'EmployeeMainLayout renders without overflow on desktop screen (1280x800)',
+      (tester) async {
+        tester.view.physicalSize = const Size(1280, 800);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.resetPhysicalSize);
 
-      await tester.pumpWidget(
-        const ProviderScope(
-          child: MaterialApp(
-            home: EmployeeMainLayout(),
-          ),
-        ),
-      );
+        await tester.pumpWidget(
+          const ProviderScope(child: MaterialApp(home: EmployeeMainLayout())),
+        );
 
-      await tester.pumpAndSettle();
+        await tester.pumpAndSettle();
 
-      expect(tester.takeException(), isNull);
-      expect(find.text('بوابة الموظف'), findsOneWidget);
-    });
+        expect(tester.takeException(), isNull);
+        expect(find.text('بوابة الموظف'), findsOneWidget);
+      },
+    );
   });
 
   group('Portal sections follow the grants', () {
@@ -833,7 +842,9 @@ void main() {
     });
 
     for (final entry in {'mobile': mobile, 'desktop': desktop}.entries) {
-      testWidgets('the customise screen renders — ${entry.key}', (tester) async {
+      testWidgets('the customise screen renders — ${entry.key}', (
+        tester,
+      ) async {
         await _pumpCustomize(tester, size: entry.value);
 
         expect(tester.takeException(), isNull);
@@ -841,6 +852,126 @@ void main() {
         expect(find.textContaining('المفعّلة'), findsWidgets);
       });
     }
+
+    testWidgets('pinning four columns actually changes the grid', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: const Size(1200, 900),
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: const HomeLayout(userId: 1, columns: 4),
+      );
+
+      expect(_gridColumns(tester), 4);
+    });
+
+    testWidgets('automatic columns give six at the same width', (tester) async {
+      await _pumpHome(
+        tester,
+        size: const Size(1200, 900),
+        auth: _stateWith(codes: const [], isAdmin: true),
+      );
+
+      expect(_gridColumns(tester), 6);
+    });
+
+    testWidgets('a large size changes the tile ratio, not just the icon', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: const Size(1200, 900),
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: const HomeLayout(userId: 1, size: HomeCardSize.large),
+      );
+
+      expect(_gridRatio(tester), HomeCardSize.large.ratio);
+    });
+
+    testWidgets('a small size changes the tile ratio the other way', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: const Size(1200, 900),
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: const HomeLayout(userId: 1, size: HomeCardSize.small),
+      );
+
+      expect(_gridRatio(tester), HomeCardSize.small.ratio);
+    });
+
+    testWidgets('card content is vertically centred', (tester) async {
+      await _pumpHome(
+        tester,
+        size: const Size(390, 844),
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: const HomeLayout(userId: 1, columns: 3),
+      );
+
+      final card = find.byType(HomeShortcutCard).first;
+      final cardRect = tester.getRect(card);
+      final iconRect = tester.getRect(
+        find.descendant(of: card, matching: find.byType(Icon)).first,
+      );
+      final textRect = tester.getRect(
+        find.descendant(of: card, matching: find.byType(Text)).last,
+      );
+
+      // منتصف الكتلة (أعلى الأيقونة إلى أسفل آخر نص) يجب أن يقع قرب منتصف البطاقة
+      // The block's midpoint (icon top to last text bottom) must sit near the card's centre.
+      final blockCentre = (iconRect.top + textRect.bottom) / 2;
+      expect((blockCentre - cardRect.center.dy).abs(), lessThan(6));
+    });
+
+    testWidgets('the display tab exposes size and columns', (tester) async {
+      await _pumpCustomize(tester, size: mobile);
+
+      await tester.tap(find.text('العرض'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('حجم البطاقة'), findsOneWidget);
+      expect(find.text('عدد البطاقات في الصف'), findsOneWidget);
+    });
+
+    testWidgets('large cards with four pinned columns render on desktop', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: desktop,
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: const HomeLayout(
+          userId: 1,
+          size: HomeCardSize.large,
+          columns: 4,
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(6));
+    });
+
+    testWidgets(
+      'six pinned columns clamp down on a phone instead of breaking',
+      (tester) async {
+        await _pumpHome(
+          tester,
+          size: mobile,
+          auth: _stateWith(codes: const [], isAdmin: true),
+          layout: const HomeLayout(
+            userId: 1,
+            size: HomeCardSize.small,
+            columns: 6,
+          ),
+        );
+
+        expect(tester.takeException(), isNull);
+        expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(6));
+      },
+    );
 
     testWidgets('the portal shell opens on the home grid', (tester) async {
       tester.view.physicalSize = desktop;
@@ -851,7 +982,8 @@ void main() {
         ProviderScope(
           overrides: [
             authNotifierProvider.overrideWith(
-              () => _StubAuthNotifier(_stateWith(codes: const [], isAdmin: true)),
+              () =>
+                  _StubAuthNotifier(_stateWith(codes: const [], isAdmin: true)),
             ),
           ],
           child: const MaterialApp(home: EmployeeMainLayout()),
@@ -865,7 +997,9 @@ void main() {
       expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(6));
     });
 
-    testWidgets('a section card asks the shell for that section', (tester) async {
+    testWidgets('a section card asks the shell for that section', (
+      tester,
+    ) async {
       String? opened;
       await _pumpHome(
         tester,
@@ -895,12 +1029,29 @@ class _StubHomeLayoutNotifier extends HomeLayoutNotifier {
   HomeLayoutState build() => _initial;
 }
 
+/// يقرأ عدد أعمدة الشبكة الفعلية من الـ delegate
+/// Reads the grid's actual column count from its delegate.
+int _gridColumns(WidgetTester tester) {
+  final grid = tester.widget<GridView>(find.byType(GridView).first);
+  final delegate =
+      grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+  return delegate.crossAxisCount;
+}
+
+/// يقرأ نسبة البطاقة الفعلية من الـ delegate
+/// Reads the tile's actual aspect ratio from the delegate.
+double _gridRatio(WidgetTester tester) {
+  final grid = tester.widget<GridView>(find.byType(GridView).first);
+  final delegate =
+      grid.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+
+  return delegate.childAspectRatio;
+}
+
 /// يحمّل شاشة التخصيص بنفس المنح والتخطيط الثابتين
 /// Pumps the customise screen with the same fixed grants and layout.
-Future<void> _pumpCustomize(
-  WidgetTester tester, {
-  required Size size,
-}) async {
+Future<void> _pumpCustomize(WidgetTester tester, {required Size size}) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);

@@ -1,4 +1,4 @@
-# قائمة المهام (Todo List)
+﻿# قائمة المهام (Todo List)
 ## [2026-09-08 03:34:46] - إعداد والتحكم برابط Laravel API من واجهة التطبيق
 - [x] إضافة دوال حفظ واسترجاع عنوان رابط الـ API في `SecureStorageService`.
 - [x] تحديث `DioClient` وتهيئة رابط الـ BaseUrl ديناميكياً من التخزين الآمن وتوفير إمكانية تحديثه فورياً.
@@ -783,8 +783,8 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 - [x] **المسارات:** `GET /workers/cutters/{id}/work-report` و`GET /workers/tailors/{id}/work-report` خلف `permission:cutters.statement`/`tailors.statement` (لا صلاحيات جديدة).
 - [x] **الفلاتر:** موديل `worker_work_report_model.dart` + `fetchWorkReport` بالمستودع + `worker_work_report_provider.dart` (CancelToken) + شاشة `worker_work_report_screen.dart` + جدول `worker_work_report_table.dart` + مولّد PDF موحّد.
 - [x] **الميزات:** ترويسة/تذييل رسميان من `APP_SETTINGS`، طباعة/تصدير PDF، تكبير/تصغير (InteractiveViewer 0.5–3)، فلاتر تاريخ جاهزة (اليوم/أسبوع/شهر/سنة/كل) + إخفاء الفلتر + زر التحديث. الفترة الافتراضية = اليوم.
-- [x] **الأعمدة:** التاريخ | الموديل | العدد | السعر | الإجمالي + سطرا "إجــمالي العدد" و"الإجمــالي لكم".
-- [x] **الربط:** زر "كشف عمل" بقائمتي القصاصين/الخياطين يفتح الشاشة (الموظفون يبقى SnackBar).
+- [x] **الأعمدة:** التاريخ | الموديل | العدد | السعر | الإجمالي + سطرا "إجــمالي العدد" و"الإجمــالي".
+- [x] **الربط:** زر "كشف عمل" بقائمتي القصاصين/الخياطين يفتح الشاشة (الموظفين يبقى SnackBar).
 **التحقق:** `php -l` سليم · `route:list` يظهر المسارين · Pest `BusinessRoutesSealedTest` 6/6 (77 assertion) · `flutter analyze` نظيف للملفات الجديدة · `flutter test` workers 5/5 · تحقق MCP: أسطر CUTTER_FROM_CALC/TAILOR_FROM_CALC مطابقة لسطور الـ PDF.
 
 
@@ -798,3 +798,135 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 - [x] **الـOverflow:** `RenderFlex overflowed by 26 pixels on the right` كان من تذييل التوقيعات (3 × عرض ثابت 110 = 330px > ~304px على الهاتف). أصبحت الخانات `Expanded` مرنة مع فاصل `double.infinity` ونص وسط قابل للالتفاف.
 - [x] **الاستجابة/CORS:** كانت headers الأساسية فرض `Content-Type: application/json` حتى على GET بلا جسم فتثير preflight (OPTIONS). أُزيلت من `BaseOptions` وأُضيف معترض ضبط Content-Type فقط للطلبات ذات الجسم (GET/HEAD تبقى بسيطة).
 **التحقق:** `flutter analyze lib/core/network lib/features/workers` نظیف · `flutter test` workers 5/5 · الاستجابة نفسها سليمة (success:true، فترة 16/08/2026 بأسطرها).
+
+
+## [2026-10-22] تقرير جديد: كشف عمل مجموعة (Group Work Report)
+- [x] **الباك-إند:** إضافة groupWorkReportCutter() و groupWorkReportTailor() + etchGroupWorkReport() في WorkerController — يجلب كل أسطر CUTTER_FROM_CALC / TAILOR_FROM_CALC بفترة زمنية (افتراضي آخر 7 أيام) مع اسم العامل.
+- [x] **المسارات:** GET /workers/cutters/group-work-report (cutters.statement) + GET /workers/tailors/group-work-report (tailors.statement).
+- [x] **الفلاتر-العميل:** موديل +ريبو+بروفايدر+شاشة+جدول 6 أعمدة (الاسم|التاريخ|الموديل|العدد|السعر|الإجمالي) + PDF builder landscape.
+- [x] **التنقل:** بطاقة رابعة في WorkersDashboardScreen + اختصار workers.group_work في home_shortcut_catalog.
+- [x] **اختبار BusinessRoutesSealedTest:** مساران جديدان في قوائم 401/403.
+**التحقق:** route:list يظهر المسارين · Pint PASS · flutter analyze lib/features/workers نظيف · home_shortcut_catalog نظيف.
+
+---
+
+### [2026-10-22 20:30] — كشف المجموعات الجزئية: إضافة الحساب الجزئي كخيار افتراضي (ثالث)
+**النموذج المنفّذ:** Qoder Agent
+**المطلب / Requirement:** «الوضع الحالي يتم اختيار اول حساب رئيسي وثاني حساب فرعي كخيارات اوليه؛ اريد ان يتم اختيار اول حساب جزئي كخيار اولي ايضا».
+
+- [x] **إصلاح خلل سابق:** كان اختيار أول حساب فرعي مكتوباً `list[1].accSub` (يختار **الثاني** ويرمي `RangeError` عند عنصر واحد) — صُحّح إلى `list.first.accSub`. هذا يفسّر ملاحظة المستخدم «ثاني حساب فرعي».
+- [x] **مرحلة ثالثة للاختيار الافتراضي:** توسيع `_maybeApplyDefaults(accountsAsync, accMainAsync, accSubAsync)` بعلم `_autoSelectedAccPart` وثالث سلسلة: أول رئيسي → أول فرعي → **أول جزئي**، ثم جلب التقرير لمستوى الجزئي مرّة واحدة عبر `addPostFrameCallback`.
+- [x] **معالجات الحدود:** إن غابت الحسابات الفرعية (firstSub=null) يُجلب التقرير فوراً عند مستوى المتاح؛ وكذلك عند غياب الأجزاء يُجلب عند مستوى الفرعي.
+- [x] **الاختبارات:** تحديث اسم/تعليق الاختبار الأول ليشمل `main/sub/part`.
+- [x] **إصلاح عائد لمهمة سابقة (غير متعلق):** `home_catalog_test.dart` كان يتوقع 34 اختصاراً بينما الكتالوج صار 35 بعد إضافة `workers.group_work` (مهمة تقرير عمل المجموعة)؛ زُودّا العدد إلى 35 وتسمية الاختبارَين. `flutter test` الكامل = **176/176**.
+
+**التحقق / Verification:** `flutter analyze` (الشاشة) = لا مشاكل · `flutter test test/features/accounts/account_group_statement_screen_test.dart` = **+3 ناجح**.
+**لم يَمَسّ:** لا تغيير خادم/قاعدة بيانات (السلوك ضمن حدود الإصلاح المسبوق للـ SUBSTR)، لا حزم جديدة، لا مسارات API.
+
+
+## [2026-10-22 09:15] اصلاح: تجميع كشف عمل مجموعة لكل (عامل + موديل)
+- [x] Backend: GROUP BY worker+style, SUM qty/amount, drop per-row date
+- [x] Model: remove date field
+- [x] Table widget: 5 columns + total-row valueColumn
+- [x] PDF builder: 5 columns RTL
+- [x] Screen doc + tests updated
+- [x] Verify MCP: 24→10 rows, totals 236/71050 unchanged
+
+---
+
+### [2026-10-22 08:55] — إعادة تصميم البطاقات + خيارات العرض + استكمال الاختصارات
+**النموذج المنفّذ:** AutoClaw Agent
+**المطلب / Requirement:** «البطاقات غير مرتبة وغير جميلة — أصلحها، وأضف خيارات لحجم البطاقات
+وعددها في الصف، وراجع كل الأقسام وأضف الاختصارات الناقصة مثل كشف حساب مجموعة حسابات جزئية».
+
+- [x] **البطاقة:** تعبئة متدرّجة بلون القسم + فاصل لوني + حدّ ملوّن + ظلّ متحرّك + صندوق أيقونة
+      بحدّ داخلي + ضغط 0.97.
+- [x] **الترويسة:** بطاقة ترحيب متدرّجة بزر «تخصيص» نصّي/أيقوني حسب العرض.
+- [x] **تبويب «العرض»:** حجم البطاقة (صغير/متوسط/كبير) وعدد البطاقات في الصف (تلقائي/2..6)
+      مع معاينة حيّة وسقف مقروئية 104dp.
+- [x] **النموذج نسخة 2:** `size` + `cols` مع ترقية بلوب النسخة 1 بدل إهماله.
+- [x] **الكتالوج 30 ⇒ 38:** كشف مجموعة حسابات جزئية، كشف تحليلي مفصل، تعديل حساب (منتقي)،
+      إضافة/تعديل مستخدم، منح الصلاحيات، إضافة موظف/قصاص/خياط.
+- [x] **الاختبارات:** 63 اختبارًا للميزة (26 نموذجًا + 15 كتالوج + 10 مزوّد + 12 ودجت).
+
+**التحقق / Verification:** `flutter analyze` (ملفات الميزة والقشرة) = **No issues found!** ·
+`flutter test` للميزة = **63/63**. المجموعة الكاملة تعثّرت لاحقًا داخل ملفات عمل متوازٍ آخر
+(`worker_group_work_report_*`) لا داخل هذه الميزة.
+
+## [2026-10-22 09:44] طھط­ط³ظٹظ†: ط¯ظ…ط¬ ط§ط³ظ… ط§ظ„ط¹ط§ظ…ظ„ ط±ط£ط³ظٹط§ظ‹ ظپظٹ ظƒط´ظپ ط¹ظ…ظ„ ظ…ط¬ظ…ظˆط¹ط©
+- [x] Rewrite table widget for rowspan-style merged name (IntrinsicHeight+Row)
+- [x] PDF: print name once per group, blank on following rows
+- [x] Widget tests (3) + analyze + full workers suite 14/14
+
+## [2026-10-22 10:30] إصلاح وظبط شامل لكل التقارير (توحيد الترويسة/التذييل/مقاس A4 وإصلاح تضارب الياء في الطباعة)
+- [x] **R1 إصلاح تضارب حرف الياء في PDF فقط (حل داخل الكود):** helper جديد
+      `lib/core/utils/report_pdf_arabic.dart` يوظّف مُشكِّل العربية الداخلي
+      (`pdfArabic` + `kPdfShapedTextDirection=ltr`) لتشكيل الكلمات (قطري/حجازي/الشميري)
+      إلى صور اتصالّية بترتيب مرئي قبل العرض، فتزول التصادمات. تم تطبيقه مركزياً في
+      `report_pdf_page.dart` (عنوان/تذييل/خلايا/تواريخ/توقيعات) و`report_pdf_letterhead.dart`
+      وفي النصوص العربية المضمّنة داخل كل مولّدات الـ PDF الستة.
+- [x] **R2 توحيد الترويسة (عرض/طباعة/تصدير):** يمين=اسم عربي (محاذاة يمين)، وسط=شعار،
+      يسار=اسم إنجليزي (محاذاة يسار)؛ تعديل `_pdfInfoColumn` من center إلى right/left وتوحيد
+      نسب الأعمدة إلى 6:3:6 لمطابقة الشاشة.
+- [x] **R3 تذييل التوقيعات على كل كشف (عرض/طباعة/تصدير):** widget مشترك
+      `report_signature_footer.dart` (ثلاث خانات + إشعار 15 يوماً بنفس نص الـ PDF) أُضيف لكل
+      الشاشات، وإضافة `pdfSignatures()` إلى مولّد كشف المجموعة (كان ناقصاً).
+- [x] **R4 توحيد مقاس A4 على الشاشة:** widget مشترك `report_a4_sheet.dart` يرسم صفحة A4 كاملة
+      بنسبة صحيحة (طولي/عرضي) مع تثبيت التذييل أسفل الورقة؛ اعتمده كل التقارير السبعة.
+- [x] **R5 كشف حساب تحليلي مفصل:** مولّد PDF كامل `account_statement_detail_pdf_builder.dart`
+      + ربط الطباعة/التصدير الحقيقيين (كان Stub) خلف `PermissionGate`، وتغليفه على الشاشة بـ
+      `ReportA4Sheet` + `ReportSignatureFooter`.
+- [x] **اختبارات:** `test/core/report_a4_sheet_test.dart` (3) + الإبقاء على `report_pdf_arabic_test.dart`
+      وسلسلة workers خضراء. **تحقق:** `flutter analyze` (الملفات المعدّلة) = No issues found! ·
+      `flutter test test/core test/features/workers` = 28/28 All tests passed!
+
+---
+
+### [2026-10-22 09:40] — إصلاح خيارات العرض + تصميم البطاقات (نسخة 3)
+**النموذج المنفّذ:** AutoClaw Agent
+**المطلب / Requirement:** «عدد البطاقات في الصف لا يعمل، وحجم البطاقة لا يغيّر إلا الأيقونة،
+والبطاقات وفت والألوان باهتة وغير منسّقة».
+
+- [x] **جذر الأعمدة:** سقف المقروئية كان 104dp فيُقيَّد كل اختيار إلى عمودين على الهاتف — صار 72dp
+      مع وضع مصغّر داخل البطاقة.
+- [x] **جذر الحجم:** أُضيفت نسبة لكل حجم (1.22 صغير / 1.12 متوسط / 1.0 كبير) فتغيّر البطاقةُ
+      ارتفاعها ومحتواها لا أيقونتها فقط.
+- [x] **التصميم:** بطاقة بيضاء موحّدة + أيقونة صلبة كبيرة + محاذاة علوية (خط أيقونات واحد) +
+      حذف سطر القسم المكرّر + مقاسات مشتقّة من عرض البطاقة + ميزانية ارتفاع تمنع التجاوز.
+- [x] **التحقق البصري:** لقطات PNG بخط عربي حقيقي عبر `test/home_visual_test.dart` (مُعلَّق
+      افتراضيًا، يُشغَّل بـ `KY_VISUAL=1`) في `test/goldens/`.
+- [x] **اختبارات جديدة:** الأعمدة المثبّتة تُغيّر الشبكة، نسبة البطاقة تتغيّر مع الحجم، السقف
+      الجديد للأعمدة، ولا تجاوز عند 1.25 أو 4 أعمدة.
+
+**التحقق / Verification:** `flutter analyze` = **No issues found!** · `flutter test` للميزة
+**94/94** · المجموعة الكاملة **194 ناجحًا / 0 فاشلة / 4 مُعلَّقة**.
+
+---
+
+### [2026-10-22 11:20] — إصلاح انتكاسات التقارير الثلاثة
+**النموذج المنفّذ:** Qoder Agent
+**المطلب / Requirement:** «اتجاه الكلمات ينعكس عند الطباعة/التصدير في كل التقارير؛ شاشة
+التقرير صارت صغيرة وتذييلها مجمّد (A4 مطلوب في المخرجات لا الشاشة)؛ كشف مجموعة عمل
+القصاصين يتجاوز المساحة (RenderFlex 63px)».
+
+- [x] **R1 اتجاه PDF:** `pdfArabic = convert(text).split(' ').reversed.join(' ')` + عرض بـ `ltr`
+      لإنتاج ترتيب مرئي RTL صحيح دون عكس مزدوج.
+- [x] **R2 حجم الشاشة:** إعادة كتابة `ReportA4Sheet` إلى بطاقة تملأ العرض حتى سقف وبارتفاع
+      المحتوى الطبيعي، والتذييل بعد المتن؛ A4 بقي في مخرجات الطباعة/التصدير فقط.
+- [x] **تغليف الشاشات:** تحويل `Padding` → `SingleChildScrollView` في 7 شاشات تقارير، وإضافة
+      `shrinkWrap + NeverScrollableScrollPhysics` لقائمة الكشف التحليلي.
+- [x] **اختبارات:** إعادة كتابة `report_a4_sheet_test.dart` (تحجّم بالمحتوى) + اختبار عكس ترتيب
+      الكلمات في `report_pdf_arabic_test.dart`.
+
+**التحقق / Verification:** `flutter analyze` (core+accounts+customers+workers) = **No issues found!** ·
+`flutter test test/features/workers test/core` = **31/31 All tests passed!** · لا تغيير Backend/SQL/DDL.
+
+---
+
+### [2026-10-22 10:05] — توسيط محتوى البطاقات
+- [x] استبدال المحاذاة العلوية بتوسيط عمودي للكتلة كاملة.
+- [x] صندوق عنوان ثابت بسطرين + حجز سطر القسم عند وجود نصّ فقط.
+- [x] +2dp لصناديق النصّ لتفادي انطباق العنوان إلى سطر واحد.
+- [x] اختبار توازن: |منتصف الكتلة − منتصف البطاقة| < 6dp.
+
+**التحقق:** `flutter analyze` = No issues found! · `flutter test` **198 ناجحًا / 0 فاشلة / 5 معلّقة**.

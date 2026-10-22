@@ -6,6 +6,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../employee_portal/domain/portal_section_titles.dart';
 import '../../../employee_portal/presentation/widgets/portal_section_scope.dart';
+import '../../domain/home_card_size.dart';
 import '../../domain/home_shortcut.dart';
 import '../../domain/home_shortcut_catalog.dart';
 import '../providers/home_layout_notifier.dart';
@@ -110,7 +111,10 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
               SizedBox(height: compact ? 16 : 22),
 
               if (layoutState.loading)
-                const _SkeletonGrid()
+                _SkeletonGrid(
+                  size: layoutState.layout.size,
+                  columns: layoutState.layout.columns,
+                )
               else if (active.isEmpty)
                 HomeEmptyState(
                   icon: Icons.lock_outline_rounded,
@@ -160,6 +164,8 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 else
                   HomeShortcutGrid(
                     shortcuts: visible,
+                    size: layoutState.layout.size,
+                    columns: layoutState.layout.columns,
                     onOpen: _open,
                     onLongPress: _showActions,
                   ),
@@ -296,27 +302,31 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
 /// هيكل عظمي ساكن — بلا حركة متكررة، فلا يُعلّق `pumpAndSettle` في الاختبارات
 /// A static skeleton — no repeating animation, so `pumpAndSettle` never hangs in tests.
 class _SkeletonGrid extends StatelessWidget {
-  const _SkeletonGrid();
+  const _SkeletonGrid({required this.size, required this.columns});
+
+  final HomeCardSize size;
+  final int columns;
 
   @override
   Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.sizeOf(context).width;
-    final gap = HomeTokens.gap(screenWidth);
-
     return LayoutBuilder(
       builder: (context, constraints) {
-        final columns = HomeTokens.columns(constraints.maxWidth);
+        final resolved = HomeTokens.columns(
+          constraints.maxWidth,
+          size: size,
+          fixed: columns,
+        );
 
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
-          itemCount: columns * 2,
+          itemCount: resolved * 2,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: columns,
-            crossAxisSpacing: gap,
-            mainAxisSpacing: gap,
-            childAspectRatio: 1,
+            crossAxisCount: resolved,
+            crossAxisSpacing: size.gap,
+            mainAxisSpacing: size.gap,
+            childAspectRatio: size.ratio,
           ),
           itemBuilder:
               (context, index) => DecoratedBox(

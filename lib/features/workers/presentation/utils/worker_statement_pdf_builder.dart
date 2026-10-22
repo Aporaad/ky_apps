@@ -4,6 +4,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/utils/report_pdf_arabic.dart';
 import '../../../../core/utils/report_pdf_fonts.dart';
 import '../../../../core/utils/report_pdf_letterhead.dart';
 import '../../../../core/utils/report_pdf_page.dart';
@@ -77,16 +78,16 @@ pw.Widget _metaSection(
         children: [
           pw.Expanded(
             child: pw.Text(
-              'العامل ($workerTypeLabel): $workerName  |  حساب: $accNo',
+              pdfArabic('العامل ($workerTypeLabel): $workerName  |  حساب: $accNo'),
               style: const pw.TextStyle(fontSize: 10),
-              textDirection: pw.TextDirection.rtl,
+              textDirection: kPdfShapedTextDirection,
             ),
           ),
           if (currency.isNotEmpty)
             pw.Text(
-              currency,
+              pdfArabic(currency),
               style: const pw.TextStyle(fontSize: 10),
-              textDirection: pw.TextDirection.rtl,
+              textDirection: kPdfShapedTextDirection,
             ),
         ],
       ),
@@ -230,12 +231,12 @@ pw.Widget _totalsRow(String label, String value, {bool highlight = false}) {
           padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 6),
           alignment: pw.Alignment.center,
           child: pw.Text(
-            label,
+            pdfArabic(label),
             style: pw.TextStyle(
               fontSize: 8.5,
               fontWeight: highlight ? pw.FontWeight.bold : pw.FontWeight.normal,
             ),
-            textDirection: pw.TextDirection.rtl,
+            textDirection: kPdfShapedTextDirection,
           ),
         ),
       ),
@@ -252,7 +253,7 @@ pw.Widget _totalsRow(String label, String value, {bool highlight = false}) {
               fontWeight: pw.FontWeight.bold,
               color: highlight ? ReportPdfColors.dangerRed : PdfColors.black,
             ),
-            textDirection: pw.TextDirection.rtl,
+            textDirection: kPdfShapedTextDirection,
           ),
         ),
       ),

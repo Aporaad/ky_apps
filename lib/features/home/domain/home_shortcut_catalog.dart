@@ -9,6 +9,7 @@ import '../../accounts/presentation/screens/account_tree_screen.dart';
 import '../../accounts/presentation/screens/create_account_screen.dart';
 import '../../accounts/presentation/screens/currency_screen.dart';
 import '../../admin/presentation/screens/active_sessions_screen.dart';
+import '../../admin/presentation/screens/add_user_screen.dart';
 import '../../admin/presentation/screens/admin_users_screen.dart';
 import '../../admin/presentation/screens/permissions_catalog_screen.dart';
 import '../../admin/presentation/screens/security_settings_screen.dart'
@@ -19,6 +20,7 @@ import '../../customers/presentation/screens/all_customers_screen.dart';
 import '../../workers/presentation/screens/cutters_list_screen.dart';
 import '../../workers/presentation/screens/employees_list_screen.dart';
 import '../../workers/presentation/screens/tailors_list_screen.dart';
+import '../../workers/presentation/screens/worker_group_work_report_screen.dart';
 import '../presentation/screens/home_customize_screen.dart';
 import 'home_shortcut.dart';
 import 'home_shortcut_flows.dart';
@@ -43,7 +45,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'sales.section',
     title: 'المبيعات',
-    icon: Icons.point_of_sale_outlined,
+    icon: Icons.point_of_sale_rounded,
     sectionId: 'sales',
     target: SectionTarget('sales'),
     codes: [Perm.salesView],
@@ -54,7 +56,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'tailoring.section',
     title: 'التفصيل',
-    icon: Icons.content_cut_outlined,
+    icon: Icons.content_cut_rounded,
     sectionId: 'tailoring',
     target: SectionTarget('tailoring'),
     codes: [Perm.tailoringView],
@@ -65,7 +67,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'customers.section',
     title: 'العملاء',
-    icon: Icons.people_outline_rounded,
+    icon: Icons.people_rounded,
     sectionId: 'customers',
     target: SectionTarget('customers'),
     codes: [Perm.customersView],
@@ -113,7 +115,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'workers.section',
     title: 'جاري العاملين',
-    icon: Icons.groups_2_outlined,
+    icon: Icons.groups_2_rounded,
     sectionId: 'workers',
     target: SectionTarget('workers'),
     codes: [Perm.employeesView, Perm.cuttersView, Perm.tailorsView],
@@ -121,8 +123,8 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
   HomeShortcut(
     id: 'workers.employees',
-    title: 'الموظفون',
-    icon: Icons.badge_outlined,
+    title: 'الموظفين',
+    icon: Icons.badge_rounded,
     sectionId: 'workers',
     target: ScreenTarget(EmployeesListScreen.new),
     codes: [Perm.employeesView],
@@ -130,7 +132,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
   HomeShortcut(
     id: 'workers.cutters',
-    title: 'القصاصون',
+    title: 'القصاصين',
     icon: Icons.content_cut_rounded,
     sectionId: 'workers',
     target: ScreenTarget(CuttersListScreen.new),
@@ -138,18 +140,51 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
   HomeShortcut(
     id: 'workers.tailors',
-    title: 'الخياطون',
-    icon: Icons.design_services_outlined,
+    title: 'الخياطين',
+    icon: Icons.design_services_rounded,
     sectionId: 'workers',
     target: ScreenTarget(TailorsListScreen.new),
     codes: [Perm.tailorsView],
+  ),
+  HomeShortcut(
+    id: 'workers.group_work',
+    title: 'كشف عمل مجموعة',
+    icon: Icons.summarize_rounded,
+    sectionId: 'workers',
+    target: ScreenTarget(WorkerGroupWorkReportScreen.new),
+    codes: [Perm.cuttersStatement, Perm.tailorsStatement],
+  ),
+
+  HomeShortcut(
+    id: 'workers.add_employee',
+    title: 'إضافة موظف',
+    icon: Icons.person_add_alt_rounded,
+    sectionId: 'workers',
+    target: ScreenTarget(buildAddEmployeeScreen),
+    codes: [Perm.employeesCreate],
+  ),
+  HomeShortcut(
+    id: 'workers.add_cutter',
+    title: 'إضافة قصاص',
+    icon: Icons.content_cut_rounded,
+    sectionId: 'workers',
+    target: ScreenTarget(buildAddCutterScreen),
+    codes: [Perm.cuttersCreate],
+  ),
+  HomeShortcut(
+    id: 'workers.add_tailor',
+    title: 'إضافة خياط',
+    icon: Icons.design_services_rounded,
+    sectionId: 'workers',
+    target: ScreenTarget(buildAddTailorScreen),
+    codes: [Perm.tailorsCreate],
   ),
 
   // ── الحسابات / accounts ──────────────────────────────────
   HomeShortcut(
     id: 'accounts.section',
     title: 'الحسابات',
-    icon: Icons.account_balance_outlined,
+    icon: Icons.account_balance_rounded,
     sectionId: 'accounts',
     target: SectionTarget('accounts'),
     codes: [Perm.accountsView],
@@ -158,7 +193,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'accounts.tree',
     title: 'دليل الحسابات',
-    icon: Icons.account_tree_outlined,
+    icon: Icons.account_tree_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountTreeScreen.new),
     codes: [Perm.accountsView],
@@ -167,7 +202,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'accounts.statement',
     title: 'كشف حساب مالي',
-    icon: Icons.request_quote_outlined,
+    icon: Icons.request_quote_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountStatementScreen.new),
     codes: [Perm.accountsStatement],
@@ -175,7 +210,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
   HomeShortcut(
     id: 'accounts.group',
-    title: 'ميزان المراجعة',
+    title: 'كشف مجموعة حسابات جزئية',
     icon: Icons.balance_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountGroupStatementScreen.new),
@@ -184,8 +219,8 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
   HomeShortcut(
     id: 'accounts.analysis',
-    title: 'كشف تحليلي',
-    icon: Icons.analytics_outlined,
+    title: 'كشف حساب تحليلي مفصل',
+    icon: Icons.analytics_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountStatementDetailScreen.new),
     codes: [Perm.accountsStatement],
@@ -193,10 +228,18 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'accounts.create',
     title: 'إضافة حساب',
-    icon: Icons.create_new_folder_outlined,
+    icon: Icons.create_new_folder_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(CreateAccountScreen.new),
     codes: [Perm.accountsCreate],
+  ),
+  HomeShortcut(
+    id: 'accounts.edit',
+    title: 'تعديل بيانات حساب',
+    icon: Icons.edit_document,
+    sectionId: 'accounts',
+    target: FlowTarget(openAccountEdit),
+    codes: [Perm.accountsUpdate],
   ),
   HomeShortcut(
     id: 'accounts.currencies',
@@ -211,7 +254,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'stores.section',
     title: 'المخازن',
-    icon: Icons.inventory_2_outlined,
+    icon: Icons.inventory_2_rounded,
     sectionId: 'stores',
     target: SectionTarget('stores'),
     codes: [Perm.storesView],
@@ -222,7 +265,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'management.section',
     title: 'الإدارة',
-    icon: Icons.admin_panel_settings_outlined,
+    icon: Icons.admin_panel_settings_rounded,
     sectionId: 'management',
     target: SectionTarget('management'),
     codes: [Perm.managementView],
@@ -231,16 +274,40 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'management.users',
     title: 'إدارة المستخدمين',
-    icon: Icons.manage_accounts_outlined,
+    icon: Icons.manage_accounts_rounded,
     sectionId: 'management',
     target: ScreenTarget(AdminUsersScreen.new),
     codes: [Perm.usersView],
     defaultOn: true,
   ),
   HomeShortcut(
+    id: 'management.add_user',
+    title: 'إضافة مستخدم',
+    icon: Icons.person_add_alt_rounded,
+    sectionId: 'management',
+    target: ScreenTarget(AddUserScreen.new),
+    codes: [Perm.usersCreate],
+  ),
+  HomeShortcut(
+    id: 'management.edit_user',
+    title: 'تعديل مستخدم',
+    icon: Icons.edit_rounded,
+    sectionId: 'management',
+    target: FlowTarget(openUserEdit),
+    codes: [Perm.usersUpdate],
+  ),
+  HomeShortcut(
+    id: 'management.grants',
+    title: 'منح الصلاحيات',
+    icon: Icons.verified_user_rounded,
+    sectionId: 'management',
+    target: FlowTarget(openUserGrants),
+    codes: [Perm.usersPermissionsManage],
+  ),
+  HomeShortcut(
     id: 'management.sessions',
     title: 'الجلسات النشطة',
-    icon: Icons.devices_other_outlined,
+    icon: Icons.devices_other_rounded,
     sectionId: 'management',
     target: ScreenTarget(ActiveSessionsScreen.new),
     codes: [Perm.sessionsView],
@@ -250,7 +317,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'management.security',
     title: 'إعدادات الأمان',
-    icon: Icons.shield_outlined,
+    icon: Icons.shield_rounded,
     sectionId: 'management',
     target: ScreenTarget(admin.SecuritySettingsScreen.new),
     codes: [Perm.settingsView],
@@ -258,7 +325,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'management.catalog',
     title: 'كتالوج الصلاحيات',
-    icon: Icons.key_outlined,
+    icon: Icons.key_rounded,
     sectionId: 'management',
     target: ScreenTarget(PermissionsCatalogScreen.new),
     codes: [Perm.usersView],
@@ -266,7 +333,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'management.activity',
     title: 'سجل النشاط',
-    icon: Icons.fact_check_outlined,
+    icon: Icons.fact_check_rounded,
     sectionId: 'management',
     target: FlowTarget(openUserActivity),
     codes: [Perm.usersActivityView],
@@ -278,7 +345,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'settings.section',
     title: 'الإعدادات',
-    icon: Icons.settings_outlined,
+    icon: Icons.settings_rounded,
     sectionId: 'settings',
     target: SectionTarget('settings'),
     defaultOn: true,
@@ -286,7 +353,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'settings.api',
     title: 'إعدادات الاتصال',
-    icon: Icons.dns_outlined,
+    icon: Icons.dns_rounded,
     sectionId: 'settings',
     target: RouteTarget('/api-settings'),
     codes: [Perm.appConfigApiManage],
@@ -301,7 +368,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'settings.appconfig',
     title: 'تهيئة التطبيق',
-    icon: Icons.palette_outlined,
+    icon: Icons.palette_rounded,
     sectionId: 'settings',
     target: ScreenTarget(AppConfigScreen.new),
     codes: [Perm.appConfigUpdate],
@@ -313,7 +380,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
   HomeShortcut(
     id: 'home.customize',
     title: 'تخصيص الاختصارات',
-    icon: Icons.dashboard_customize_outlined,
+    icon: Icons.dashboard_customize_rounded,
     sectionId: 'home',
     target: ScreenTarget(HomeCustomizeScreen.new),
     // `pinned` وحدها تكفي: البطاقة ظاهرة دائمًا، و`defaultOn` هنا كانت ستُحصى مرتين

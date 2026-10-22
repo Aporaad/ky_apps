@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/home_layout.dart';
+import '../../domain/home_card_size.dart';
 import '../../data/repositories/home_layout_repository.dart';
 import '../../domain/home_shortcut.dart';
 import '../../domain/home_shortcut_catalog.dart';
@@ -157,6 +158,24 @@ class HomeLayoutNotifier extends Notifier<HomeLayoutState> {
     await _persist(state.layout.copyWith(order: [...ids, ...tail]));
   }
 
+  /// حجم البطاقة: كثافة العرض وحدّها الأدنى — يُحفظ مع بقية التخطيط
+  /// Card size: display density and its floor — saved with the rest of the layout.
+  Future<void> setSize(HomeCardSize size) async {
+    if (state.layout.size == size) return;
+
+    await _persist(state.layout.copyWith(size: size));
+  }
+
+  /// عدد البطاقات في الصف؛ وأي قيمة خارج 2..6 تعني «تلقائي»
+  /// Cards per row; any value outside 2..6 means automatic.
+  Future<void> setColumns(int columns) async {
+    final normalized =
+        columns >= 2 && columns <= 6 ? columns : HomeLayout.autoColumns;
+    if (state.layout.columns == normalized) return;
+
+    await _persist(state.layout.copyWith(columns: normalized));
+  }
+
   /// استعادة الافتراضي: التشكيلة الأولى وحدها، بلا إخفاء ولا ترتيب مخصص
   /// Restores the default: the first-run set only, with no hiding and no custom order.
   Future<void> reset() async {
@@ -180,6 +199,8 @@ class HomeLayoutNotifier extends Notifier<HomeLayoutState> {
               order: next.order,
               shown: next.shown,
               hidden: next.hidden,
+              size: next.size,
+              columns: next.columns,
             );
 
     _revision++;

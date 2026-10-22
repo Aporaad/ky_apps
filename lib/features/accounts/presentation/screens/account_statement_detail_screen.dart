@@ -1,8 +1,18 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:printing/printing.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
+import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../providers/accounts_provider.dart';
 import '../providers/currency_provider.dart';
+import '../utils/account_statement_detail_pdf_builder.dart';
 
 String _formatDateDash(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -93,9 +103,77 @@ class _AccountStatementDetailScreenState
     'account': 'قسم رئيسي',
   };
 
+  // ─── مساعدات التقرير (ترويسة/نطاق/عملة) / Report helpers ──────────────────────
+
+  /// هوية ترويسة التقرير من إعدادات التطبيق — تُقرأ عند الطباعة/التصدير.
+  /// Report letterhead identity from app config, read imperatively for print/export.
+  ReportLetterheadInfo _letterheadInfo() => ReportLetterheadInfo.fromConfig(
+        ref.read(appConfigNotifierProvider).config,
+      );
+
+  /// وصف النطاق المحدد (المستوى + المعرف) لعرضه في الترويسة.
+  /// Human-readable scope (level label + id) shown in the header.
+  String _scopeLabel() {
+    final level = _typeLabels[_selectedType] ?? _selectedType;
+    final id = _idController.text.trim();
+    return id.isNotEmpty ? '$level — الرقم: $id' : level;
+  }
+
+  /// اسم العملة المحددة إن وُجدت / selected currency label, if any.
+  String? _currencyLabel() {
+    if (_selectedCurrencyNo == null) return null;
+    final list = ref.read(currenciesProvider).currencies;
+    for (final c in list) {
+      if (c.curNo == _selectedCurrencyNo) {
+        return '${c.curName}${c.code != null ? ' (${c.code})' : ''}';
+      }
+    }
+    return null;
+  }
+
+  Map<String, dynamic> get _summary =>
+      (_resultData['data'] as Map<String, dynamic>?)?['summary']
+          as Map<String, dynamic>? ??
+      {};
+
+  List<dynamic> get _transactions =>
+      (_resultData['data'] as Map<String, dynamic>?)?['transactions']
+          as List? ??
+      const [];
+
+  /// يبني الـ PDF من نفس بيانات الشاشة — يطابق الاستعراض تماماً.
+  /// Builds the PDF from the exact on-screen data, so print equals the view.
+  Future<Uint8List> _buildPdf() => buildAccountStatementDetailPdf(
+        letterhead: _letterheadInfo(),
+        scopeLabel: _scopeLabel(),
+        summary: _summary,
+        transactions: _transactions,
+        currency: _currencyLabel(),
+        fromDate: _fromDate != null ? _formatDateDash(_fromDate!) : null,
+        toDate: _toDate != null ? _formatDateDash(_toDate!) : null,
+      );
+
+  Future<void> _printReport() async {
+    final bytes = await _buildPdf();
+    await Printing.layoutPdf(onLayout: (_) async => bytes);
+  }
+
+  Future<void> _exportPdf() async {
+    final bytes = await _buildPdf();
+    await Printing.sharePdf(
+      bytes: bytes,
+      filename: 'account-statement-detail.pdf',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final currenciesState = ref.watch(currenciesProvider);
+    // تراقب هوية الشركة من الإعدادات لتنعكس فوراً على ترويسة الورقة
+    // Watches the configured identity so a branding edit repaints the sheet header.
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.watch(appConfigNotifierProvider.select((s) => s.config)),
+    );
     final data = _resultData['data'] as Map<String, dynamic>? ?? {};
     final summary = data['summary'] as Map<String, dynamic>? ?? {};
     final transactions = (data['transactions'] as List? ?? []);
@@ -110,18 +188,26 @@ class _AccountStatementDetailScreenState
         backgroundColor: AppColors.surface,
         elevation: 0.5,
         actions: [
-          if (transactions.isNotEmpty)
-            IconButton(
-              icon: const Icon(Icons.print_outlined, size: 20),
-              tooltip: 'طباعة وتصدير',
-              onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('جاري إعداد التقرير المالي المفصل للطباعة'),
-                  ),
-                );
-              },
+          if (transactions.isNotEmpty) ...[
+            // طباعة — محمية بصلاحية كشف الحساب (كبقية التقارير)
+            PermissionGate(
+              code: Perm.accountsStatement,
+              child: IconButton(
+                icon: const Icon(Icons.print_outlined, size: 20),
+                tooltip: 'طباعة',
+                onPressed: _printReport,
+              ),
             ),
+            // تصدير PDF — محمي بصلاحية كشف الحساب
+            PermissionGate(
+              code: Perm.accountsStatement,
+              child: IconButton(
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+                tooltip: 'تصدير PDF',
+                onPressed: _exportPdf,
+              ),
+            ),
+          ],
         ],
       ),
       body: Column(
@@ -336,119 +422,184 @@ class _AccountStatementDetailScreenState
               ),
             ),
 
-          // ─── قائمة النتائج ───
+          // ─── قائمة النتائج — كورقة تقرير A4 موحّدة (ترويسة + توقيعات) ───
+          // Results shown as a unified A4 sheet: letterhead band + title + scope
+          // meta on top, the transactions in the scrollable body, signatures pinned
+          // to the page bottom — mirroring the exported/printed PDF.
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : transactions.isEmpty
                 ? _buildEmptyState()
-                : ListView.builder(
-                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 14),
-                    itemCount: transactions.length,
-                    itemBuilder: (context, index) {
-                      final item =
-                          transactions[index] as Map<String, dynamic>;
-                      final debit = (item['debit'] as num?)?.toDouble() ?? 0;
-                      final credit = (item['credit'] as num?)?.toDouble() ?? 0;
-                      final balance =
-                          (item['balance'] as num?)?.toDouble() ?? 0;
-                      final isDebit = debit > 0;
-                      final color = isDebit
-                          ? const Color(0xFF1565C0)
-                          : const Color(0xFFE65100);
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 6),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: AppColors.border.withValues(alpha: 0.7),
+                : InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 3,
+                    // تمرير طبيعي للصفحة كاملة — بلا A4 مقصوص على الشاشة
+                    // Natural full-page scroll — no clipped on-screen A4.
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: ReportA4Sheet(
+                        orientation: ReportSheetOrientation.portrait,
+                        header: ReportLetterheadBranding(info: letterhead),
+                        title: const Text(
+                          'كشف حساب تحليلي مفصل',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.w900,
+                            color: Colors.black,
                           ),
                         ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 9,
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 34,
-                                height: 34,
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Icon(
-                                  isDebit
-                                      ? Icons.arrow_circle_up_rounded
-                                      : Icons.arrow_circle_down_rounded,
-                                  color: color,
-                                  size: 18,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      item['description']?.toString() ?? '-',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w600,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      item['date']?.toString() ?? '-',
-                                      style: const TextStyle(
-                                        fontSize: 11,
-                                        color: AppColors.textMuted,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.end,
-                                children: [
-                                  Text(
-                                    isDebit
-                                        ? '+${debit.toStringAsFixed(2)}'
-                                        : '-${credit.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.bold,
-                                      color: color,
-                                    ),
-                                  ),
-                                  Text(
-                                    'رصيد: ${balance.toStringAsFixed(2)}',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w500,
-                                      color: balance >= 0
-                                          ? const Color(0xFF2E7D32)
-                                          : AppColors.error,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+                        meta: _buildScopeMetaBar(),
+                        body: _buildTransactionsList(transactions),
+                        footer: const ReportSignatureFooter(),
+                      ),
+                    ),
                   ),
           ),
         ],
       ),
+    );
+  }
+
+  /// شريط بيانات النطاق/الفترة أعلى المتن داخل الورقة — يطابق Meta في الـ PDF.
+  /// Scope/period meta band at the top of the sheet body — matches the PDF meta.
+  Widget _buildScopeMetaBar() {
+    final rangeLabel = _fromDate != null && _toDate != null
+        ? 'من ${_formatDateDash(_fromDate!)} إلى ${_formatDateDash(_toDate!)}'
+        : 'كل الحركات (بدون تحديد فترة)';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              'النطاق: ${_scopeLabel()}',
+              style: const TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+          ),
+          Text(
+            rangeLabel,
+            style: const TextStyle(fontSize: 10.5, color: Colors.black54),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// قائمة حركات الكشف التحليلي داخل متن الورقة / The transactions list, sheet body.
+  Widget _buildTransactionsList(List<dynamic> transactions) {
+    // القائمة داخل متن تقرير ذي ارتفاع طبيعي غير محدود → يجب إغلاق تمريرها الداخلي
+    // وتمددها بحجم محتواها ليتم تمرير الصفحة كاملة من الخارج لا الجدول وحده.
+    // The list sits inside the report sheet whose height is naturally unbounded, so it
+    // must shrink-wrap and disable its own scroll — the whole page scrolls, not just rows.
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(2, 2, 2, 2),
+      itemCount: transactions.length,
+      itemBuilder: (context, index) {
+        final item = transactions[index] as Map<String, dynamic>;
+        final debit = (item['debit'] as num?)?.toDouble() ?? 0;
+        final credit = (item['credit'] as num?)?.toDouble() ?? 0;
+        final balance = (item['balance'] as num?)?.toDouble() ?? 0;
+        final isDebit = debit > 0;
+        final color =
+            isDebit ? const Color(0xFF1565C0) : const Color(0xFFE65100);
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: AppColors.border.withValues(alpha: 0.7),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            child: Row(
+              children: [
+                Container(
+                  width: 34,
+                  height: 34,
+                  decoration: BoxDecoration(
+                    color: color.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isDebit
+                        ? Icons.arrow_circle_up_rounded
+                        : Icons.arrow_circle_down_rounded,
+                    color: color,
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item['description']?.toString() ?? '-',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item['date']?.toString() ?? '-',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      isDebit
+                          ? '+${debit.toStringAsFixed(2)}'
+                          : '-${credit.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                    Text(
+                      'رصيد: ${balance.toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500,
+                        color: balance >= 0
+                            ? const Color(0xFF2E7D32)
+                            : AppColors.error,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 

@@ -8,7 +8,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../../data/models/worker_statement_model.dart';
@@ -576,40 +578,28 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 3,
+      // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
+      // Natural full-page scroll — footer at content end, no on-screen A4.
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 1000),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.portrait,
+          maxPageWidth: 1000,
+          // الترويسة — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
+          header: _buildReportHeader(),
+          // شريط بيانات العامل ورقم الحساب ونطاق التاريخ
+          meta: _buildWorkerMetaBar(
+            workerName: displayName,
+            accNo: displayAccNo,
+            currency: currency,
+            fromDate: fromDateStr,
+            toDate: toDateStr,
+          ),
+          // المتن — الجدول المتجاوب + التنقل + ملخص الأرصدة (قابل للتمرير)
+          body: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. الترويسة — الشريط الثلاثي الموحد (يمين عربي / شعار / يسار إنجليزي)
-                _buildReportHeader(),
-                const SizedBox(height: 7),
-
-                // 2. شريط بيانات العامل ورقم الحساب ونطاق التاريخ
-                _buildWorkerMetaBar(
-                  workerName: displayName,
-                  accNo: displayAccNo,
-                  currency: currency,
-                  fromDate: fromDateStr,
-                  toDate: toDateStr,
-                ),
-                const SizedBox(height: 16),
-
                 // 3. جدول كشف الحساب المتجاوب بالكامل (بدون تمرير أفقي)
                 _buildStatementTableLayout(
                   rows: pageRows,
@@ -636,6 +626,8 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
               ],
             ),
           ),
+          // 6. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
+          footer: const ReportSignatureFooter(),
         ),
       ),
     );

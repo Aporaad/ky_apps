@@ -6,7 +6,9 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/customer_statement_model.dart';
@@ -691,43 +693,30 @@ class _CustomerStatementScreenState
     return InteractiveViewer(
       minScale: 0.5,
       maxScale: 3,
+      // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
+      // Natural full-page scroll — footer at content end, no on-screen A4.
       child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 14),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 980),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: const Color(0xFFD0D5DD), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(14),
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.portrait,
+          maxPageWidth: 980,
+          // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
+          header: _buildOfficialHeader(),
+          // 2. شريط بيانات العميل والحساب والتواريخ
+          meta: _buildCustomerMetaBar(
+            customerName: displayName,
+            customerCode: displayCode,
+            currency: currency,
+            accountTitle: accountTitle,
+            fromDate: fromDate,
+            toDate: toDate,
+          ),
+          // 3. المتن — الجدول وملخص الأرصدة (قابل للتمرير)
+          body: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
-                _buildOfficialHeader(),
-                const SizedBox(height: 14),
-
-                // 2. شريط بيانات العميل والحساب والتواريخ
-                _buildCustomerMetaBar(
-                  customerName: displayName,
-                  customerCode: displayCode,
-                  currency: currency,
-                  accountTitle: accountTitle,
-                  fromDate: fromDate,
-                  toDate: toDate,
-                ),
-                const SizedBox(height: 12),
-
-                // 3. جدول كشف الحساب
+                // جدول كشف الحساب
                 _buildStatementTableLayout(
                   rows: state.rows,
                   totalDebit: totalDebit.toDouble(),
@@ -738,7 +727,7 @@ class _CustomerStatementScreenState
 
                 const SizedBox(height: 16),
 
-                // 4. ملخص الأرصدة أسفل الجدول
+                // ملخص الأرصدة أسفل الجدول
                 _buildBottomBalanceSummary(
                   openingBalance: openingBalance.toDouble(),
                   finalBalance: finalBalance.toDouble(),
@@ -746,6 +735,8 @@ class _CustomerStatementScreenState
               ],
             ),
           ),
+          // 4. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
+          footer: const ReportSignatureFooter(),
         ),
       ),
     );

@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../domain/home_card_size.dart';
 
-/// رموز تصميم الواجهة الرئيسية: مسافات وأنصاف أقطار وظلال وحساب الأعمدة
-/// Home design tokens: spacing, radii, shadows, and the column calculation.
+/// رموز تصميم الواجهة الرئيسية: مسافات وأنصاف أقطار وظلال وتدرّجات وحساب الأعمدة
+/// Home design tokens: spacing, radii, shadows, gradients, and the column calculation.
 ///
 /// في ملف واحد لأن الرئيسية كلها تُقاس من هنا: بطاقة تُعدّل حشوها بمعزل عن الشبكة تنحرف عن
 /// جارتها عند أول تغيير. ولا لون صلب هنا — كل لون يُقرأ من [AppColors] ليبقى تابعًا لتهيئة
@@ -16,59 +17,76 @@ class HomeTokens {
 
   /// أقصى عرض للمحتوى: الشبكة على سطح مكتب عريض تتوقف عن التمدد
   /// Content ceiling: the grid stops stretching on a wide desktop.
-  static const double contentMaxWidth = 1180;
+  static const double contentMaxWidth = 1240;
 
-  static const double cardRadius = 16;
+  static const double cardRadius = 18;
   static const double badgeRadius = 14;
-  static const double iconBox = 44;
-  static const double iconSize = 22;
+  static const double captionSize = 10.5;
 
-  /// أصغر ضلع مسموح للبطاقة — الحدّ الذي يحتمل عنوانًا من سطرين عند تكبير الخط 1.25
-  /// Smallest allowed tile edge — the size that still fits a two-line title at text scale 1.25.
-  static const double minTile = 150;
+  /// أقصى عدد أعمدة مسموح — سبعة تصنع بطاقات أضيق من نصّها
+  /// Highest allowed column count — seven makes tiles narrower than their own labels.
+  static const int maxColumns = 6;
+
+  /// أقل عدد أعمدة مسموح: عمود واحد يحوّل الشبكة إلى قائمة ويُفقدها معناها
+  /// Lowest allowed column count: a single column turns the grid into a list.
+  static const int minColumns = 2;
 
   static const Duration press = Duration(milliseconds: 120);
-  static const double titleSize = 13.5;
-  static const double captionSize = 10.5;
+  static const Duration hover = Duration(milliseconds: 160);
 
   /// حشو الصفحة الجانبي حسب عرض الشاشة
   /// Horizontal page padding by screen width.
   static double pagePadding(double width) {
     if (width < 600) return 16;
-    if (width < 1100) return 20;
+    if (width < 1100) return 24;
 
-    return 24;
+    return 32;
   }
 
-  /// الفراغ بين البطاقات
-  /// Gap between tiles.
-  static double gap(double width) {
-    if (width < 600) return 12;
-    if (width < 1100) return 14;
-
-    return 16;
-  }
-
-  /// عدد الأعمدة: يضمن ألّا ينزل ضلع البطاقة تحت [minTile]، ويقبل حده الأدنى عمودين
-  /// Columns: never lets a tile fall below [minTile], and floors at two columns.
+  /// عدد الأعمدة: العدد المثبّت يتقدّم، وإلا يُشتق من حدّ ضلع الحجم الحالي
+  /// Columns: a pinned count wins, otherwise derived from the current size's minimum edge.
   ///
-  /// 320dp ⇒ عمودان بضلع 137 (أضيق جهاز مدعوم)، و1180dp ⇒ ستة أعمدة بضلع 181.
-  /// 320dp ⇒ two columns of 137 (the narrowest supported device), 1180dp ⇒ six of 181.
-  static int columns(double width) {
-    const gap = 14.0;
-    final fit = ((width + gap) / (minTile + gap)).floor();
+  /// 320dp بالحجم المتوسط ⇒ عمودان بضلع 137، و1240dp ⇒ ستة بضلع 190.
+  /// 320dp at medium ⇒ two columns of 137, 1240dp ⇒ six of 190.
+  /// أقل ضلع تُقرأ عنده البطاقة: تحته تختنق الأيقونة والعنوان
+  /// The narrowest edge at which a card still reads: below it the icon and title choke.
+  /// أرضية صلبة: تحتها تصير البطاقة أيقونةً بلا عنوان. عند 72dp يعمل الوضع المصغّر في البطاقة
+  /// A hard floor: below it a card is an icon with no title. At 72dp the card's micro mode works.
+  static const double minReadableTile = 72;
 
-    return fit.clamp(2, 6);
+  static int columns(
+    double width, {
+    required HomeCardSize size,
+    int fixed = 0,
+  }) {
+    // سقف العدّ من الأرضية الصلبة لا من حدّ الحجم: الاختيار الصريح يجب أن يُرى، ثم تُصغّر
+    // البطاقة داخليًا (وضع مصغّر) بدل أن يُلغى الاختيار بصمت
+    // The count ceiling uses the hard floor, not the size's target: an explicit choice must be
+    // visible, and the card then shrinks internally (micro mode) instead of being silently voided.
+    const floor = HomeTokens.minReadableTile;
+    const floorGap = 8.0;
+    final ceiling = ((width + floorGap) / (floor + floorGap)).floor().clamp(
+      minColumns,
+      maxColumns,
+    );
+
+    if (fixed >= minColumns && fixed <= maxColumns) {
+      return fixed.clamp(minColumns, ceiling);
+    }
+
+    final fit = ((width + size.gap) / (size.minTile + size.gap)).floor();
+
+    return fit.clamp(minColumns, ceiling);
   }
 
-  /// ظل البطاقة: ساكن وخفيف، ويرتفع قليلًا عند التحويم على سطح المكتب
-  /// Card shadow: light at rest, slightly lifted on desktop hover.
+  /// ظل البطاقة: ساكن وخفيف، ويرتفع عند التحويم على سطح المكتب
+  /// Card shadow: light at rest, lifted on desktop hover.
   static List<BoxShadow> cardShadow({bool hover = false}) {
     return [
       BoxShadow(
-        color: Colors.black.withValues(alpha: hover ? 0.08 : 0.04),
-        blurRadius: hover ? 14 : 8,
-        offset: Offset(0, hover ? 4 : 2),
+        color: Colors.black.withValues(alpha: hover ? 0.10 : 0.045),
+        blurRadius: hover ? 20 : 10,
+        offset: Offset(0, hover ? 7 : 2),
       ),
     ];
   }

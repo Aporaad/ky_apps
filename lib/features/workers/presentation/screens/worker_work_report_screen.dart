@@ -6,7 +6,9 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../../data/models/worker_work_report_model.dart';
@@ -574,54 +576,33 @@ class _WorkerWorkReportScreenState extends ConsumerState<WorkerWorkReportScreen>
       maxScale: 3,
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-        child: Center(
-          child: Container(
-            constraints: const BoxConstraints(maxWidth: 1000),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(8),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
-                  blurRadius: 10,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 1. الترويسة الرسمية الموحّدة (عربي/شعار/إنجليزي)
-                ReportLetterheadBranding(info: letterhead),
-                const SizedBox(height: 8),
-                // 2. عنوان التقرير
-                Center(
-                  child: Text(
-                    _title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w900,
-                      color: Color(0xFF6B2D1B),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                // 3. شريط بيانات العامل والحساب والعملة والفترة
-                _metaBar(report, accNo),
-                const SizedBox(height: 14),
-                // 4. جدول كشف العمل
-                WorkerWorkReportTable(
-                  rows: report.rows,
-                  totalCount: report.totalCount,
-                  totalAmount: report.totalAmount,
-                ),
-                const SizedBox(height: 22),
-                // 5. التذييل الرسمي: التوقيعات + إشعار 15 يوماً
-                _signatureFooter(),
-              ],
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.portrait,
+          // 1. الترويسة الرسمية الموحّدة (عربي/شعار/إنجليزي)
+          header: ReportLetterheadBranding(info: letterhead),
+          // 2. عنوان التقرير
+          title: Center(
+            child: Text(
+              _title,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF6B2D1B),
+              ),
             ),
           ),
+          // 3. شريط بيانات العامل والحساب والعملة والفترة
+          meta: _metaBar(report, accNo),
+          // 4. جدول كشف العمل — يتمرّر داخل المتن إن طالت الحركات
+          body: SingleChildScrollView(
+            child: WorkerWorkReportTable(
+              rows: report.rows,
+              totalCount: report.totalCount,
+              totalAmount: report.totalAmount,
+            ),
+          ),
+          // 5. التذييل الرسمي الموحّد: التوقيعات + إشعار 15 يوماً
+          footer: const ReportSignatureFooter(),
         ),
       ),
     );
@@ -726,60 +707,6 @@ class _WorkerWorkReportScreenState extends ConsumerState<WorkerWorkReportScreen>
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  // ─── التذييل الرسمي: ثلاثة توقيعات + إشعار المصادقة خلال 15 يوماً ─────────────
-  Widget _signatureFooter() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _sigSlot('توقيع المحاسب'),
-            _sigSlot('توقيع أمين الصندوق'),
-            _sigSlot('توقيع المدير'),
-          ],
-        ),
-        const SizedBox(height: 14),
-        Text(
-          '(يعتبر هذا الكشف صحيحاً ومصدقاً عليه إذا لم يصلنا أي اعتراض خطي خلال فترة 15 يوماً من تاريخه)',
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 10,
-            color: AppColors.textMuted,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
-    );
-  }
-
-  /// خانة توقيع مرنة — تأخذ ثلث العرض المتاح لتجنّب تجاوز الحافة على الشاشات الضيّقة.
-  Widget _sigSlot(String label) {
-    return Expanded(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: double.infinity,
-              child: Divider(color: Color(0xFF6B7280), thickness: 0.6),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 10.5,
-                color: Colors.black87,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

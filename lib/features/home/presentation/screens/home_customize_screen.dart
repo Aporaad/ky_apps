@@ -4,17 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../employee_portal/domain/portal_section_titles.dart';
+import '../../data/models/home_layout.dart';
+import '../../domain/home_card_size.dart';
 import '../../domain/home_shortcut.dart';
 import '../../domain/home_shortcut_catalog.dart';
 import '../providers/home_layout_notifier.dart';
+import '../widgets/home_shortcut_grid.dart';
 import '../widgets/home_tokens.dart';
 
-/// شاشة تخصيص الاختصارات: ما يظهر، وبأي ترتيب
-/// The shortcut customisation screen: what shows, and in which order.
+/// شاشة تخصيص الاختصارات: ما يظهر، وبأي ترتيب، وبأي حجم وأعمدة
+/// The shortcut customisation screen: what shows, in which order, at which size and column count.
 ///
-/// تبويبان لا سحب داخل الشبكة: `ReorderableListView` الأصلي يعطي مقابض سحب وقارئ شاشة مجانًا،
-/// بينما سحب الشبكة يحتاج حزمة أو حساب مواضع هشًّا لكل قياس.
-/// Two tabs rather than in-grid dragging: the stock `ReorderableListView` brings drag handles and
+/// ثلاثة تبويبات لا سحب داخل الشبكة: `ReorderableListView` الأصلي يعطي مقابض سحب وقارئ شاشة
+/// مجانًا، بينما سحب الشبكة يحتاج حزمة أو حساب مواضع هشًّا لكل قياس.
+/// Three tabs rather than in-grid dragging: the stock `ReorderableListView` brings drag handles and
 /// screen-reader support for free, while grid dragging needs a package or fragile per-size maths.
 class HomeCustomizeScreen extends ConsumerStatefulWidget {
   const HomeCustomizeScreen({super.key});
@@ -27,7 +30,10 @@ class HomeCustomizeScreen extends ConsumerStatefulWidget {
 class _HomeCustomizeScreenState extends ConsumerState<HomeCustomizeScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
-  bool _showActive = true;
+
+  /// 0 = المفعّلة، 1 = المتاحة، 2 = العرض
+  /// 0 = active, 1 = available, 2 = display.
+  int _tab = 0;
 
   @override
   void dispose() {
@@ -66,56 +72,74 @@ class _HomeCustomizeScreenState extends ConsumerState<HomeCustomizeScreen> {
       body: Align(
         alignment: AlignmentDirectional.topCenter,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 860),
+          constraints: const BoxConstraints(maxWidth: 900),
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                child: TextField(
-                  controller: _searchCtrl,
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: InputDecoration(
-                    hintText: 'ابحث عن اختصار…',
-                    prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                    suffixIcon:
-                        _query.isEmpty
-                            ? null
-                            : IconButton(
-                              tooltip: 'مسح البحث',
-                              icon: const Icon(Icons.close_rounded, size: 18),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() => _query = '');
-                              },
-                            ),
+              if (_tab != 2)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: TextField(
+                    controller: _searchCtrl,
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: 'ابحث عن اختصار…',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                      suffixIcon:
+                          _query.isEmpty
+                              ? null
+                              : IconButton(
+                                tooltip: 'مسح البحث',
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _query = '');
+                                },
+                              ),
+                    ),
                   ),
                 ),
-              ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 child: SegmentedButton<int>(
                   segments: [
+                    // `FittedBox` يحمي التسمية من التجاوز على شاشة 360dp مع تكبير الخط 1.25
+                    // FittedBox keeps the label from overflowing on a 360dp screen at 1.25 scale.
                     ButtonSegment<int>(
                       value: 0,
-                      label: Text('المفعّلة (${active.length})'),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('المفعّلة (${active.length})'),
+                      ),
                     ),
                     ButtonSegment<int>(
                       value: 1,
-                      label: Text('المتاحة (${available.length})'),
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('المتاحة (${available.length})'),
+                      ),
+                    ),
+                    const ButtonSegment<int>(
+                      value: 2,
+                      label: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text('العرض'),
+                      ),
                     ),
                   ],
-                  selected: {_showActive ? 0 : 1},
+                  selected: {_tab},
                   showSelectedIcon: false,
+                  expandedInsets: EdgeInsets.zero,
                   onSelectionChanged: (selection) {
-                    setState(() => _showActive = selection.first == 0);
+                    setState(() => _tab = selection.first);
                   },
                 ),
               ),
               Expanded(
-                child:
-                    _showActive
-                        ? _buildActiveList(active, query)
-                        : _buildAvailableList(available, query),
+                child: switch (_tab) {
+                  0 => _buildActiveList(active, query),
+                  1 => _buildAvailableList(available, query),
+                  _ => _DisplaySettings(layout: layoutState.layout),
+                },
               ),
             ],
           ),
@@ -250,7 +274,7 @@ class _HomeCustomizeScreenState extends ConsumerState<HomeCustomizeScreen> {
           (dialogContext) => AlertDialog(
             title: const Text('استعادة الافتراضي'),
             content: const Text(
-              'سيُعاد ترتيب الاختصارات وتظهر التشكيلة الأولى فقط. هل تريد المتابعة؟',
+              'سيُعاد ترتيب الاختصارات وحجمها وعددها في الصف إلى الوضع الأول. هل تريد المتابعة؟',
             ),
             actions: [
               TextButton(
@@ -267,6 +291,197 @@ class _HomeCustomizeScreenState extends ConsumerState<HomeCustomizeScreen> {
     if (confirmed != true || !mounted) return;
 
     await ref.read(homeLayoutNotifierProvider.notifier).reset();
+  }
+}
+
+// ── التبويب الثالث: العرض ────────────────────────────────────
+// Tab three: display.
+
+/// إعدادات الشكل: حجم البطاقة، عدد البطاقات في الصف، ومعاينة حيّة
+/// Appearance settings: card size, cards per row, and a live preview.
+///
+/// المعاينة تستخدم نفس ودجت الشبكة والبطاقة اللذين تستخدمهما الرئيسية، فلا تنفصل «الصورة
+/// المصغّرة» عن النتيجة أبدًا — وهذا نوع الانحراف الذي يشتكي منه المستخدم بعد الحفظ.
+/// The preview uses the very grid and card widgets the home screen uses, so the thumbnail can never
+/// drift from the result — the kind of mismatch a user only discovers after saving.
+class _DisplaySettings extends ConsumerWidget {
+  const _DisplaySettings({required this.layout});
+
+  final HomeLayout layout;
+
+  static const List<String> _previewIds = [
+    'customers.section',
+    'customers.statement',
+    'accounts.tree',
+    'accounts.group',
+    'management.users',
+    'home.customize',
+  ];
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(homeLayoutNotifierProvider.notifier);
+    final byId = {
+      for (final shortcut in homeShortcutCatalog) shortcut.id: shortcut,
+    };
+    final preview = [
+      for (final id in _previewIds)
+        if (byId[id] != null) byId[id]!,
+    ];
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+      children: [
+        const _GroupHeader(title: 'حجم البطاقة'),
+        SegmentedButton<HomeCardSize>(
+          segments: [
+            for (final size in HomeCardSize.values)
+              ButtonSegment<HomeCardSize>(value: size, label: Text(size.label)),
+          ],
+          selected: {layout.size},
+          showSelectedIcon: false,
+          expandedInsets: EdgeInsets.zero,
+          onSelectionChanged: (selection) => notifier.setSize(selection.first),
+        ),
+        const SizedBox(height: 6),
+        const _HintText(
+          'الحجم يضبط الحشو وحجم الأيقونة والخط. وعندما يكون عدد الأعمدة «تلقائيًا» يضبط عرض '
+          'البطاقة أيضًا.',
+        ),
+        const SizedBox(height: 18),
+
+        const _GroupHeader(title: 'عدد البطاقات في الصف'),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _ColumnsChip(
+              label: 'تلقائي',
+              selected: layout.columns == HomeLayout.autoColumns,
+              onTap: () => notifier.setColumns(HomeLayout.autoColumns),
+            ),
+            for (
+              var count = HomeTokens.minColumns;
+              count <= HomeTokens.maxColumns;
+              count++
+            )
+              _ColumnsChip(
+                label: '$count',
+                selected: layout.columns == count,
+                onTap: () => notifier.setColumns(count),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        const _HintText(
+          '«تلقائي» يحسب العدد من عرض الشاشة وحجم البطاقة. والاختيار الصريح يُطبَّق حيث تتّسع '
+          'الشاشة، ويقلّ تلقائيًا على الشاشات الضيقة حتى تبقى البطاقة مقروءة — والمعاينة أدناه '
+          'تُظهر النتيجة الفعلية.',
+        ),
+        const SizedBox(height: 18),
+
+        const _GroupHeader(title: 'معاينة'),
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: AppColors.surfaceSubtle.withValues(alpha: 0.55),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.border),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              // `constraints` هنا هي العرض الداخلي بعد حشو الحاوية، فلا نطرحه مرتين
+              // These constraints are already the padded inner width — do not subtract twice.
+              final resolved = HomeTokens.columns(
+                constraints.maxWidth,
+                size: layout.size,
+                fixed: layout.columns,
+              );
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Text(
+                      'يظهر الآن $resolved في الصف · حجم ${layout.size.label}',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  IgnorePointer(
+                    child: HomeShortcutGrid(
+                      shortcuts: preview,
+                      size: layout.size,
+                      columns: layout.columns,
+                      onOpen: (_) {},
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// شريحة اختيار عدد الأعمدة
+/// One column-count chip.
+class _ColumnsChip extends StatelessWidget {
+  const _ColumnsChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ChoiceChip(
+      label: Text(label),
+      selected: selected,
+      onSelected: (_) => onTap(),
+      showCheckmark: false,
+      visualDensity: VisualDensity.compact,
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: selected ? AppColors.primary : AppColors.textSecondary,
+      ),
+      backgroundColor: Colors.white,
+      selectedColor: AppColors.primary.withValues(alpha: 0.10),
+      side: BorderSide(
+        color:
+            selected
+                ? AppColors.primary.withValues(alpha: 0.45)
+                : AppColors.border,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+    );
+  }
+}
+
+/// سطر شرح صغير تحت أي مجموعة إعدادات
+/// A small explanatory line under any settings group.
+class _HintText extends StatelessWidget {
+  const _HintText(this.text);
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      style: TextStyle(fontSize: 11, height: 1.5, color: AppColors.textMuted),
+    );
   }
 }
 
@@ -430,8 +645,8 @@ class _RowIcon extends StatelessWidget {
   }
 }
 
-/// ترويسة مجموعة في تبويب «المتاحة»
-/// A group header in the "available" tab.
+/// ترويسة مجموعة في تبويب «المتاحة» أو في «العرض»
+/// A group header in the "available" or "display" tab.
 class _GroupHeader extends StatelessWidget {
   const _GroupHeader({required this.title});
 

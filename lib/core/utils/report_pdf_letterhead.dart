@@ -2,6 +2,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:pdf/widgets.dart' as pw;
 
 import 'report_letterhead_info.dart';
+import 'report_pdf_arabic.dart';
 
 /// ترويسة تقرير PDF بنفس الأعمدة الثلاثة التي ترسمها الشاشة: يمين عربي، وسط للشعار،
 /// يسار إنجليزي — نفس المصدر ([ReportLetterheadInfo]) ونفس الترتيب، فيتطابق المطبوع
@@ -21,15 +22,15 @@ pw.Widget reportPdfLetterheadBranding(
   return pw.Row(
     crossAxisAlignment: pw.CrossAxisAlignment.center,
     children: [
-      // اليمين (بداية RTL): الكتلة العربية
-      // Right side (RTL start): the Arabic block.
-      pw.Expanded(flex: 5, child: _pdfInfoColumn(info.arabicLines, true)),
+      // اليمين (بداية RTL): الكتلة العربية — نفس نِسَب الشاشة (6 : 3 : 6)
+      // Right side (RTL start): the Arabic block — same ratios as the screen (6 : 3 : 6).
+      pw.Expanded(flex: 6, child: _pdfInfoColumn(info.arabicLines, true)),
       pw.SizedBox(width: 10),
 
       // المنتصف: الشعار
       // Center: the logo.
       pw.Expanded(
-        flex: 4,
+        flex: 3,
         child: pw.Container(
           alignment: pw.Alignment.center,
           child: logo ?? pw.SizedBox.shrink(),
@@ -39,13 +40,18 @@ pw.Widget reportPdfLetterheadBranding(
 
       // اليسار: الكتلة الإنجليزية باتجاه LTR حتى لا تنعكس كلماتها داخل صفحة RTL
       // Left side: the English block, LTR so its words never mirror inside an RTL page.
-      pw.Expanded(flex: 4, child: _pdfInfoColumn(info.englishLines, false)),
+      pw.Expanded(flex: 6, child: _pdfInfoColumn(info.englishLines, false)),
     ],
   );
 }
 
 /// عمود واحد من أسطر الترويسة: أولها اسم الشركة بخط أعرض وبقية الأسطر تفاصيل أصغر.
 /// One letterhead column: the first line is the bolder company name, the rest are detail.
+///
+/// الأسطر العربية تُشكَّل مسبقاً (pdfArabic) وتُحاذاة يميناً؛ الإنجليزية تبقى LTR
+/// وتُحاذاة يساراً — مطابقةً لترويسة الشاشة تماماً.
+/// Arabic lines are pre-shaped and right-aligned; English stays LTR and left-aligned —
+/// exactly mirroring the on-screen letterhead.
 pw.Widget _pdfInfoColumn(List<String> lines, bool arabic) {
   return pw.Column(
     crossAxisAlignment: pw.CrossAxisAlignment.stretch,
@@ -54,15 +60,15 @@ pw.Widget _pdfInfoColumn(List<String> lines, bool arabic) {
       for (int i = 0; i < lines.length; i++) ...[
         if (i > 0) pw.SizedBox(height: 2),
         pw.Text(
-          lines[i],
+          pdfArabic(lines[i]),
           style: pw.TextStyle(
             fontSize: i == 0 ? 9.5 : 7.5,
             fontWeight: i == 0 ? pw.FontWeight.bold : pw.FontWeight.normal,
           ),
-          // الاتجاه صريح هنا لا موروث: الصفحة كلها RTL والكتلة الإنجليزية يجب أن تبقى LTR
-          // Explicit, not inherited: the page is RTL while the English block must stay LTR.
-          textDirection: arabic ? pw.TextDirection.rtl : pw.TextDirection.ltr,
-          textAlign: pw.TextAlign.center,
+          // النص مُشكَّل مسبقاً → يُعرض ltr؛ المحاذاة هي من يحدد اليمين/اليسار
+          // Pre-shaped text renders ltr; textAlign alone drives right/left placement.
+          textDirection: kPdfShapedTextDirection,
+          textAlign: arabic ? pw.TextAlign.right : pw.TextAlign.left,
         ),
       ],
     ],

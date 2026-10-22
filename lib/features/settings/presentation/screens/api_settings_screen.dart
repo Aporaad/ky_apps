@@ -202,7 +202,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                                 child: Text(
                                   'عنوان الـ API الأساسي (Base URL)',
                                   style: TextStyle(
-                                    fontSize: scaledLabel,
+                                    fontSize: scaledLabel-4,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textPrimary,
                                   ),
@@ -219,7 +219,7 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                             child: TextFormField(
                               controller: _urlController,
                               style: TextStyle(
-                                fontSize: textScaler.scale(13.5).clamp(11.0, 17.0),
+                                fontSize: textScaler.scale(7.5).clamp(7.0, 9.0),
                                 fontFamily: 'monospace',
                                 fontWeight: FontWeight.w600,
                               ),
@@ -581,7 +581,7 @@ class _ActiveUrlCard extends StatelessWidget {
             child: Text(
               activeUrl,
               style: TextStyle(
-                fontSize: textScaler.scale(11.5).clamp(9.5, 15.0),
+                fontSize: textScaler.scale(9.5).clamp(8.5, 11.0),
                 fontFamily: 'monospace',
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -673,7 +673,7 @@ class _ConfirmChangeDialog extends StatelessWidget {
                     child: Text(
                       targetUrl,
                       style: TextStyle(
-                        fontSize: 11.5,
+                        fontSize: 9.5,
                         fontWeight: FontWeight.w600,
                         color: AppColors.primary,
                       ),

@@ -693,3 +693,26 @@ SELECT * FROM (SELECT em.ENTRY_NO,
 ## [2026-10-22] لا تغییر في قاعدة البیانات (إصلاح واجهة/شبكة فقط)
 - الإصلاح یتعلّق بتجاوز تخطيط في شاشة كشف العمل (Flutter) وبسُلوك ترويسة HTTP في عمیل Dio (CORS) — لا SQL جدید، لا DDL، لا جداول.
 - الاستجابة المرجعة من `work-report` تأیّد سلیمة (success:true، الفترة الافتراضیة 16/08/2026 مع الأسطر) قبل وبعد الإصلاح.
+
+---
+
+## [2026-10-22] لا تغییر في قاعدة البیانات (تقریر كشف عمل مجموعة — قراءة فقط)
+- تقریر "كشف عمل مجموعة" جدید **یقرأ فقط** من نفس الجدولین المستخدمین فيكشف العمل الفردی:
+  `ACCOUNTS.CUTTER_FROM_CALC` (CUTTER_NO, STYLE_NAME, CUTTING_DATE, POST, AMT) و
+  `ACCOUNTS.TAILOR_FROM_CALC` (TAILOR_NO, STYLE_NAME, TAILOR_DATE, POST, AMT, AMT_ALL).
+- الفرق عن الفردي: **بدون فلترة `r.ACC_NO=:acc`** — یُجلب عمل **جمیع** القصاصین أو **جمیع** الخیاطین.
+  یُضاف `r.CUTTER_NAME`/`r.TAILOR_NAME` كالعمود الأول، والترتیب `ORDER BY r.NAME, w.DATE, w.STYLE`.
+- صیغة الفلترة الزمنیة تبقى مطابقة لنموذج أوراكل FOR_CUTTER_CALC.RDF:
+  `w.CUTTING_DATE BETWEEN TO_DATE(:from,'YYYY-MM-DD') AND TO_DATE(:to,'YYYY-MM-DD')+1-1/86400`.
+- **التحقق عبر oracledb MCP:** الفترة `22/06/2026..25/06/2026` أعادت 24 سطراً بمجموع
+  `SUM(QTY)=236` و `SUM(TOTAL)=71050` — مطابق تماماً لقيم PDF المرفق (FOR_CUTTER_CALC.pdf).
+- **لا DDL، لا sequences، لا triggers جدیدة.** لا سطر ID new.
+- **الترميز:** `CUTTER_NAME` و `STYLE_NAME` یصلان mojibake (WE8MSWIN1252) — یُصلَحان
+  بـ `ArabicEncoding::fixMojibake()` في الخادم و `ArabicEncodingUtils.fix()` في العميل (مطابق للفردي).
+- **الصلاحيات:** `cutters.statement` للمسار `/workers/cutters/group-work-report` و
+  `tailors.statement` للمسار `/workers/tailors/group-work-report` — لا أكواد IBAC جدیدة.
+
+
+## [2026-10-22 09:15] تجميع كشف عمل مجموعة — استعلام READ-only (SELECT/GROUP BY فقط، لا DDL)
+- لا تغييرات على مخطط قاعدة البيانات. تم تعديل الاستعلام داخل WorkerController فقط من أسطر لكل سجل إلى تجميع لكل (عامل + موديل).
+- تحقق SELECT للقصاصين للفترة 22/06/2026 - 25/06/2026: 10 أسطر مجمّعة، SUM(QTY)=236، SUM(TOTAL)=71050 (مطابق للإجــمالي في FOR_CUTTER_CALC.pdf بعد ضغط 24 سجلاً).

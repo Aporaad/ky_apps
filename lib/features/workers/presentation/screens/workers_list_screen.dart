@@ -379,7 +379,7 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
   }
 
   void _goToWorkReport(WorkerModel worker) {
-    // كشف العمل متاح للقصاص والخياط فقط؛ الموظفون ("كشف حضور") ما زالوا خارج النطاق.
+    // كشف العمل متاح للقصاص والخياط فقط؛ الموظفين ("كشف حضور") ما زالوا خارج النطاق.
     // Work report covers cutters/tailors only; employees ("attendance") remain out of scope.
     if (worker.type == WorkerType.employee) {
       ScaffoldMessenger.of(context).showSnackBar(

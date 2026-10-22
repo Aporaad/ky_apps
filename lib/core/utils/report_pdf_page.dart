@@ -2,6 +2,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
 import 'report_letterhead_info.dart';
+import 'report_pdf_arabic.dart';
 import 'report_pdf_letterhead.dart';
 
 /// وحدة الترويسة والتذييل الموحّدة لكل تقارير PDF — تُستهلك من كل مولّدات PDF
@@ -55,9 +56,10 @@ pw.Widget buildReportPdfHeader({
         pw.SizedBox(height: 6),
         // عنوان التقرير / Report title
         pw.Text(
-          title,
+          pdfArabic(title),
           style: pw.TextStyle(fontSize: 15, fontWeight: pw.FontWeight.bold),
-          textDirection: pw.TextDirection.rtl,
+          // النص مُشكَّل مسبقاً بترتيب مرئي → يُعرض ltr حتى لا يعيد المحرك ترتيبه
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.SizedBox(height: 4),
         // صف المعلومات الخاص بالتقرير / Report-specific meta
@@ -79,14 +81,15 @@ pw.Widget buildReportPdfFooter(pw.Context context, {String? currency}) {
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text(
-          currency != null && currency.isNotEmpty ? 'العملة: $currency' : '',
+          pdfArabic(
+              currency != null && currency.isNotEmpty ? 'العملة: $currency' : ''),
           style: const pw.TextStyle(fontSize: 7),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          'صفحة ${context.pageNumber} من ${context.pagesCount}',
+          pdfArabic('صفحة ${context.pageNumber} من ${context.pagesCount}'),
           style: const pw.TextStyle(fontSize: 7),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
       ],
     ),
@@ -110,9 +113,9 @@ pw.Widget pdfTh(String text, {double fontSize = 8.5}) {
     padding: const pw.EdgeInsets.symmetric(vertical: 4, horizontal: 2),
     child: pw.Center(
       child: pw.Text(
-        text,
+        pdfArabic(text),
         style: pw.TextStyle(fontSize: fontSize, fontWeight: pw.FontWeight.bold),
-        textDirection: pw.TextDirection.rtl,
+        textDirection: kPdfShapedTextDirection,
         textAlign: pw.TextAlign.center,
       ),
     ),
@@ -132,13 +135,13 @@ pw.Widget pdfTd(
     child: text.isEmpty
         ? pw.SizedBox()
         : pw.Text(
-            text,
+            pdfArabic(text),
             style: pw.TextStyle(
               fontSize: fontSize,
               fontWeight: bold ? pw.FontWeight.bold : pw.FontWeight.normal,
               color: color ?? PdfColors.black,
             ),
-            textDirection: pw.TextDirection.rtl,
+            textDirection: kPdfShapedTextDirection,
             textAlign: align,
           ),
   );
@@ -157,18 +160,18 @@ pw.Widget pdfDateRangeRow({
     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
     children: [
       pw.Text(
-        fromDate != null && toDate != null
+        pdfArabic(fromDate != null && toDate != null
             ? 'من تاريخ: $fromDate   إلى تاريخ: $toDate'
-            : 'كل الحركات (بدون تحديد فترة)',
+            : 'كل الحركات (بدون تحديد فترة)'),
         style: const pw.TextStyle(fontSize: 9),
-        textDirection: pw.TextDirection.rtl,
+        textDirection: kPdfShapedTextDirection,
       ),
       if (rightNote != null)
         pw.Text(
-          rightNote,
+          pdfArabic(rightNote),
           style: const pw.TextStyle(
               fontSize: 8, color: ReportPdfColors.subtleText),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
         ),
     ],
   );
@@ -194,10 +197,11 @@ pw.Widget pdfSignatures() {
       pw.SizedBox(height: 12),
       pw.Center(
         child: pw.Text(
-          'يجب مراجعة هذا الكشف خلال 15 يوماً من تاريخ إصداره، وما بعد ذلك يُعتبر معتمداً.',
+          pdfArabic(
+              'يجب مراجعة هذا الكشف خلال 15 يوماً من تاريخ إصداره، وما بعد ذلك يُعتبر معتمداً.'),
           style: const pw.TextStyle(
               fontSize: 7.5, color: ReportPdfColors.subtleText),
-          textDirection: pw.TextDirection.rtl,
+          textDirection: kPdfShapedTextDirection,
           textAlign: pw.TextAlign.center,
         ),
       ),
@@ -211,9 +215,9 @@ pw.Widget _signatureSlot(String label) {
       pw.Container(width: 110, height: 0.5, color: PdfColors.grey600),
       pw.SizedBox(height: 3),
       pw.Text(
-        label,
+        pdfArabic(label),
         style: const pw.TextStyle(fontSize: 8),
-        textDirection: pw.TextDirection.rtl,
+        textDirection: kPdfShapedTextDirection,
       ),
     ],
   );

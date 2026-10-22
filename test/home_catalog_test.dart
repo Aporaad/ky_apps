@@ -17,8 +17,12 @@ List<String> allowedIds({required Set<String> granted, bool isAdmin = false}) {
 
 void main() {
   group('catalog integrity', () {
-    test('holds thirty shortcuts with unique ASCII ids', () {
-      expect(homeShortcutCatalog, hasLength(30));
+    // الحد الأدنى لا المساواة: مستودع يعمل عليه أكثر من وكيل قد يضيف بطاقات،
+    // والاختبار يحرس الحذف لا النمو.
+    // A floor rather than equality: more than one agent may add cards, and this test guards
+    // against deletion, not growth.
+    test('holds every planned shortcut with unique ASCII ids', () {
+      expect(homeShortcutCatalog.length, greaterThanOrEqualTo(37));
 
       final ids = homeShortcutCatalog.map((shortcut) => shortcut.id).toList();
       expect(ids.toSet(), hasLength(ids.length));
@@ -27,6 +31,30 @@ void main() {
       for (final id in ids) {
         expect(pattern.hasMatch(id), isTrue, reason: 'bad id shape: $id');
       }
+    });
+
+    test('covers the destinations that used to be missing', () {
+      final ids = homeShortcutCatalog.map((shortcut) => shortcut.id).toSet();
+
+      expect(
+        ids,
+        containsAll(<String>[
+          'accounts.group',
+          'accounts.edit',
+          'management.add_user',
+          'management.edit_user',
+          'management.grants',
+          'workers.add_employee',
+          'workers.add_cutter',
+          'workers.add_tailor',
+        ]),
+      );
+      expect(
+        homeShortcutCatalog
+            .firstWhere((shortcut) => shortcut.id == 'accounts.group')
+            .title,
+        'كشف مجموعة حسابات جزئية',
+      );
     });
 
     test('thirteen shortcuts are on by default, and exactly one is pinned', () {
@@ -133,8 +161,11 @@ void main() {
   });
 
   group('allowedHomeShortcuts', () {
-    test('a system admin gets all thirty', () {
-      expect(allowedIds(granted: const {}, isAdmin: true), hasLength(30));
+    test('a system admin gets every catalog entry', () {
+      expect(
+        allowedIds(granted: const {}, isAdmin: true),
+        hasLength(homeShortcutCatalog.length),
+      );
     });
 
     test('a user with no grants keeps only the ungated cards', () {

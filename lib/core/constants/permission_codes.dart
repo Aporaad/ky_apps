@@ -45,7 +45,7 @@ class Perm {
   static const String customersExport = 'customers.export';
   static const String customersEditLimit = 'customers.edit_limit';
 
-  // ── الموظفون / employees ─────────────────────────────────
+  // ── الموظفين / employees ─────────────────────────────────
   static const String employeesWildcard = 'employees.*';
   static const String employeesView = 'employees.view';
   static const String employeesCreate = 'employees.create';
@@ -54,7 +54,7 @@ class Perm {
   static const String employeesToggle = 'employees.toggle';
   static const String employeesStatement = 'employees.statement';
 
-  // ── القصاصون / cutters ───────────────────────────────────
+  // ── القصاصين / cutters ───────────────────────────────────
   static const String cuttersWildcard = 'cutters.*';
   static const String cuttersView = 'cutters.view';
   static const String cuttersCreate = 'cutters.create';
@@ -63,7 +63,7 @@ class Perm {
   static const String cuttersToggle = 'cutters.toggle';
   static const String cuttersStatement = 'cutters.statement';
 
-  // ── الخياطون / tailors ───────────────────────────────────
+  // ── الخياطين / tailors ───────────────────────────────────
   static const String tailorsWildcard = 'tailors.*';
   static const String tailorsView = 'tailors.view';
   static const String tailorsCreate = 'tailors.create';
@@ -282,9 +282,9 @@ const Map<String, String> permModuleLabels = {
   'sales': 'المبيعات',
   'tailoring': 'كروت التفصيل',
   'customers': 'العملاء',
-  'employees': 'الموظفون',
-  'cutters': 'القصاصون',
-  'tailors': 'الخياطون',
+  'employees': 'الموظفين',
+  'cutters': 'القصاصين',
+  'tailors': 'الخياطين',
   'accounts': 'الحسابات',
   'currencies': 'العملات',
   'invoices': 'الفواتير',

@@ -6,6 +6,8 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/chart_account_model.dart';
 import '../providers/accounts_provider.dart';
@@ -259,46 +261,53 @@ class _AccountStatementScreenState extends ConsumerState<AccountStatementScreen>
                     title: 'لا توجد حركات',
                     subtitle: 'لا توجد حركات مسجلة لهذا الحساب في الفترة المحددة',
                   )
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.symmetric(vertical: 8,horizontal: 5),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 900),
-                        child: Card(
-                          // padding: const EdgeInsets.symmetric(horizontal: 3),
-                          margin: const EdgeInsets.symmetric(horizontal: 1),
-                          color: Colors.white,
-                          child: InteractiveViewer(
-                            minScale: 0.5,
-                            maxScale: 3,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                AccountStatementLetterhead(
-                                  letterhead: letterhead,
-                                  accName: _selectedAccName,
-                                  accNo: _selectedAccNo!,
-                                  currency: _statementData.currency,
-                                  fromDate: fromDateLabel,
-                                  toDate: toDateLabel,
-                                ),
-                                AccountStatementReportTable(
-                                  transactions: _statementData.transactions,
-                                  openingBalance: _statementData.openingBalance ?? 0,
-                                  finalBalance: _statementData.finalBalance ?? 0,
-                                  totalDebit: _statementData.totalDebit ?? 0,
-                                  totalCredit: _statementData.totalCredit ?? 0,
-                                ),
-                                AccountStatementReportFooter(
-                                  openingBalance: _statementData.openingBalance ?? 0,
-                                  totalDebit: _statementData.totalDebit ?? 0,
-                                  totalCredit: _statementData.totalCredit ?? 0,
-                                  finalBalance: _statementData.finalBalance ?? 0,
-                                ),
-                              ],
-                            ),
+                : InteractiveViewer(
+                    minScale: 0.5,
+                    maxScale: 3,
+                    // تمرير طبيعي للصفحة كاملة — بلا A4 مقصوص على الشاشة
+                    // Natural full-page scroll — no clipped on-screen A4.
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 8, horizontal: 5),
+                      child: ReportA4Sheet(
+                        orientation: ReportSheetOrientation.portrait,
+                        maxPageWidth: 900,
+                        // الترويسة + العنوان + بيانات الحساب داخل مكوّن واحد
+                        header: AccountStatementLetterhead(
+                          letterhead: letterhead,
+                          accName: _selectedAccName,
+                          accNo: _selectedAccNo!,
+                          currency: _statementData.currency,
+                          fromDate: fromDateLabel,
+                          toDate: toDateLabel,
+                        ),
+                        // المتن: الجدول + ملخص الأرصدة — يتمرّر داخل المتن
+                        body: SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              AccountStatementReportTable(
+                                transactions: _statementData.transactions,
+                                openingBalance:
+                                    _statementData.openingBalance ?? 0,
+                                finalBalance:
+                                    _statementData.finalBalance ?? 0,
+                                totalDebit: _statementData.totalDebit ?? 0,
+                                totalCredit: _statementData.totalCredit ?? 0,
+                              ),
+                              AccountStatementReportFooter(
+                                openingBalance:
+                                    _statementData.openingBalance ?? 0,
+                                totalDebit: _statementData.totalDebit ?? 0,
+                                totalCredit: _statementData.totalCredit ?? 0,
+                                finalBalance:
+                                    _statementData.finalBalance ?? 0,
+                              ),
+                            ],
                           ),
                         ),
+                        // التذييل الرسمي الموحّد (يُضاف — كان مفقوداً)
+                        footer: const ReportSignatureFooter(),
                       ),
                     ),
                   ),
