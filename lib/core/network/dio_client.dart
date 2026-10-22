@@ -36,8 +36,27 @@ class DioClient {
         connectTimeout: ApiConstants.connectTimeout,
         receiveTimeout: ApiConstants.receiveTimeout,
         headers: {
-          'Content-Type': 'application/json',
           'Accept': 'application/json',
+        },
+      ),
+    );
+
+    // نُعيّن Content-Type فقط للطلبات التي تحمل جسماً (POST/PUT/PATCH…)؛ طلبات GET
+    // بلا جسم تبقى "بسيطة" وفق CORS فلا تثير طلب_preflight (OPTIONS) على الويب.
+    // Set Content-Type only for requests that actually carry a body; body-less GETs
+    // stay CORS-simple and never trigger a preflight (OPTIONS) round-trip on the web.
+    dio.interceptors.add(
+      InterceptorsWrapper(
+        onRequest: (options, handler) {
+          final method = options.method.toUpperCase();
+          final hasBody =
+              options.data != null && method != 'GET' && method != 'HEAD';
+          if (hasBody &&
+              options.headers[Headers.contentTypeHeader] == null) {
+            options.headers[Headers.contentTypeHeader] =
+                Headers.jsonContentType;
+          }
+          handler.next(options);
         },
       ),
     );

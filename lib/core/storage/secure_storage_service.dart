@@ -34,6 +34,12 @@ class SecureStorageService {
   static const String _appLogoPathKey = 'ky_app_logo_path'; // مسار ملف الشعار المحلي
   static const String _apiPasswordHashKey = 'ky_api_pw_hash'; // تجزئة محلية للاحتياط دون اتصال
 
+  // تخطيط الواجهة الرئيسية — تفضيل مستخدم لا حالة جلسة: يبقى بعد الخروج، ويُفصل بحارس
+  // `user_id` داخل البلوب نفسه، ويمسحه `purgeEverything` وحده.
+  // Home layout — a user preference, not session state: survives logout, separated by the
+  // `user_id` guard inside the blob, and wiped only by `purgeEverything`.
+  static const String _homeLayoutKey = 'ky_home_layout';
+
   /// حفظ رمز الوصول (Token)
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
@@ -262,6 +268,27 @@ class SecureStorageService {
   /// Delete the local API-settings password hash.
   Future<void> deleteApiPasswordHash() async {
     await _storage.delete(key: _apiPasswordHashKey);
+  }
+
+  // ── تخطيط الواجهة الرئيسية (الاختصارات) ──────────────────
+  // Home layout (shortcuts).
+
+  /// حفظ تخطيط الرئيسية كنص JSON
+  /// Persist the home layout as JSON text.
+  Future<void> saveHomeLayout(String json) async {
+    await _storage.write(key: _homeLayoutKey, value: json);
+  }
+
+  /// قراءة التخطيط المخزّن (null = لم يخصّص المستخدم بعد)
+  /// Read the stored layout (null means the user has not customised yet).
+  Future<String?> getHomeLayout() async {
+    return await _storage.read(key: _homeLayoutKey);
+  }
+
+  /// حذف التخطيط — للعودة إلى أول تشغيل
+  /// Delete the layout, returning to first run.
+  Future<void> deleteHomeLayout() async {
+    await _storage.delete(key: _homeLayoutKey);
   }
 }
 

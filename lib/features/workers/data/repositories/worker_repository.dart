@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import '../../../../core/network/dio_client.dart';
 import '../models/worker_model.dart';
 import '../models/worker_statement_model.dart';
+import '../models/worker_work_report_model.dart';
 
 /// نتيجة عملية العامل
 class WorkerResult {
@@ -160,6 +161,35 @@ class WorkerRepository {
           'rows': rows,
           'summary': body['summary'],
         };
+      }
+      return null;
+    } on DioException catch (e) {
+      if (CancelToken.isCancel(e)) return null;
+      rethrow;
+    }
+  }
+
+  /// كشف عمل العامل (القصاص/الخياط) - جدول كشف العمل فقط (تاريخ|موديل|عدد|سعر|إجمالي)
+  /// Work report for a cutter/tailor — the work table only, never the financial statement.
+  Future<WorkerWorkReport?> fetchWorkReport(
+    WorkerType type,
+    int id, {
+    String? fromDate,
+    String? toDate,
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final resp = await client.dio.get(
+        '/workers/${type.apiPath}/$id/work-report',
+        queryParameters: {
+          if (fromDate != null && fromDate.isNotEmpty) 'from_date': fromDate,
+          if (toDate != null && toDate.isNotEmpty) 'to_date': toDate,
+        },
+        cancelToken: cancelToken,
+      );
+      final body = resp.data as Map<String, dynamic>;
+      if (body['success'] == true) {
+        return WorkerWorkReport.fromJson(body);
       }
       return null;
     } on DioException catch (e) {

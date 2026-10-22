@@ -11,6 +11,7 @@ import '../presentation/screens/sections/settings_section.dart';
 import '../presentation/screens/sections/stores_section.dart';
 import '../presentation/screens/sections/tailoring_section.dart';
 import '../presentation/screens/sections/workers_section.dart';
+import 'portal_section_titles.dart';
 
 /// قسم واحد في بوابة الموظف: هويّة ثابتة + عنوان + أيقونة + شرط ظهور + شاشة
 /// One employee-portal section: stable id, title, icon, visibility rule, and its screen.
@@ -66,7 +67,7 @@ class PortalSection {
 const List<PortalSection> portalSections = [
   PortalSection(
     id: 'home',
-    title: 'الرئيسية',
+    title: PortalSectionTitles.home,
     icon: Icons.dashboard_outlined,
     selectedIcon: Icons.dashboard_rounded,
     builder: _buildHome,
@@ -75,7 +76,7 @@ const List<PortalSection> portalSections = [
   ),
   PortalSection(
     id: 'sales',
-    title: 'المبيعات',
+    title: PortalSectionTitles.sales,
     icon: Icons.point_of_sale_outlined,
     selectedIcon: Icons.point_of_sale_rounded,
     builder: _buildSales,
@@ -84,7 +85,7 @@ const List<PortalSection> portalSections = [
   ),
   PortalSection(
     id: 'tailoring',
-    title: 'التفصيل',
+    title: PortalSectionTitles.tailoring,
     icon: Icons.content_cut_outlined,
     selectedIcon: Icons.content_cut_rounded,
     builder: _buildTailoring,
@@ -93,7 +94,7 @@ const List<PortalSection> portalSections = [
   ),
   PortalSection(
     id: 'customers',
-    title: 'العملاء',
+    title: PortalSectionTitles.customers,
     icon: Icons.people_outline_rounded,
     selectedIcon: Icons.person_rounded,
     builder: _buildCustomers,
@@ -104,7 +105,7 @@ const List<PortalSection> portalSections = [
   // «جاري العاملين» spans three registries, so any one of their view codes is enough to show it.
   PortalSection(
     id: 'workers',
-    title: 'جاري العاملين',
+    title: PortalSectionTitles.workers,
     icon: Icons.groups_2_rounded,
     builder: _buildWorkers,
     viewCodes: [
@@ -115,7 +116,7 @@ const List<PortalSection> portalSections = [
   ),
   PortalSection(
     id: 'accounts',
-    title: 'الحسابات',
+    title: PortalSectionTitles.accounts,
     icon: Icons.account_balance_outlined,
     selectedIcon: Icons.account_balance_rounded,
     builder: _buildAccounts,
@@ -124,21 +125,21 @@ const List<PortalSection> portalSections = [
   ),
   PortalSection(
     id: 'stores',
-    title: 'المخازن',
+    title: PortalSectionTitles.stores,
     icon: Icons.inventory_2_outlined,
     builder: _buildStores,
     viewCodes: [Perm.storesView],
   ),
   PortalSection(
     id: 'management',
-    title: 'الإدارة',
+    title: PortalSectionTitles.management,
     icon: Icons.admin_panel_settings_outlined,
     builder: _buildManagement,
     viewCodes: [Perm.managementView],
   ),
   PortalSection(
     id: 'settings',
-    title: 'الإعدادات',
+    title: PortalSectionTitles.settings,
     icon: Icons.settings_outlined,
     builder: _buildSettings,
   ),

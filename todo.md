@@ -751,3 +751,50 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 
 **التحقق / Verification:** `flutter analyze` (الشاشة) = لا مشاكل · `php -l` = سليم · `flutter test` **108/108**.
 **لم يَمَسّ:** لا DDL/INSERT/DELETE على القاعدة (تحقق للقراءة فقط عبر oracledb MCP)، لا مسارات API جديدة، لا تعديل منطق حلّ النطاق في `group_statement_scope.dart` (كان سليماً).
+
+---
+
+### [2026-10-22 17:10] — الواجهة الرئيسية: لوحة اختصارات مربّعة قابلة للتخصيص
+**النموذج المنفّذ:** AutoClaw Agent
+**المطلب / Requirement:** «خطة متكاملة لتطوير الواجهة الرئيسية وإضافة اختصارات إليها من جميع
+الأقسام وإمكانية تخصيص الاختصارات التي تظهر، على شكل بطائق مربعة مرتبة ومنظمة وبتصميم احترافي».
+
+- [x] **المجال:** `home_shortcut.dart` (هدف مختوم: قسم/شاشة/مسار/تدفّق) + `home_shortcut_catalog.dart`
+      (30 بطاقة) + `home_shortcut_flows.dart` (كشف حساب عميل، تعديل عميل، سجل نشاط).
+- [x] **الحالة والتخزين:** `HomeLayout` (opt-out للافتراضي وopt-in لغيره، حارس `user_id`)، مستودع
+      بلا شبكة، `HomeLayoutNotifier` (حفظ متفائل + سلسلة كتابة + عدّاد نسخة يمنع دهس نقرة المستخدم
+      بقراءة تخزين متأخرة)، ومفتاح `ky_home_layout` في `SecureStorageService`.
+- [x] **الشبكة:** أعمدة محسوبة بحد أدنى 150dp، نسبة مربّعة 1:1، بطاقة بأيقونة وعنوان من سطرين
+      وسطر قسم وشارة «قيد التطوير»، وتحويم/ضغط متحركان.
+- [x] **الرئيسية:** ترويسة (تحية + تاريخ عربي يدوي بلا `intl`)، شرائح تصفية الأقسام، الحالات الخمس
+      (تحميل/نجاح/تصفية فارغة/الكل مخفي/لا منح)، وتلميح أول تشغيل.
+- [x] **التخصيص:** شاشة كاملة بتبويبين وبحث وإعادة ترتيب واستعادة افتراضي، وورقة خيارات بالضغط المطوّل.
+- [x] **الهيكل:** `PortalSectionScope` + `_openSection` بفحص صلاحية، وإصلاح مؤشر الشريط السفلي حين
+      يكون القسم المفتوح خارج الشريط، واستخراج عناوين الأقسام إلى ثوابت.
+- [x] **الاختبارات:** 3 ملفات جديدة (39 اختبارًا) + 7 حالات في `responsive_layout_test.dart`.
+
+**التحقق / Verification:** `flutter analyze` = التحذيران القائمان مسبقًا فقط · `flutter test`
+**153 ناجحًا / 3 فاشلة** (الفاشلة الثلاث سابقة للتعديل) · `dart format` على الملفات الجديدة.
+**لم يَمَسّ:** لا حزم جديدة، لا مسار GoRouter جديد، لا تغيير في الخلفية أو القاعدة.
+
+
+## [2026-10-22] تقرير "كشف حساب عمل القصاص / الخياط" (مطابقة FOR_CUTTER_TAILOR / FOR_TAILOR)
+- [x] **الباك-إند:** إضافة `fetchWorkReport` في `WorkerController` (جدول `CUTTER_FROM_CALC`/`TAILOR_FROM_CALC` فقط، بدون الكشف المالي) + مفتاحا `work_*` في مصفوفة `TABLES` + غلفا `workReportCutter/workReportTailor`.
+- [x] **المسارات:** `GET /workers/cutters/{id}/work-report` و`GET /workers/tailors/{id}/work-report` خلف `permission:cutters.statement`/`tailors.statement` (لا صلاحيات جديدة).
+- [x] **الفلاتر:** موديل `worker_work_report_model.dart` + `fetchWorkReport` بالمستودع + `worker_work_report_provider.dart` (CancelToken) + شاشة `worker_work_report_screen.dart` + جدول `worker_work_report_table.dart` + مولّد PDF موحّد.
+- [x] **الميزات:** ترويسة/تذييل رسميان من `APP_SETTINGS`، طباعة/تصدير PDF، تكبير/تصغير (InteractiveViewer 0.5–3)، فلاتر تاريخ جاهزة (اليوم/أسبوع/شهر/سنة/كل) + إخفاء الفلتر + زر التحديث. الفترة الافتراضية = اليوم.
+- [x] **الأعمدة:** التاريخ | الموديل | العدد | السعر | الإجمالي + سطرا "إجــمالي العدد" و"الإجمــالي لكم".
+- [x] **الربط:** زر "كشف عمل" بقائمتي القصاصين/الخياطين يفتح الشاشة (الموظفون يبقى SnackBar).
+**التحقق:** `php -l` سليم · `route:list` يظهر المسارين · Pest `BusinessRoutesSealedTest` 6/6 (77 assertion) · `flutter analyze` نظيف للملفات الجديدة · `flutter test` workers 5/5 · تحقق MCP: أسطر CUTTER_FROM_CALC/TAILOR_FROM_CALC مطابقة لسطور الـ PDF.
+
+
+## [2026-10-22] تعديل: الفترة الافتراضية لكشف عمل القصاص/الخياط = آخر يوم يوجد به سجل
+- [x] **الباك-إند:** في `fetchWorkReport` عند عدم إرسال تواريخ أصبح يبحث أولاً عن `MAX(تاريخ العمل)` لربط `ACC_NO` للعامل (استعلام `SELECT TO_CHAR(MAX(...))` عبر نفس JOIN المعتمد) ويعيّن ذلك اليوم (من = إلى) كفترة افتراضية؛ وإن لا توجد سجلات نهائياً يعود لتاريخ اليوم كقيمة آمنة.
+- [x] **الفلاتر:** `worker_work_report_screen.dart` لم يعد يملأ التاریخين بالیوم في `initState` (يتركهما فارغين لیحدّدهما الخادم) ثم یعكس الفترة العائدة من `summary.from_date/to_date` على حقول الفلتر عبر `ref.listen` عند أوّل تحميل (`_awaitingDefaultDates` + `_parseDmy`).
+**التحقق:** `php -l` سليم · Pint PASS · MCP: قصاص ACC_NO=12910001 وخیاط 12910004 یُرجعان 16/08/2026 مع أسطر فعلیة · `flutter analyze` نظیف · `flutter test` workers 5/5.
+
+
+## [2026-10-22] إصلاح: تجاوز عرض شاشة كشف العمل + تحذير CORS على طلبات GET
+- [x] **الـOverflow:** `RenderFlex overflowed by 26 pixels on the right` كان من تذييل التوقيعات (3 × عرض ثابت 110 = 330px > ~304px على الهاتف). أصبحت الخانات `Expanded` مرنة مع فاصل `double.infinity` ونص وسط قابل للالتفاف.
+- [x] **الاستجابة/CORS:** كانت headers الأساسية فرض `Content-Type: application/json` حتى على GET بلا جسم فتثير preflight (OPTIONS). أُزيلت من `BaseOptions` وأُضيف معترض ضبط Content-Type فقط للطلبات ذات الجسم (GET/HEAD تبقى بسيطة).
+**التحقق:** `flutter analyze lib/core/network lib/features/workers` نظیف · `flutter test` workers 5/5 · الاستجابة نفسها سليمة (success:true، فترة 16/08/2026 بأسطرها).

@@ -5,6 +5,7 @@ import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../domain/portal_sections.dart';
 import '../widgets/collapsible_side_drawer.dart';
+import '../widgets/portal_section_scope.dart';
 
 /// الهيكل الرئيسي لبوابة الموظف المتجاوب بالكامل مع مختلف أحجام الشاشات
 /// Main Employee Portal Layout with Responsive Sidebar / Drawer and Top Bar
@@ -27,6 +28,10 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
   /// المعرّف المختار حالياً — من السجل، وليس فهرساً
   /// The selected section id, taken from the registry rather than a numeric position.
   String _currentSectionId = portalSections.first.id;
+
+  /// آخر قسم اختاره المستخدم من الشريط السفلي — يُستخدم حين يكون القسم المفتوح خارج الشريط
+  /// The last section picked from the bottom bar — used while the open section is outside the bar.
+  String _lastBarSectionId = portalSections.first.id;
   bool _isCollapsed = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -79,6 +84,43 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     return 0;
   }
 
+  /// الانتقال إلى قسم من داخل قسم آخر (بطاقات الرئيسية) — بالمعرّف لا بالفهرس
+  /// Switches sections from within a section (home tiles) — by id, never by index.
+  ///
+  /// الصلاحية تُفحص هنا مرة أخرى: البطاقة قد تكون رُسمت قبل أن يسحب المدير منحتها، والقناة
+  /// لا تثق بمن يناديها.
+  /// The grant is re-checked here: the tile may have been drawn before an admin revoked it, and
+  /// the channel does not trust its caller.
+  void _openSection(String id) {
+    if (!mounted) return;
+    final auth = ref.read(authNotifierProvider);
+    final visible = visiblePortalSections(
+      granted: auth.permissions,
+      isAdmin: auth.isAdmin,
+    );
+    if (!visible.any((section) => section.id == id)) return;
+
+    setState(() => _currentSectionId = id);
+  }
+
+  /// مؤشر الشريط السفلي: القسم الحالي إن كان في الشريط، وإلا آخر اختيار منه، وإلا الأول
+  /// Bottom-bar index: the current section if it sits in the bar, else the last bar choice, else 0.
+  ///
+  /// الرجوع إلى `0` كان يقول للمستخدم إنه في «الرئيسية» وهو في «المخازن» — خلل قديم يصير
+  /// يوميًا بمجرد أن تفتح الرئيسية أقسامًا ليست في الشريط.
+  /// Falling back to `0` told the user they were on «الرئيسية» while «المخازن» was open — an old
+  /// bug that turns daily once home can open sections the bar does not hold.
+  int _barIndexFor(List<PortalSection> barSections, String currentId) {
+    final direct = barSections.indexWhere((section) => section.id == currentId);
+    if (direct >= 0) return direct;
+
+    final last = barSections.indexWhere(
+      (section) => section.id == _lastBarSectionId,
+    );
+
+    return last >= 0 ? last : 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authNotifierProvider);
@@ -104,8 +146,17 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     final barSections = visible
         .where((section) => section.showInBottomBar)
         .toList(growable: false);
-    final barSelectedIndex = barSections.indexWhere(
-      (section) => section.id == visible[currentIndex].id,
+
+    // قناة الأقسام تُلفّ الشجرة مرة واحدة: كل الأقسام تراها والرئيسية وحدها تستخدمها، فلا
+    // يعرف الهيكل من ينادي ولا تحتاج البطاقة إلى معامل يمرّ عبر تسعة أبنائن
+    // The section channel wraps the stack once: every section sees it, only home uses it, so the
+    // shell never knows the caller and a tile needs no parameter threaded through nine children.
+    final portalStack = PortalSectionScope(
+      openSection: _openSection,
+      child: IndexedStack(
+        index: currentIndex,
+        children: [for (final section in visible) section.builder(context)],
+      ),
     );
 
     // واجهة القائمة الجانبية المشتركة
@@ -218,10 +269,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
             ),
           ],
         ),
-        body: IndexedStack(
-          index: currentIndex,
-          children: [for (final section in visible) section.builder(context)],
-        ),
+        body: portalStack,
         // الشريط يعرض الأقسام المسموح بها والموسومة له فقط: كانت الوجهة الخامسة فيه تقابل
         // الفهرس 4 من تسعة، فكان اختيار «الحسابات» يفتح «جاري العاملين»
         // The bar lists only the sections that are both allowed and flagged for it. Previously its
@@ -234,9 +282,13 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
         bottomNavigationBar: barSections.length < 2
             ? null
             : NavigationBar(
-                selectedIndex: barSelectedIndex < 0 ? 0 : barSelectedIndex,
+                selectedIndex: _barIndexFor(
+                  barSections,
+                  visible[currentIndex].id,
+                ),
                 onDestinationSelected: (idx) {
                   setState(() {
+                    _lastBarSectionId = barSections[idx].id;
                     _currentSectionId = barSections[idx].id;
                   });
                 },
@@ -350,14 +402,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   ),
                 ),
 
-                Expanded(
-                  child: IndexedStack(
-                    index: currentIndex,
-                    children: [
-                      for (final section in visible) section.builder(context),
-                    ],
-                  ),
-                ),
+                Expanded(child: portalStack),
               ],
             ),
           ),

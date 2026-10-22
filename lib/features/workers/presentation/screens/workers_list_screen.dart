@@ -7,6 +7,7 @@ import '../providers/workers_provider.dart';
 import '../widgets/worker_action_icons.dart';
 import 'add_edit_worker_screen.dart';
 import 'worker_statement_screen.dart';
+import 'worker_work_report_screen.dart';
 
 /// شاشة قائمة العمال المشتركة (تعمل للموظفين والقصاصين والخياطين)
 class WorkersListScreen extends ConsumerStatefulWidget {
@@ -368,7 +369,7 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
           lightColor: widget.lightColor,
           workReportLabel: widget.workReportLabel,
           onStatement: () => _goToStatement(workers[index]),
-          onWorkReport: () => _showWorkReportInfo(workers[index]),
+          onWorkReport: () => _goToWorkReport(workers[index]),
           onEdit: () => _goToEdit(workers[index]),
           onToggle: () => _toggleStatus(workers[index]),
           onDelete: () => _confirmDelete(workers[index]),
@@ -377,11 +378,27 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
     );
   }
 
-  void _showWorkReportInfo(WorkerModel worker) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('${widget.workReportLabel} لـ ${worker.name} - قيد التطوير'),
-        backgroundColor: AppColors.info,
+  void _goToWorkReport(WorkerModel worker) {
+    // كشف العمل متاح للقصاص والخياط فقط؛ الموظفون ("كشف حضور") ما زالوا خارج النطاق.
+    // Work report covers cutters/tailors only; employees ("attendance") remain out of scope.
+    if (worker.type == WorkerType.employee) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.workReportLabel} لـ ${worker.name} - قيد التطوير'),
+          backgroundColor: AppColors.info,
+        ),
+      );
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => WorkerWorkReportScreen(
+          workerId: worker.id,
+          workerType: worker.type,
+          workerName: worker.name,
+          accNo: worker.accNo,
+        ),
       ),
     );
   }

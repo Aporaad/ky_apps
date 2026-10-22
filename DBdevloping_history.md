@@ -674,3 +674,22 @@ SELECT * FROM (SELECT em.ENTRY_NO,
   صار يجد لهما صفاً (وإلا رمى «الإعداد غير معروف»).
 - الملف المكافئ القابل للتكرار: `kyApp_API/database/oracle/05_app_settings_company_en.sql`.
 - كل SQL (تشخيصي وكاتبي) موثّق حرفياً في `db_commends.md` بنفس الوقت.
+
+
+## [2026-10-22] كشف عمل القصاص/الخياط — قراءة الجداول (لا DDL)
+- **الجداول المستخدمة (قراءة فقط):** `ACCOUNTS.CUTTER_FROM_CALC` (CUTTER_NO, STYLE_NAME, CUTTING_DATE, POST, AMT) و`ACCOUNTS.TAILOR_FROM_CALC` (TAILOR_NO, STYLE_NAME, TAILOR_DATE, POST, AMT, AMT_ALL) + `CUTTER`/`TAILOR` (ACC_NO, CUR_NO) + `CUR_CODE` (CODE, MAIN_CUR_NAME).
+- **لا إنشاء/تعديل/حذف:** التقرير يقرأ فقط؛ `AMT` للقصاص = الإجمالي (السعر يُحسب AMT/POST)، `AMT_ALL` للخياط = الإجمالي النهائي (يتضمن ADDCOST2/3).
+- **الفلترة:** `CUTTER.ACC_NO=:acc AND CUTTING_DATE BETWEEN TO_DATE(from) AND TO_DATE(to)` — نفس صيغة الـ RDF الأصلي.
+- **الترميز:** `STYLE_NAME` مخزّن Windows-1256 ويصل mojibake (مثل `ÞØÑí`)؛ يُصلَح عبر `ArabicEncoding::fixMojibake` بالخادم و`ArabicEncodingUtils.fix` بالعميل.
+- **التحقق عبر oracledb MCP:** ACC_NO=12910001 (قصاص) و12910004 (خياط) أرجعا أسطراً مطابقة لقيم PDF المرفق (قطري/حجازي/قطري جاهز + الأسعار 400/700/250/1600...).
+
+
+## [2026-10-22] الفترة الافتراضية لكشف العمل = MAX(تاريخ العمل) للعامل (قراءة فقط)
+- **منطق جدید (قراءة):** تحدید آخرین یوم عمل عبر `SELECT TO_CHAR(MAX(w.CUTTING_DATE/TAILOR_DATE),'YYYY-MM-DD')` بالربط على `ACC_NO` — لا DDL ولا جداول جدیدة.
+- **تحقّق oracledb MCP:** قصاص `ACC_NO=12910001` => آخر یوم 2026-08-16 بأسطر (حجازي 8/5600، عُماني 7/2800، قطري 12/4800)؛ خیاط `ACC_NO=12910004` => آخرین یوم 2026-08-16.
+- **سلوك آمن:** عند عدم وجود أي سجل للعامل یعود الكود إلى تاریخ الیوم (لا یُرجع خطأ).
+
+
+## [2026-10-22] لا تغییر في قاعدة البیانات (إصلاح واجهة/شبكة فقط)
+- الإصلاح یتعلّق بتجاوز تخطيط في شاشة كشف العمل (Flutter) وبسُلوك ترويسة HTTP في عمیل Dio (CORS) — لا SQL جدید، لا DDL، لا جداول.
+- الاستجابة المرجعة من `work-report` تأیّد سلیمة (success:true، الفترة الافتراضیة 16/08/2026 مع الأسطر) قبل وبعد الإصلاح.

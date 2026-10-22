@@ -1281,3 +1281,83 @@ Already fully implemented; verified only.
 - في `_maybeApplyDefaults` كان اختيار أول حساب فرعي مكتوباً `list[1].accSub` (يختار الثاني ويرمي `RangeError`
   عند وجود عنصر واحد)؛ صُحّح إلى `list.first.accSub` التزاماً مع المتطلب «أول حساب في الجدول».
 - التحقق بعد التصحيح: `flutter analyze` = لا مشاكل · `flutter test test/features/accounts/account_group_statement_screen_test.dart` = **+3 ناجح**.
+
+## [2026-10-22 17:10] الواجهة الرئيسية: لوحة اختصارات مربّعة قابلة للتخصيص
+**النموذج:** AutoClaw Agent
+
+### المطلب
+«خطة متكاملة لتطوير الواجهة الرئيسية وإضافة اختصارات إليها من جميع الأقسام وإمكانية تخصيص
+الاختصارات التي تظهر، على شكل بطائق مربعة مرتبة ومنظمة وبتصميم احترافي» — ونُفِّذت الخطة
+المكتوبة في `home_dashboard_plan.md`.
+
+### ما كان قبل
+- `home_dashboard_section.dart` ملف من 19 سطرًا يعيد `PortalSectionScaffold` بحالة فارغة.
+- لا قناة للتنقل بين الأقسام: `_currentSectionId` حالة محلية في `EmployeeMainLayout` لا تُغيَّر إلا
+  من الدرج/الشريط.
+- لا مخزن تفضيلات في المشروع، ولا `shared_preferences`، و`path_provider` بلا تنفيذ ويب.
+
+### ما نُفِّذ
+- **ميزة جديدة `lib/features/home/`** (14 ملفًا): مجال (اختصار + هدف مختوم بأربعة أنواع + كتالوج
+  30 بطاقة + تدفّقات منتقي←شاشة)، وبيانات (نموذج `HomeLayout` + مستودع بلا شبكة)، وعرض
+  (مزوّد `HomeLayoutNotifier` + شاشة الرئيسية + شاشة التخصيص + ستة ودجت).
+- **بطاقات مربّعة** (`childAspectRatio: 1`) بعدد أعمدة محسوب بحد أدنى 150dp، فتصمد على 320dp
+  وعند تكبير الخط 1.25.
+- **اختصارات من كل الأقسام**: 26 وجهة عاملة + 3 أقسام بشارة «قيد التطوير» + بطاقة تخصيص دائمة.
+  13 بطاقة في التشكيلة الأولى لمدير النظام، وتنقص تلقائيًا بنقص المنح.
+- **تخصيص كامل**: تبويبا «المفعّلة/المتاحة»، إعادة ترتيب بـ `ReorderableListView`، إخفاء/إظهار،
+  بحث، واستعادة افتراضي، مع ورقة خيارات بالضغط المطوّل على البطاقة.
+- **حفظ محلي** بمفتاح `ky_home_layout` في `SecureStorageService`، بصيغة opt-out للبطاقات
+  الافتراضية وopt-in لغيرها (`order` + `shown` + `hidden` + حارس `user_id`)، والبلوب التالف أو
+  التابع لمستخدم آخر يعني «أول تشغيل».
+- **قناة أقسام** `PortalSectionScope` (InheritedWidget) تلفّ `IndexedStack` في الموضعين، مع فحص
+  الصلاحية مرة أخرى عند الطلب، وإصلاح مؤشر الشريط السفلي حين يكون القسم المفتوح خارج الشريط.
+- **عناوين الأقسام** استُخرجت إلى `portal_section_titles.dart` ليقرأها السجل والرئيسية معًا بدل نسخها.
+
+### الاختبارات
+- `test/home_layout_test.dart` (18): قراءة دفاعية، تطبيع، دمج، ثبات المثبّتة، دورة JSON.
+- `test/home_catalog_test.dart` (12): تفرّد المعرّفات، مطابقة الأكواد لمرآة الصلاحيات، مطابقة كل
+  `SectionTarget` لـ `viewCodes` في السجل، 13 افتراضيًا، وبطاقة مثبّتة واحدة، وفلترة المنح.
+- `test/home_notifier_test.dart` (9): إخفاء/إظهار، ترتيب، استعادة، بلوب تالف، مستخدم آخر، سحب منح،
+  وسباق «قراءة أبطأ من نقرة المستخدم».
+- `test/responsive_layout_test.dart` (+7): الشبكة على 360×640 و1280×800، مستخدم بصلاحية قراءة
+  واحدة، إخفاء الكل، تكبير 1.25، بطاقة قسم تنادي القناة، شاشة التخصيص على مقاسين، والهيكل يفتح
+  على الشبكة.
+
+**التحقق / Verification:** `flutter analyze` = **تحذيران قائمان مسبقًا فقط** (خيار `ignore ignore`
+في `analysis_options.yaml`، ومتغير غير مستخدم في `biometric_login_button.dart`) · `flutter test` =
+**153 ناجحًا / 3 فاشلة**، والفاشلة الثلاث هي نفسها في خط الأساس قبل التعديل
+(`account_group_statement_screen_test.dart`) · لا تغيير في `pubspec.yaml` ولا مسار جديد في
+`app_router.dart`.
+**لم يَمَسّ:** لا تغييرات في `kyApp_API/` ولا في Oracle، ولا حزم جديدة، ولا ملفات الحوكمة.
+
+
+## [2026-10-22] تقرير كشفي عمل القصاص والخياط — Flutter + Laravel API
+**الوصف:** إنشاء تقريري "كشف حساب عمل القصاص" و"كشف حساب عمل الخياط" منسوخين من قالب أوراكل `FOR_CUTTER_TAILOR`/`FOR_TAILOR` مع استخدام جدول **كشف العمل فقط** (لا الكشف المالي ENTRY_MAIN/ENTRY_SUB).
+**API (kyApp_API):**
+- `WorkerController::fetchWorkReport(type, request, id)` — JOIN على `CUTTER_FROM_CALC`/`TAILOR_FROM_CALC` مع جدول العامل بالـ `ACC_NO` وفلترة `BETWEEN TO_DATE`. السعر = الإجمالي/العدد؛ الإجمالي = `AMT` (قصاص) / `AMT_ALL` (خياط، يشمل ADDCOST). إرجاع envelope موحّد مع worker/data/summary (total_count, total_amount, currency عبر `CUR_CODE`).
+- مفاتيح `work_table/work_join_col/work_date_col/work_style_col/work_qty_col/work_total_col` في `TABLES` (cutters/tailors فقط).
+- مسارَان خلف `permission:cutters.statement` / `permission:tailors.statement` (إعادة استخدام الصلاحية، لا أكواد IBAC جديدة). تحديث `BusinessRoutesSealedTest` بعينتين. `vendor/bin/pint` نظيف.
+**Flutter (lib/features/workers):**
+- `data/models/worker_work_report_model.dart` (WorkerWorkRow/WorkerWorkReport، قراءة مزدوجة المفاتيح، أرقام دفاعية، `ArabicEncodingUtils.fix`).
+- `repositories/worker_repository.dart`: `fetchWorkReport`.
+- `presentation/providers/worker_work_report_provider.dart`: Notifier + CancelToken + `ref.onDispose`.
+- `presentation/widgets/worker_work_report_table.dart`: جدول 5 أعمدة RTL برأس ذهبي وسطري إجمالي.
+- `presentation/screens/worker_work_report_screen.dart`: افتراضي = اليوم، فلاتر جاهزة، ترويسة/تذييل رسميان، تكبير/تصغير، 4 حالات، طباعة/تصدير خلف `PermissionGate`.
+- `presentation/utils/worker_work_report_pdf_builder.dart`: يستخدم الترويسة/التذييل/التوقيعات الموحّدة في `report_pdf_page.dart`.
+- `workers_list_screen.dart`: استبدال SnackBar بـ `_goToWorkReport` (دفع الشاشة لـ cutter/tailor).
+**النتيجة:** `flutter analyze` نظيف · flutter test workers 5/5 · Pest 6/6 · لا DDL ولا جداول جديدة.
+**لم يمسّ:** لا هجرة قاعدة بيانات، لا صلاحيات جديدة، لا مسار GoRouter جديد.
+
+
+## [2026-10-22] تعديل الفترة الافتراضية لكشف العمل — آخر يوم سجل (بدلاً من اليوم الحالي)
+**المطلوب:** عند فتح كشف عمل القصاص/الخياط بدون تواريخ، لا نعرض اليوم الحالي، بل نبحث عن تاريخ آخر سجل عمل فعلي للعامل ونجعله الفترة الافتراضية ونجلب التقرير عليه.
+**WorkerController::fetchWorkReport:** نُقلت تعريفات الأعمدة/الجداول قبل منطق التاریخ؛ عند خلوّ `from_date`/`to_date` من الطلب یُنفَّذ `SELECT TO_CHAR(MAX(w.<dateCol>),'YYYY-MM-DD') FROM <calc> w, <reg> r WHERE w.<join>=r.<join> AND r.ACC_NO=:acc` ویُعیَّن الناتج (من = إلى)؛ وإن صفراً سجلات فالاحتیاط `Carbon::today()`. حال إرسال تاریخ واحد فقط یُطابَق للطرفین. لا تغییر في المسارات ولا الصلاحيات.
+**Flutter worker_work_report_screen.dart:** `initState` یترک التاریخین null؛ متغيّر `_awaitingDefaultDates` یتتبّع أوّل طلب بلا تواریخ؛ بعد رجوع التقرير یُستخرَج `fromDate/toDate` (dd/mm/yyyy عبر `_parseDmy`) ویُحدَّث حقلا الفلتر بـ `setState` داخل `ref.listen` ليبقى العرض مطابقاً للفترة المعتمدة. لا یمسّ السلوك عند استخدام النطاقات الجاهزة أو التحديد اليدوي.
+**النتیجة:** `flutter analyze` نظیف · workers 5/5 · Pint PASS · تحقّق MCP أن الافتراضي 16/08/2026 یُرجع أسطراً حقیقیة.
+
+
+## [2026-10-22] إصلاح حجم شاشة كشف العمل (تجاوز أفقي) وضجيج CORS في الشبكة
+**المشكلة (من سجل المستخدم):** بعد نجاح جلب كشف العمل (القصاص والخیاط) یُرمی `A RenderFlex overflowed by 26 pixels on the right`، وكل طلب GET یطبع تحذیر Dio حول preflight لكون `Content-Type: application/json` غیر ضمن قائمة CORS البسیطة.
+**۱) التجاوز — worker_work_report_screen.dart:** سببه صرّف `_signatureFooter`: ثلاثة `_sigSlot` بعرض ثابت `SizedBox(width:110)` داخل `Row` (المجموع 330px) يتجاوز عرض المحتوى على الهاتف (~304px بعد الحواشی). أضحى كل خانة `Expanded` (توزیع متساوٍ على العرض المتاح) مع `Divider` بـ`SizedBox(width: double.infinity)` و`Text(textAlign:center)`، وحُذف `MainAxisAlignment.spaceAround`. عناصر `Expanded` لا تتجاوز أفقیاَ ریاضیاَ. بقیة الشاشة آمنة: شريط البيانات `Wrap` والفلاتر `Expanded` والجدول `LayoutBuilder+Table` بأعمدة مرنة.
+**۲) CORS — lib/core/network/dio_client.dart:** أُزيل `Content-Type` من `BaseOptions.headers` (بقي `Accept`) وأُضيف `InterceptorsWrapper.onRequest` یعین `Headers.jsonContentType` فقط عندما یوجد جسم والطرقة لیست GET/HEAD (ویتجنّب الدهس على أنواع multipart/الصریح). الطلبات الأصلیة (POST) ما زالت تصل JSON للـLaravel، أما GET فتصبح بسيطة بلا preflight.
+**التحقق:** analyze نظیف على النطاقین · workers 5/5 · المنطق حتمي لإزالة التجاوز (Expanded محدودة بعرض الـRow).

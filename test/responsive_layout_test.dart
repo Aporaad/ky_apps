@@ -33,6 +33,13 @@ import 'package:ky_apps/features/auth/data/models/permission_snapshot_model.dart
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:ky_apps/features/employee_portal/domain/portal_sections.dart';
 import 'package:ky_apps/features/employee_portal/presentation/screens/employee_main_layout.dart';
+import 'package:ky_apps/features/employee_portal/presentation/widgets/portal_section_scope.dart';
+import 'package:ky_apps/features/home/data/models/home_layout.dart';
+import 'package:ky_apps/features/home/domain/home_shortcut_catalog.dart';
+import 'package:ky_apps/features/home/presentation/providers/home_layout_notifier.dart';
+import 'package:ky_apps/features/home/presentation/screens/home_dashboard_screen.dart';
+import 'package:ky_apps/features/home/presentation/screens/home_customize_screen.dart';
+import 'package:ky_apps/features/home/presentation/widgets/home_shortcut_card.dart';
 
 /// مزود مصادقة وهمي للحالات الثابتة — بلا فحص حالة وبلا شبكة
 /// Stub auth notifier with a fixed state: no status check, no network.
@@ -736,4 +743,228 @@ void main() {
       });
     }
   });
+
+  group('Home dashboard', () {
+    const mobile = Size(360, 640);
+    const desktop = Size(1280, 800);
+
+    testWidgets('a system admin sees the shortcut grid on mobile', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: mobile,
+        auth: _stateWith(codes: const [], isAdmin: true),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(6));
+      expect(find.textContaining('الموظف'), findsWidgets);
+    });
+
+    testWidgets('a system admin sees the shortcut grid on desktop', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: desktop,
+        auth: _stateWith(codes: const [], isAdmin: true),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(12));
+    });
+
+    testWidgets('a read-only user gets five cards, not thirty', (tester) async {
+      // سطح مرتفع عمدًا: الشبكة كسولة داخل `SingleChildScrollView`، فالبطاقة الخامسة تحت
+      // الطيّة لا تُبنى — والعدّ على سطح قصير كان سيقيس التمرير لا الصلاحيات.
+      // A tall surface on purpose: the grid is lazy inside the scroll view, so the fifth card
+      // below the fold is never built — counting on a short surface would measure scrolling.
+      await _pumpHome(
+        tester,
+        size: const Size(360, 1200),
+        auth: _stateWith(codes: const [Perm.customersView]),
+      );
+
+      expect(tester.takeException(), isNull);
+      // أربع لا خمس: «الأمان والبصمة» مسموحة لكنها ليست في التشكيلة الأولى، فهي في «المتاحة»
+      // Four, not five: «الأمان والبصمة» is allowed but not a first-run card, so it waits in
+      // the "available" tab until the user adds it.
+      expect(find.byType(HomeShortcutCard), findsNWidgets(4));
+      expect(find.text('إضافة عميل'), findsNothing);
+      expect(find.text('كشف حساب عميل'), findsNothing);
+    });
+
+    testWidgets('hiding everything keeps the pinned card and explains why', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: mobile,
+        auth: _stateWith(codes: const [], isAdmin: true),
+        layout: HomeLayout(
+          userId: 1,
+          hidden: {
+            for (final shortcut in homeShortcutCatalog)
+              if (!shortcut.pinned) shortcut.id,
+          },
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeShortcutCard), findsOneWidget);
+      expect(
+        find.text('أخفيت كل الاختصارات — يمكنك استعادتها الآن.'),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('survives the maximum allowed text scale on mobile', (
+      tester,
+    ) async {
+      await _pumpHome(
+        tester,
+        size: mobile,
+        auth: _stateWith(codes: const [], isAdmin: true),
+        textScale: 1.25,
+      );
+
+      expect(tester.takeException(), isNull);
+    });
+
+    for (final entry in {'mobile': mobile, 'desktop': desktop}.entries) {
+      testWidgets('the customise screen renders — ${entry.key}', (tester) async {
+        await _pumpCustomize(tester, size: entry.value);
+
+        expect(tester.takeException(), isNull);
+        expect(find.text('تخصيص الاختصارات'), findsOneWidget);
+        expect(find.textContaining('المفعّلة'), findsWidgets);
+      });
+    }
+
+    testWidgets('the portal shell opens on the home grid', (tester) async {
+      tester.view.physicalSize = desktop;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider.overrideWith(
+              () => _StubAuthNotifier(_stateWith(codes: const [], isAdmin: true)),
+            ),
+          ],
+          child: const MaterialApp(home: EmployeeMainLayout()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // الهيكل يفتح على «الرئيسية» ويستبدل الحالة الفارغة القديمة بالشبكة
+      // The shell opens on «الرئيسية» and replaces the old empty state with the grid.
+      expect(tester.takeException(), isNull);
+      expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(6));
+    });
+
+    testWidgets('a section card asks the shell for that section', (tester) async {
+      String? opened;
+      await _pumpHome(
+        tester,
+        size: mobile,
+        auth: _stateWith(codes: const [Perm.customersView]),
+        openSection: (id) => opened = id,
+      );
+
+      await tester.tap(find.byType(HomeShortcutCard).first);
+      await tester.pumpAndSettle();
+
+      // البطاقة الأولى في هذه المنح هي «العملاء» — هدفها قسم لا شاشة
+      // The first card under these grants is «العملاء» — a section target, not a screen.
+      expect(opened, 'customers');
+    });
+  });
+}
+
+/// حالة تخطيط ثابتة: لا تخزين ولا قرص في الاختبار
+/// A fixed layout state: no storage and no disk in the test.
+class _StubHomeLayoutNotifier extends HomeLayoutNotifier {
+  _StubHomeLayoutNotifier(this._initial);
+
+  final HomeLayoutState _initial;
+
+  @override
+  HomeLayoutState build() => _initial;
+}
+
+/// يحمّل شاشة التخصيص بنفس المنح والتخطيط الثابتين
+/// Pumps the customise screen with the same fixed grants and layout.
+Future<void> _pumpCustomize(
+  WidgetTester tester, {
+  required Size size,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authNotifierProvider.overrideWith(
+          () => _StubAuthNotifier(_stateWith(codes: const [], isAdmin: true)),
+        ),
+        homeLayoutNotifierProvider.overrideWith(
+          () => _StubHomeLayoutNotifier(
+            HomeLayoutState(layout: HomeLayout.firstRun(1)),
+          ),
+        ),
+      ],
+      child: const MaterialApp(home: HomeCustomizeScreen()),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// يحمّل الرئيسية على قياس معيّن بمنح وتخطيط ثابتين، ويُوصّلها بقناة أقسام وهمية
+/// Pumps home at a given size with fixed grants and layout, wired to a fake section channel.
+Future<void> _pumpHome(
+  WidgetTester tester, {
+  required Size size,
+  required AuthState auth,
+  HomeLayout? layout,
+  void Function(String sectionId)? openSection,
+  double textScale = 1,
+}) async {
+  tester.view.physicalSize = size;
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+
+  final state = HomeLayoutState(layout: layout ?? HomeLayout.firstRun(1));
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        authNotifierProvider.overrideWith(() => _StubAuthNotifier(auth)),
+        homeLayoutNotifierProvider.overrideWith(
+          () => _StubHomeLayoutNotifier(state),
+        ),
+      ],
+      child: MaterialApp(
+        builder:
+            textScale == 1
+                ? null
+                : (context, child) => MediaQuery(
+                  data: MediaQuery.of(
+                    context,
+                  ).copyWith(textScaler: TextScaler.linear(textScale)),
+                  child: child ?? const SizedBox.shrink(),
+                ),
+        home: Scaffold(
+          body: PortalSectionScope(
+            openSection: openSection ?? (_) {},
+            child: const HomeDashboardScreen(),
+          ),
+        ),
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
 }

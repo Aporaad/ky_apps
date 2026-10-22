@@ -1275,3 +1275,65 @@ SELECT NVL(DBMS_TRANSACTION.LOCAL_TRANSACTION_ID,'NONE') FROM DUAL;   -- NONE �
 - لا `UPDATE` ولا `DELETE` على أي صف قائم؛ العدد من 22 إلى 24 صفاً.
 - لا أعمدة جديدة ولا جدول جديد — `APP_SETTINGS` key-value كما هو.
 - الملف المكافئ للتكرار لاحقاً: `kyApp_API/database/oracle/05_app_settings_company_en.sql`.
+
+
+## [2026-10-22] استعلامات التحقق من كشف العمل (oracledb MCP — قراءة فقط)
+```sql
+-- مخطط الجداول
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS'
+   AND TABLE_NAME IN ('CUTTER_FROM_CALC','TAILOR_FROM_CALC','CUTTER','TAILOR') ORDER BY TABLE_NAME, COLUMN_ID;
+
+-- قصاص (ACC_NO=12910001) — يوم واحد للتأكد من مطابقة PDF
+SELECT TO_CHAR(w.CUTTING_DATE,'DD/MM/YYYY') WORK_DATE, w.STYLE_NAME,
+       NVL(w.POST,0) QTY, NVL(w.AMT,0) TOTAL
+  FROM ACCOUNTS.CUTTER_FROM_CALC w, ACCOUNTS.CUTTER r
+ WHERE w.CUTTER_NO=r.CUTTER_NO AND r.ACC_NO=12910001
+   AND w.CUTTING_DATE BETWEEN TO_DATE('03/07/2026','DD/MM/YYYY')
+       AND TO_DATE('03/07/2026','DD/MM/YYYY')+1-1/86400
+ ORDER BY w.CUTTING_DATE, w.STYLE_NAME;
+-- => حجازي(2/1400) قطري(10/4000) قطري جاهز(2/500) لابقوت(1/400) مطابقة للسعر 700/400/250/400
+
+-- خياط (ACC_NO=12910004)
+SELECT t.STYLE_NAME, TO_CHAR(t.TAILOR_DATE,'DD/MM/YYYY') T_DATE, t.POST, t.AMT, t.AMT_ALL
+  FROM ACCOUNTS.TAILOR_FROM_CALC t, ACCOUNTS.TAILOR tl
+ WHERE t.TAILOR_NO=tl.TAILOR_NO AND tl.ACC_NO=12910004
+   AND t.TAILOR_DATE BETWEEN TO_DATE('09/07/2026','DD/MM/YYYY') AND TO_DATE('22/07/2026','DD/MM/YYYY')
+ ORDER BY t.TAILOR_DATE;
+-- => AMT_ALL هو الإجمالي المعروض (15/07 قطري جاهز: AMT=3000 AMT_ALL=4800 POST=3 => سعر 1600)
+
+-- ربط العملة
+SELECT ct.CUR_NO, cc.CODE, cc.MAIN_CUR_NAME FROM ACCOUNTS.CUTTER ct
+ LEFT JOIN ACCOUNTS.CUR_CODE cc ON cc.CUR_NO=ct.CUR_NO WHERE ct.ACC_NO=12910001;
+-- => CUR_NO=1, CODE=YR, MAIN_CUR_NAME="ريال يمني" (bytes CP1256)
+```
+**ملاحظة:** لا `INSERT/UPDATE/DELETE` — كل ما سبق `SELECT` للتحقق فقط. التنفيذ الفعلي يتم داخل `WorkerController::fetchWorkReport` عبر oci8.
+
+
+## [2026-10-22] تحقّق من منطق "آخر يوم سجل" لكشف العمل (oracledb MCP — قراءة فقط)
+```sql
+-- القصاص: تاريخ آخر سجل عمل للـ ACC_NO (الفترة الافتراضية الجديدة)
+SELECT r.ACC_NO, TO_CHAR(MAX(w.CUTTING_DATE),'YYYY-MM-DD') LAST_DATE
+  FROM ACCOUNTS.CUTTER_FROM_CALC w, ACCOUNTS.CUTTER r
+ WHERE w.CUTTER_NO=r.CUTTER_NO AND r.ACC_NO=12910001 GROUP BY r.ACC_NO;
+-- => 2026-08-16
+
+-- جلب التقرير على تلك الفترة (من = إلى = آخر يوم) للتأكد من وجود أسطر
+SELECT TO_CHAR(w.CUTTING_DATE,'DD/MM/YYYY') WORK_DATE, w.STYLE_NAME, NVL(w.POST,0) QTY, NVL(w.AMT,0) TOTAL
+  FROM ACCOUNTS.CUTTER_FROM_CALC w, ACCOUNTS.CUTTER r
+ WHERE w.CUTTER_NO=r.CUTTER_NO AND r.ACC_NO=12910001
+   AND w.CUTTING_DATE BETWEEN TO_DATE('2026-08-16','YYYY-MM-DD') AND TO_DATE('2026-08-16','YYYY-MM-DD')+1-1/86400;
+-- => حجازي(8/5600) عُماني(7/2800) قطري(12/4800)
+
+-- الخياط: نفس المنطق
+SELECT tl.ACC_NO, TO_CHAR(MAX(t.TAILOR_DATE),'YYYY-MM-DD') LAST_DATE
+  FROM ACCOUNTS.TAILOR_FROM_CALC t, ACCOUNTS.TAILOR tl
+ WHERE t.TAILOR_NO=tl.TAILOR_NO AND tl.ACC_NO=12910004 GROUP BY tl.ACC_NO;
+-- => 2026-08-16
+```
+**ملاحظة:** كل ما سبق `SELECT` للتحقق فقط؛ لا `INSERT/UPDATE/DELETE`. التنفيذ الفعلي داخل `WorkerController::fetchWorkReport`.
+
+
+## [2026-10-22] لا استعلامات جدیدة — الإصلاح واجهة/شبكة
+- لا تغییرات SQL في هذا الإصلاح؛ یتعلّق بتخطيط Flutter (إزالة التجاوز) وبإعدادات Dio HTTP (تقليل preflight على GET).
+- التحقق الوظيفي تمّ عبر استدعاء `work-report` (القصاص id=1، الخیاط id=2) الذي أعاد success:true مع أسطر یوم 16/08/2026.
