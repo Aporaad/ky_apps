@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/message_model.dart';
 import '../data/repositories/message_repository.dart';
+import '../data/repositories/service_result.dart';
 import 'services_providers.dart';
 
 /// قناة الرسائل — تُحدد المستودع والمسار
@@ -120,6 +121,22 @@ class MessagesNotifier extends Notifier<MessagesState> {
   /// إعادة المحاولة بعد نجاح عملية كتابة
   /// Refresh after a successful write.
   void refresh() => load();
+
+  /// تعديل رسالة منتظرة ثم إعادة الجلب — يُرجع نتيجة الخادم للواجهة لتعرض الرسالة
+  /// Update a pending message then reload — returns the server result so the UI can toast it.
+  Future<ServiceResult> updateMessage(int id, Map<String, dynamic> payload) async {
+    final result = await _repo.update(id, payload);
+    if (result.success) load();
+    return result;
+  }
+
+  /// حذف رسالة منتظرة من الطابور ثم إعادة الجلب
+  /// Delete a pending queued message then reload.
+  Future<ServiceResult> deleteMessage(int id) async {
+    final result = await _repo.delete(id);
+    if (result.success) load();
+    return result;
+  }
 }
 
 final messagesProvider = NotifierProvider.family<MessagesNotifier, MessagesState, MessageChannel>(

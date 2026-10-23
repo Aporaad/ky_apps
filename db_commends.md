@@ -1412,3 +1412,10 @@ SELECT LOG_DATE, RUN_DURATION, SUCCEEDED, STATUS, "ERROR#", ADDITIONAL_INFO
 -- (موديلات العميل تقرأ snake_case، وسطران في متحكّمين يقرآن `id`/`status` بحروف صغيرة).
 -- الاختبارات (Pest) أجاعت SELECTات قراءة فقط عبر التطبيق على USER_SCHEDULER_JOBS ورسائل الطوابير؛
 -- لا DDL ولا INSERT/UPDATE/DELETE يدوي. لا تغيير في هيكل الجداول.
+
+-- 2026-10-23 08:10 (Qoder agent) — ترتيب الرسائل + تفعيل تعديل/حذف الطابور:
+-- لم يُنفَّذ أي أمر SQL مباشر على قاعدة البيانات. التغيير في طبقة الاستعلام داخل المتحكّم فقط:
+-- ORDER BY CREATED_AT DESC, ID DESC (فردي) ومفتاح ترتيب مركّب لدمج status=all.
+-- عمليات UPDATE/DELETE للرسائل تُنفَّذ عبر مسارات التطبيق الموجودة (`PUT`/`DELETE /{sms|whatsapp}/messages/{id}`)
+-- على جدول *_QUEUE فقط، خلف صلاحيات sms.update/delete وwhatsapp.update/delete — لا SQL يدوي.
+-- اختبار Pest (ServicesSectionTest) قراءة فقط. لا DDL ولا تغيير هيكل.

@@ -7,6 +7,7 @@ import '../../../../../core/constants/permission_codes.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/widgets/permission_gate.dart';
 import '../../../data/models/message_model.dart';
+import '../../../data/repositories/message_repository.dart';
 import '../../../providers/messages_provider.dart';
 import '../../../providers/services_providers.dart';
 import '../../widgets/message_status_segments.dart';
@@ -159,7 +160,7 @@ class _MessageLogScreenState extends ConsumerState<MessageLogScreen> {
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      builder: (_) => _MessageDetailSheet(message: message),
+      builder: (_) => _MessageDetailSheet(message: message, channel: widget.channel),
     );
   }
 }
@@ -260,12 +261,18 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-/// تفاصيل الرسالة بالنص الكامل — تُجلب من الخادم عند فتحها
-/// Message detail with full text — fetched from the server on open.
+/// تفاصيل الرسالة بالنص الكامل — تُجلب من الخادم عند فتحها، مع تعديل/حذف للمنتظرة فقط
+/// Message detail with full text — fetched on open, with edit/delete for pending rows only.
+///
+/// القيد: الخادم يسمح بالتعديل والحذف على صفوف الطابور (`IS_SENT='N'`) فقط؛ فالمُرسلة/الفاشلة
+/// موجودة في الأرشفة وتُعرض للقراءة. الأزرار مُقيّدة بصلاحية القناة (update/delete) على الجانبين.
+/// Constraint: the server only allows edit/delete on queue rows (IS_SENT='N'); sent/failed live in
+/// the archive and are read-only. Buttons are gated by the channel's update/delete permission.
 class _MessageDetailSheet extends ConsumerStatefulWidget {
-  const _MessageDetailSheet({required this.message});
+  const _MessageDetailSheet({required this.message, required this.channel});
 
   final MessageModel message;
+  final MessageChannel channel;
 
   @override
   ConsumerState<_MessageDetailSheet> createState() => _MessageDetailSheetState();
@@ -274,21 +281,101 @@ class _MessageDetailSheet extends ConsumerStatefulWidget {
 class _MessageDetailSheetState extends ConsumerState<_MessageDetailSheet> {
   late Future<MessageModel?> _future;
 
+  // وضع التحرير — الحقول مُهيّأة من الرسالة الكاملة عند الضغط على «تعديل»
+  // Edit mode — fields populated from the full message when the user taps "edit".
+  bool _editing = false;
+  bool _saving = false;
+  final TextEditingController _textCtrl = TextEditingController();
+  final TextEditingController _mobileCtrl = TextEditingController();
+  final TextEditingController _customerCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _future = _load();
   }
 
-  Future<MessageModel?> _load() async {
-    // نص القائمة معاينة فقط؛ التفاصيل تجلب النص الكامل من نفس القناة
-    // The list shows only a preview; detail fetches the full text from the same channel.
-    final isWa = widget.message.status != MessageStatus.unknown &&
-        widget.message.filePath != null;
-    final repo = isWa
-        ? ref.read(whatsappRepositoryProvider)
-        : ref.read(smsRepositoryProvider);
-    return repo.fetchMessage(widget.message.id);
+  @override
+  void dispose() {
+    _textCtrl.dispose();
+    _mobileCtrl.dispose();
+    _customerCtrl.dispose();
+    super.dispose();
+  }
+
+  bool get _isWhatsapp => widget.channel == MessageChannel.whatsapp;
+
+  String get _updateCode =>
+      _isWhatsapp ? Perm.whatsappUpdate : Perm.smsUpdate;
+
+  String get _deleteCode =>
+      _isWhatsapp ? Perm.whatsappDelete : Perm.smsDelete;
+
+  // مستودع القناة الصحيح — عبر المعامل المُرر، لا باستنتاج من filePath (قد يكون فارقًا في المعاينة)
+  // The right channel repository — driven by the passed channel, not inferred from filePath.
+  MessageRepository get _repo => _isWhatsapp
+      ? ref.read(whatsappRepositoryProvider)
+      : ref.read(smsRepositoryProvider);
+
+  Future<MessageModel?> _load() => _repo.fetchMessage(widget.message.id);
+
+  void _startEdit(MessageModel m) {
+    _textCtrl.text = m.msgText;
+    _mobileCtrl.text = m.mobileNo ?? '';
+    _customerCtrl.text = m.customerName ?? '';
+    setState(() => _editing = true);
+  }
+
+  Future<void> _save(MessageModel m) async {
+    final text = _textCtrl.text.trim();
+    if (text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('نص الرسالة مطلوب')),
+      );
+      return;
+    }
+    setState(() => _saving = true);
+    final res = await ref
+        .read(messagesProvider(widget.channel).notifier)
+        .updateMessage(m.id, {
+      'msg_text': text,
+      'mobile_no': _mobileCtrl.text.trim(),
+      'customer_name': _customerCtrl.text.trim(),
+    });
+    if (!mounted) return;
+    setState(() => _saving = false);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.message)));
+    if (res.success) {
+      setState(() => _editing = false);
+      _future = _load(); // أعِد جلب النص الكامل بعد التعديل / refetch full text after the update
+    }
+  }
+
+  Future<void> _delete(MessageModel m) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('حذف الرسالة'),
+        content: Text('حذف الرسالة #${m.id} من الطابور؟ لا يمكن التراجع.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('إلغاء'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('حذف', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final res = await ref
+        .read(messagesProvider(widget.channel).notifier)
+        .deleteMessage(m.id);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(res.message)));
+    if (res.success) Navigator.pop(context); // أغلق الورقة بعد الحذف / close the sheet after delete
   }
 
   @override
@@ -300,7 +387,7 @@ class _MessageDetailSheetState extends ConsumerState<_MessageDetailSheet> {
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
         child: ConstrainedBox(
           constraints: BoxConstraints(
-            maxHeight: MediaQuery.sizeOf(context).height * 0.72,
+            maxHeight: MediaQuery.sizeOf(context).height * 0.8,
           ),
           child: FutureBuilder<MessageModel?>(
             future: _future,
@@ -312,52 +399,154 @@ class _MessageDetailSheetState extends ConsumerState<_MessageDetailSheet> {
                 );
               }
               final m = snap.data ?? widget.message;
+              final isPending = m.status == MessageStatus.pending;
               return SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text('تفاصيل الرسالة #${m.id}',
-                              style: const TextStyle(
-                                  fontSize: 16, fontWeight: FontWeight.bold)),
-                        ),
-                        _StatusBadge(status: m.status),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    _DetailRow('إلى', m.mobileNo ?? '—'),
-                    if (m.customerName != null)
-                      _DetailRow('العميل', m.customerName!),
-                    if (m.serviceId != null)
-                      _DetailRow('معرّف الخدمة', '${m.serviceId}'),
-                    if (m.providerId != null)
-                      _DetailRow('معرّف المزوّد', '${m.providerId}'),
-                    if (m.sendAttempt != null)
-                      _DetailRow('محاولات الإرسال', '${m.sendAttempt}'),
-                    if (m.createdAt != null) _DetailRow('التاريخ', m.createdAt!),
-                    if (m.fileName != null) _DetailRow('الملف', m.fileName!),
-                    if (m.errorMsg != null)
-                      _DetailRow('خطأ', m.errorMsg!, isError: true),
-                    const SizedBox(height: 8),
-                    const Divider(),
-                    const SizedBox(height: 6),
-                    const Text('نص الرسالة',
-                        style: TextStyle(fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 6),
-                    SelectableText(
-                      m.msgText.isEmpty ? '—' : m.msgText,
-                      style: const TextStyle(fontSize: 14, height: 1.5),
-                    ),
-                  ],
-                ),
+                child: _editing
+                    ? _buildEditForm(m)
+                    : _buildReadOnly(m, isPending),
               );
             },
           ),
         ),
       ),
+    );
+  }
+
+  // عرض للقراءة + أزرار التعديل/الحذف للمنتظرة فقط
+  // Read-only view plus edit/delete actions for pending rows only.
+  Widget _buildReadOnly(MessageModel m, bool isPending) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('تفاصيل الرسالة #${m.id}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            _StatusBadge(status: m.status),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _DetailRow('إلى', m.mobileNo ?? '—'),
+        if (m.customerName != null) _DetailRow('العميل', m.customerName!),
+        if (m.serviceId != null) _DetailRow('معرّف الخدمة', '${m.serviceId}'),
+        if (m.providerId != null) _DetailRow('معرّف المزوّد', '${m.providerId}'),
+        if (m.sendAttempt != null) _DetailRow('محاولات الإرسال', '${m.sendAttempt}'),
+        if (m.createdAt != null) _DetailRow('التاريخ', m.createdAt!),
+        if (m.fileName != null) _DetailRow('الملف', m.fileName!),
+        if (m.caption != null) _DetailRow('التعليق', m.caption!),
+        if (m.errorMsg != null) _DetailRow('خطأ', m.errorMsg!, isError: true),
+        const SizedBox(height: 8),
+        const Divider(),
+        const SizedBox(height: 6),
+        const Text('نص الرسالة', style: TextStyle(fontWeight: FontWeight.w600)),
+        const SizedBox(height: 6),
+        SelectableText(
+          m.msgText.isEmpty ? '—' : m.msgText,
+          style: const TextStyle(fontSize: 14, height: 1.5),
+        ),
+        if (isPending) ...[
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: PermissionGate(
+                  code: _updateCode,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _startEdit(m),
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    label: const Text('تعديل'),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: PermissionGate(
+                  code: _deleteCode,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _delete(m),
+                    icon: const Icon(Icons.delete_outline_rounded, size: 18, color: AppColors.error),
+                    label: const Text('حذف', style: TextStyle(color: AppColors.error)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  // نموذج تحرير صف منتظر — نص/رقم/عميل، مع حفظ وإلغاء
+  // Edit form for a pending row — text/mobile/customer, with save and cancel.
+  Widget _buildEditForm(MessageModel m) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text('تعديل الرسالة #${m.id}',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ),
+            _StatusBadge(status: m.status),
+          ],
+        ),
+        const SizedBox(height: 12),
+        const Text('نص الرسالة *', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _textCtrl,
+          minLines: 3,
+          maxLines: 8,
+          decoration: const InputDecoration(isDense: true),
+        ),
+        const SizedBox(height: 12),
+        const Text('الرقم', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _mobileCtrl,
+          keyboardType: TextInputType.phone,
+          decoration: const InputDecoration(isDense: true),
+        ),
+        const SizedBox(height: 12),
+        const Text('اسم العميل', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: _customerCtrl,
+          decoration: const InputDecoration(isDense: true),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: _saving ? null : () => setState(() => _editing = false),
+                child: const Text('إلغاء'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: _saving ? null : () => _save(m),
+                icon: _saving
+                    ? const SizedBox(
+                        width: 16, height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Icon(Icons.save_rounded, size: 18),
+                label: Text(_saving ? 'جارٍ الحفظ...' : 'حفظ'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

@@ -227,8 +227,25 @@ class _ServicesPanelState extends ConsumerState<_ServicesPanel> {
                 for (final s in widget.services)
                   ListTile(
                     dense: true,
-                    title: Text(s.serviceName),
-                    subtitle: s.serviceType != null ? Text(s.serviceType!) : null,
+                    contentPadding: EdgeInsets.zero,
+                    leading: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                      child: Text('${s.serviceId}',
+                          style: TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.primary)),
+                    ),
+                    // رقم + اسم + نوع الخدمة — تفاصيل واضحة بدل الاسم وحده
+                    // Service number + name + type — explicit details instead of name alone.
+                    title: Text(
+                      s.serviceName.isEmpty ? 'خدمة بلا اسم' : s.serviceName,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      'رقم: ${s.serviceId}'
+                      '${(s.serviceType != null && s.serviceType!.isNotEmpty) ? ' • النوع: ${s.serviceType}' : ''}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
                     trailing: PermissionGate(
                       code: Perm.servicesUpdate,
                       child: IconButton(

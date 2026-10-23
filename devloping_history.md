@@ -1693,3 +1693,33 @@ Already fully implemented; verified only.
 **التحقق:** `flutter analyze` (services+employee_portal+home) = **No issues found!** ·
 `flutter test` (services + home_catalog + ibac + responsive) = **98 ناجحًا** ·
 `vendor/bin/pint` للمتحكّمين = **passed** · `php artisan test --filter=ServicesSectionTest` = **6 passed** (ضد أوراكل الحيّة).
+
+---
+
+## تعديل/حذف الرسائل المنتظرة + ترتيب الأحدث أولاً + توضيح قاموس الخدمات — 2026-10-23 08:10 (Qoder agent)
+
+**المتطلبات (من أمر المستخدم):** إضافة تعديل/حذف لرسائل SMS والواتساب المنتظرة؛ جعل الرسائل تظهر
+الأحدث أولاً؛ ومعالجة عدم ظهور بيانات الحقول في إعدادات الرسائل وعدم ظهور اسم/رقم/تفاصيل الخدمات.
+
+**التحليل:** مسارات الخادم (`PUT/DELETE /sms|whatsapp/messages/{id}`) موجودة منذ البداية خلف
+`sms.update/delete` و`whatsapp.update/delete`، لكن الواجهة والـ notifier/المستودع لم تكن تستدعيها.
+والترتيب كان بالمعرّف فقط؛ وبقاءُ بيانات الإعدادات فارغةً راجعٌ لبناءٍ سابق لإصلاح الموديلات (الموديلات الآن تقرأ
+snake_case كما يثبت سجل الخادم الذي يُرجع `corp_name`/`service_name`).
+
+**التغييرات:**
+- `message_repository.dart`: إضافة `update(id, payload)` (PUT) وفرز دفاعي الأحدث أولاً داخل `fetchMessages`
+  (بـ `created_at` ثم `id`).
+- `messages_provider.dart`: `updateMessage`/`deleteMessage` في `MessagesNotifier` مع `load()` بعد نجاح الكتابة.
+- `message_log_screen.dart`: `_MessageDetailSheet` يستقبل `channel`؛ أزرار تعديل/حذف للصفوف المنتظرة فقط
+  (`MessageStatus.pending`) خلف `PermissionGate`؛ نموذج تحرير داخلي (نص/رقم/عميل) مع حفظ/إلغاء؛ حذف بتأكيد ثم إغلاق.
+  وإصلاح استنتاج القناة: كان من `filePath` (تخمينٌ هش) فصار من `channel` الممرَّر صراحةً.
+- `service_config_screen.dart`: بطاقات SERVICES تعرض الآن رقم الخدمة (شارة دائرية) + الاسم + النوع.
+- Backend `MessageChannelController::index`: الترتيب `CREATED_AT DESC, ID DESC` للفرع الفردي، ومفتاح ترتيب
+  مركّب (تأريخ + id ممدّد بأصفار) لفرع الدمج `status=all`.
+
+**التحقق:** `flutter analyze lib/features/services test/features/services` = **No issues found!** ·
+`flutter test` (services + home_catalog + ibac) = **54 ناجحًا** · `pint` = **passed** ·
+`php artisan test --filter=ServicesSectionTest` = **6 passed** (108 assertions) ضد أوراكل الحيّة.
+
+**ملاحظة تشغيلية:** يجب نشر تعديلَي الـ API (الترتيب + إصلاح `status=all` السابق) على `ky.alx.luxe`، وإعادة
+بناء التطبيق، حتى تظهر كل الإصلاحات في بيئة الاختبار الحالية (سجل المستخدم ما زال يُظهر الـ 500 أي لم يُنشَر بعد).
