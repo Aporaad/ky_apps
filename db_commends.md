@@ -1381,3 +1381,34 @@ WHERE w.CUTTER_NO = r.CUTTER_NO
 GROUP BY r.CUTTER_NAME, w.STYLE_NAME
 ORDER BY r.CUTTER_NAME, w.STYLE_NAME;
 -- Result: 10 rows, QTY total 236, TOTAL 71050
+
+
+
+-- [2026-10-23 10:30] Qoder Agent — قسم «الخدمات والمزودين»: بثّ الكتالوج + استعلامات فحص (لا DDL)
+-- 1) بثّ كتالوج IBAC (idempotent، بلا DDL): عبر Laravel، يحدّث الموجود ويُدرج 30 كودًا جديدًا
+--    للوحدات الخمس services/providers/sms/whatsapp/jobs → إجمالي 127. لا جداول جديدة.
+--    php artisan tinker database/oracle/02_ibac_seed.php
+
+-- 2) فحص المهام الزمنية الذي يقرأه JobController@index (قراءة فقط من منظور مستخدم ACCOUNTS):
+SELECT JOB_NAME, ENABLED, REPEAT_INTERVAL, JOB_TYPE, JOB_ACTION, STATE
+  FROM USER_SCHEDULER_JOBS
+ ORDER BY JOB_NAME;
+-- النتيجة المتوقّعة ضمن القسم: SEND_MSG (كل 3ث)، W_SEND_MSG (كل 20ث)، W_SEND_MSG_F (كل 14د).
+
+-- 3) سجل تشغيل مهمة (قراءة فقط، يُستخدم في /jobs/{name}/history — ترقيم بمقابل ROWNUM عبر yajra،
+--    لا FETCH FIRST لأن القاعدة 11g):
+SELECT LOG_DATE, RUN_DURATION, SUCCEEDED, STATUS, "ERROR#", ADDITIONAL_INFO
+  FROM USER_SCHEDULER_JOB_RUN_DETAILS
+ WHERE JOB_NAME = 'SEND_MSG'
+ ORDER BY LOG_DATE DESC;
+
+-- ملاحظة الكتابة: نقاط الرسائل تُدرج في *_QUEUE فقط بـ IS_SENT='N' (عبر MSG_QUEUE_TAPI حيث وُجد)؛
+-- لم نُشغّل أي DBMS_SCHEDULER CREATE/DROP/ENABLE تدميري يدويًا في هذا العمل — يتم حصريًا عبر
+-- متحكّم JobController خلف صلاحيات jobs.*، ولم يُستدعَ في الاختبارات (اختبار المهام قراءة فقط).
+-- ملاحظة DDL: لا إنشاء / لا تعديل / لا حذف لأي جدول أو sequence أو trigger.
+
+-- 2026-10-23 07:32 (Qoder agent) — إصلاح عرض قسم الخدمات:
+-- لم يُنفَّذ أي أمر SQL مباشر على قاعدة البيانات في هذا العمل. التغييرات كانت في الكود فقط
+-- (موديلات العميل تقرأ snake_case، وسطران في متحكّمين يقرآن `id`/`status` بحروف صغيرة).
+-- الاختبارات (Pest) أجاعت SELECTات قراءة فقط عبر التطبيق على USER_SCHEDULER_JOBS ورسائل الطوابير؛
+-- لا DDL ولا INSERT/UPDATE/DELETE يدوي. لا تغيير في هيكل الجداول.

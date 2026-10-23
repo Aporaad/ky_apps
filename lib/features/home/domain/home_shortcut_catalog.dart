@@ -21,6 +21,11 @@ import '../../workers/presentation/screens/cutters_list_screen.dart';
 import '../../workers/presentation/screens/employees_list_screen.dart';
 import '../../workers/presentation/screens/tailors_list_screen.dart';
 import '../../workers/presentation/screens/worker_group_work_report_screen.dart';
+import '../../services/presentation/screens/config/service_config_screen.dart';
+import '../../services/presentation/screens/jobs/jobs_list_screen.dart';
+import '../../services/presentation/screens/messaging/sms_log_screen.dart';
+import '../../services/presentation/screens/messaging/whatsapp_log_screen.dart';
+import '../../services/presentation/screens/providers/providers_list_screen.dart';
 import '../presentation/screens/home_customize_screen.dart';
 import 'home_shortcut.dart';
 import 'home_shortcut_flows.dart';
@@ -337,6 +342,66 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'management',
     target: FlowTarget(openUserActivity),
     codes: [Perm.usersActivityView],
+  ),
+
+  // ── الخدمات والمزودين / services ─────────────────────────
+  // بطاقات القسم كلها `defaultOn:false`: تظهر في التخصيص ولا تُحصى ضمن الافتراضية المحروسة
+  // Every services card is `defaultOn:false`: it surfaces in customization, not in the guarded default.
+  HomeShortcut(
+    id: 'services.section',
+    title: 'الخدمات والمزودين',
+    icon: Icons.category_rounded,
+    sectionId: 'services',
+    target: SectionTarget('services'),
+    // تُطابق `viewCodes` السجل حرفيًا — خمسة أكواد، لا أُنقص ولا أزيد
+    // Mirrors the registry viewCodes verbatim — five codes, neither fewer nor more.
+    codes: [
+      Perm.servicesView,
+      Perm.providersView,
+      Perm.smsView,
+      Perm.whatsappView,
+      Perm.jobsView,
+    ],
+  ),
+  HomeShortcut(
+    id: 'providers.list',
+    title: 'المزودون',
+    icon: Icons.local_shipping_rounded,
+    sectionId: 'services',
+    target: ScreenTarget(ProvidersListScreen.new),
+    codes: [Perm.providersView],
+  ),
+  HomeShortcut(
+    id: 'sms.log',
+    title: 'سجل الرسائل النصية',
+    icon: Icons.sms_rounded,
+    sectionId: 'services',
+    target: ScreenTarget(SmsLogScreen.new),
+    codes: [Perm.smsView],
+  ),
+  HomeShortcut(
+    id: 'whatsapp.log',
+    title: 'سجل رسائل واتساب',
+    icon: Icons.whatshot_rounded,
+    sectionId: 'services',
+    target: ScreenTarget(WhatsappLogScreen.new),
+    codes: [Perm.whatsappView],
+  ),
+  HomeShortcut(
+    id: 'services.config',
+    title: 'إعدادات الخدمات',
+    icon: Icons.tune_rounded,
+    sectionId: 'services',
+    target: ScreenTarget(ServiceConfigScreen.new),
+    codes: [Perm.servicesView],
+  ),
+  HomeShortcut(
+    id: 'jobs.manage',
+    title: 'إدارة المهام الزمنية',
+    icon: Icons.schedule_rounded,
+    sectionId: 'services',
+    target: ScreenTarget(JobsListScreen.new),
+    codes: [Perm.jobsView],
   ),
 
   // ── الإعدادات / settings ─────────────────────────────────

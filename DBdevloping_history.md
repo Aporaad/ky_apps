@@ -716,3 +716,39 @@ SELECT * FROM (SELECT em.ENTRY_NO,
 ## [2026-10-22 09:15] تجميع كشف عمل مجموعة — استعلام READ-only (SELECT/GROUP BY فقط، لا DDL)
 - لا تغييرات على مخطط قاعدة البيانات. تم تعديل الاستعلام داخل WorkerController فقط من أسطر لكل سجل إلى تجميع لكل (عامل + موديل).
 - تحقق SELECT للقصاصين للفترة 22/06/2026 - 25/06/2026: 10 أسطر مجمّعة، SUM(QTY)=236، SUM(TOTAL)=71050 (مطابق للإجــمالي في FOR_CUTTER_CALC.pdf بعد ضغط 24 سجلاً).
+
+
+## [2026-10-23 10:30] قسم «الخدمات والمزودين» — لا DDL، قراءة/كتابة عبر TAPI وDBMS_SCHEDULER فقط
+**النموذج:** Qoder Agent
+- **لا إنشاء جداول أعمال ولا sequences ولا triggers.** الجداول الثمانية موجودة أصلاً في مخطط
+  `ACCOUNTS`: `PROVIDERS`, `PROVIDERS_DTL`, `SERVICES`, `CORP`, `MSG_QUEUE`, `MSG_ARCHIVE`,
+  `W_MSG_QUEUE`, `W_MSG_ARCHIVE` (تم التحقق عبر oracledb MCP).
+- **توليد المعرّف بلا sequence:** `PROVIDERS`/`PROVIDERS_DTL` لا يملكان sequence ولا trigger،
+  فتُحسب `NVL(MAX(PROVIDER_ID),0)+1` داخل المتحكّم؛ التسابق مقبول لسجل منخفض التزامن.
+- **الإرسال عبر الطابور فقط:** الكتابة إلى `*_QUEUE` بـ `IS_SENT='N'` (عبر `MSG_QUEUE_TAPI` حيث
+  وُجد)؛ الإرسال الفعلي (Java `SendMessage`/`WhatsappSender`) يحدث داخل مهمة أوراكل لا في الـ API.
+  دلالة `IS_SENT`: N منتظرة (في `*_QUEUE`)، Y مُرسلة، F فاشلة (في `*_ARCHIVE`).
+- **CORP singleton بلا عمود مفتاح:** UPDATE لصفّ وحيد بشروط محدّدة داخل نطاق هذا العمل؛ لا محاولة
+  إضافة PK.
+- **المهام عبر `DBMS_SCHEDULER`:** قائمة/تاريخ من `USER_SCHEDULER_JOBS` و`USER_SCHEDULER_JOB_RUN_DETAILS`
+  (قراءة فقط)، و`CREATE_JOB`/`SET_ATTRIBUTE`/`ENABLE`/`DROP_JOB` للتحكم — لا واجهات سطر أوامر ولا
+  عامل طابور جديد. المهام الثلاث القائمة مُفعّلة: `SEND_MSG` (كل 3ث)، `W_SEND_MSG` (كل 20ث)،
+  `W_SEND_MSG_F` (كل 14د).
+- **الترميز:** أعمدة العربية (`PROVIDER_NAME`, `MSG_TEXT`, `CORP.*`, `SERVICES.*`) تصل mojibake
+  (WE8MSWIN1252) — تُصلَح بـ `ArabicEncoding::cleanData/fixMojibake` عند القراءة و`toOracleSearchChars`
+  عند الكتابة/البحث.
+- **بثّ الكتالوج:** شغّلنا `02_ibac_seed.php` (idempotent عبر `PermissionCatalog::rows()`) لإدراج
+  30 كودًا جديدًا → 127؛ لم نُنشئ جداول IBAC (موجودة) ولا منحًا أساسية (المدير `IS_ADMIN=1` يتجاوز).
+
+---
+
+### إصلاح خلل قراءة الأعمدة في قسم الخدمات — 2026-10-23 07:32 (Qoder agent)
+
+- **طبيعة البيانات:** `yajra-oci8` يُعيد أسماء أعمدة أوراكل بأحرف صغيرة snake_case (`provider_id`,
+  `msg_text_preview`, `job_name`, `corp_name`). لا تغيير في هيكل الجداول؛ التصحيح في طبقة
+  القراءة فقط (الموديلات على العميل + سطرين في متحكّمين على الخادم).
+- **عطل SQL/PHP:** `MessageChannelController::index` عند `status=all` كان يفرز الصفوف على
+  `['ID']` فينهار «Undefined array key "ID"» لأن المفتاح الفعلي `id` — أُصلح بقراءة `id ?? ID`.
+  نفس النمط في `ProviderController::toggle` مع `status ?? STATUS`.
+- **لا DDL / لا هجرات / لا sequences:** لم يُنشَأ أو يُعدَّل أو يُحذف أي جدول؛ لا يزال توليد
+  المعرّفات `NVL(MAX,0)+1` والإدراج في الطوابير فقط بـ `IS_SENT='N'`.

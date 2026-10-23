@@ -18,6 +18,7 @@ class PortalSectionTitles {
   static const String accounts = 'الحسابات';
   static const String stores = 'المخازن';
   static const String management = 'الإدارة';
+  static const String services = 'الخدمات والمزودين';
   static const String settings = 'الإعدادات';
 
   /// عنوان القسم بمعرّفه؛ والمعرّف المجهول يعود كما هو بدل أن يرمي
@@ -40,6 +41,8 @@ class PortalSectionTitles {
         return stores;
       case 'management':
         return management;
+      case 'services':
+        return services;
       case 'settings':
         return settings;
       default:

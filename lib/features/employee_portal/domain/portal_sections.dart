@@ -7,6 +7,7 @@ import '../presentation/screens/sections/customers_section.dart';
 import '../presentation/screens/sections/home_dashboard_section.dart';
 import '../presentation/screens/sections/management_section.dart';
 import '../presentation/screens/sections/sales_section.dart';
+import '../presentation/screens/sections/services_section.dart';
 import '../presentation/screens/sections/settings_section.dart';
 import '../presentation/screens/sections/stores_section.dart';
 import '../presentation/screens/sections/tailoring_section.dart';
@@ -137,6 +138,21 @@ const List<PortalSection> portalSections = [
     builder: _buildManagement,
     viewCodes: [Perm.managementView],
   ),
+  // القسم يظهر لأيٍّ من أكواد العرض الخمسة؛ ولا يُضاف إلى الشريط السفلي (يبقى خمسة)
+  // The section appears for any of the five view codes; it stays out of the bottom bar (keeps five).
+  PortalSection(
+    id: 'services',
+    title: PortalSectionTitles.services,
+    icon: Icons.category,
+    builder: _buildServices,
+    viewCodes: [
+      Perm.servicesView,
+      Perm.providersView,
+      Perm.smsView,
+      Perm.whatsappView,
+      Perm.jobsView,
+    ],
+  ),
   PortalSection(
     id: 'settings',
     title: PortalSectionTitles.settings,
@@ -190,4 +206,5 @@ Widget _buildWorkers(BuildContext _) => const WorkersSection();
 Widget _buildAccounts(BuildContext _) => const AccountsSection();
 Widget _buildStores(BuildContext _) => const StoresSection();
 Widget _buildManagement(BuildContext _) => const ManagementSection();
+Widget _buildServices(BuildContext _) => const ServicesSection();
 Widget _buildSettings(BuildContext _) => const SettingsSection();

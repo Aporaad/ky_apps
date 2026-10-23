@@ -1617,3 +1617,79 @@ Already fully implemented; verified only.
 
 **التحقق / Verification:** `flutter analyze` (الميزة والقشرة واختباراتها) = **No issues found!** ·
 `flutter test` = **198 ناجحًا / 0 فاشلة / 5 مُعلَّقة** · لقطات 390×844 بثلاثة أعمدة تؤكد التوسيط.
+
+
+## [2026-10-23 10:30] إضافة قسم «الخدمات والمزودين» (Flutter + API)
+**النموذج:** Qoder Agent
+
+### المطلب
+«نفّذ الخطة كما هي» — قسم جديد في بوابة الموظف بخمس وظائف (مزودون، رسائل SMS، رسائل واتساب،
+إعدادات الخدمات، المهام الزمنية) فوق جداول أوراكل الإرثية وحزم `*_TAPI`/`DBMS_SCHEDULER`،
+بصلاحيات IBAC دقيقة لكل قسم وكل عملية.
+
+### الطبقة الأمامية (Flutter)
+- مجلد ميزة واحد `lib/features/services/`: `data/models` (7)، `data/repositories` (7 خلف Dio)،
+  `providers` (Riverpod 3 بلا ترميز)، `presentation/{screens,widgets}`.
+- نماذج بعقد `CustomerModel`: مفاتيح مزدوجة الحالة `json['ID'] ?? json['id']`، مساعدات
+  `_parseInt/_parseString({isArabic})`، وكل حقل عربي عبر `ArabicEncodingUtils.fix()`.
+- مزوّد السجل `MessagesNotifier(this.channel)` كعائلة مع إهالة بحث 300ms وحارس تسابق
+  `_searchVersion` وإلغاء `CancelToken` عند dispose؛ ولا مؤقّت تلقائي لعدّاد الطابور (يتنافس مع
+  مهمة الـ3ثوانٍ)؛ سجل المهام `FutureProvider.autoDispose` بعائلة اسم المهمة.
+- 11 شاشة تعرض الحالات الأربع (تحميل/نجاح/فارغ/خطأ): لوحة القسم بخمس بلاطات خلف `PermissionGate`
+  لكل بلاطة، قائمة/نموذج/اشتراكات المزودين، سجل SMS/واتساب بشريط `SegmentedButton`
+  (الكل/المرسلة/المنتظرة/الفاشلة) + تفاصيل النص الكامل، شاشة التحرير، إعدادات CORP+SERVICES،
+  وقائمة/نموذج/سجل المهام. الاعتبارات خلف `credential_field` للإظهار/الإخفاء.
+- التسجيل: `PortalSectionTitles.services`، `PortalSection(id:'services', viewCodes:[5])` خارج
+  الشريط السفلي (يبقى 5)، `ServicesSection` رقيق فوق اللوحة، وبطاقات الرئيسية الستّ
+  `defaultOn:false` مع `services.section` يعكس `viewCodes` السجل حرفيًا (شرط الاختبار).
+
+### الطبقة الخلفية (Laravel)
+- `App\Http\Controllers\Services`: `ProviderController` (CRUD+toggle+اشتراكات؛ معرّف
+  `NVL(MAX,0)+1`؛ أقنعة `***` وكشف خلف `providers.reveal_credentials` موثّق في `ActivityLogger`)،
+  `MessageChannelController` مجردة يرثها `SmsController`/`WhatsappController` (فلترة الحالة في
+  `WHERE`، `SUBSTR(MSG_TEXT,1,80)` للمعاينة، إدراج في الطابور بـ `IS_SENT='N'` فقط بلا إرسال
+  متزامن)، `ServiceConfigController` (CORP singleton بدون مفتاح → UPDATE أحادي الصف)،
+  `JobController` عبر `DBMS_SCHEDULER`.
+- مسارات `api.php` كلها خلف `auth:sanctum` + `permission:<code>`؛ غلاف يدوي موحّد
+  `{success,message,data,meta{total,page,limit,pages}}`؛ ترميز عربي بـ `cleanData/fixMojibake`
+  عند القراءة و`toOracleSearchChars` عند الكتابة.
+
+### الصلاحيات (مرحلة 0)
+- خمس وحدات في `PermissionCatalog.php` = 30 كودًا → الكتالوج **127**؛ مرآة `permission_codes.dart`
+  مطابقة بالترتيب؛ بثّ `02_ibac_seed.php` (idempotent)؛ `IbacCoreTest.php:54` إلى 127.
+
+### الاختبارات
+- Dart `test/features/services/`: نماذج (موجيباك cp1256، أرقام كنص، مفاتيح مزدوجة، حالة IS_SENT،
+  ENABLED='TRUE')، مستودع بمحوّل `HttpClientAdapter` وهمي (نجاح/`success=false`/إلغاء/خطأ)،
+  ومُزوِّد السجل (إهالة استدعاء واحد بالأحدث + تجاهل ردٍّ قديم أبطأ).
+- Pest `ServicesSectionTest.php`: 401 جلسة، 403 لكل عملية بالاسم المسمّى (مع الاسم العربي في
+  الرسالة)، فصل كشف الاعتبارات عن العرض، غلاف المدير + أقنعة `***`. لا إدراج حقيقي في الطابور
+  (مهمة `SEND_MSG` سترسل فعلًا).
+
+**التحقق / Verification:** `flutter analyze` (services + employee_portal + home) = **No issues found!** ·
+`flutter test` على البوابة (`home_catalog`/`ibac`/`home_notifier`/`responsive_layout`) = **89 ناجحًا** ·
+`flutter test test/features/services` = **19 ناجحًا** · `php artisan test --filter=ServicesSectionTest` =
+**6 passed** · `vendor/bin/pint --dirty` = **passed** · لا DDL ولا هجرات لجداول الأعمال.
+
+---
+
+### إصلاح خلل عرض قسم «الخدمات والمزودين» — 2026-10-23 07:32 (Qoder agent)
+
+**المُبلَّغ:** الموردون والاشتراكات والرسائل النصية/واتساب وإعدادات الخدمات والمهام الزمنية —
+لا تظهر بياناتها، وتصميم اللوحة كبير وبه تجاوزات مساحة.
+
+**السبب الجذري (من سجل الشبكة):** الخادم عبر `yajra-oci8` يُرجع الأعمدة بحروف صغيرة snake_case
+(`provider_id`, `msg_text_preview`, `job_name`, `corp_name`, `service_name`)، بينما كانت موديلات
+القسم تقرأ `UPPERCASE`/`camelCase` فقط. بقية التطبيق (مثل `CustomerModel`) يقرأ `UPPER ?? lower_snake`،
+فكانت موديلات الخدمات هي الجانب الخاطئ.
+
+**التغييرات:**
+- موديلات (7): إضافة مفاتيح snake_case الصغيرة لكل حقول `fromJson` (provider/subscription/message/oracle_job/job_run/corp/service).
+- `services_dashboard_screen.dart`: بلاطات مدمجة أفقية بارتفاع ثابت محسوب (`childAspectRatio = cellWidth/84`) بدل بطاقات ضخمة بنسبة 1.5 — بلا تجاوز مهما طال النص.
+- `message_log_screen.dart`: ورقة التفاصيل صارت `ConstrainedBox(maxHeight: 0.72*screen)` + `SingleChildScrollView` بدل `Expanded` داخل عمود غير مُقيَّد (كان يُجاوز)، مع صفوف معلومة/قيمة أوضح.
+- `provider_subscriptions_screen.dart`: عرض اسم الخدمة بدل «خدمة #N» (ربط بقاموس SERVICES)، ونموذج الإضافة صار قائمة منسدلة للخدمات بدل إدخال رقم خام.
+- Backend: `MessageChannelController::index` قراءة `id ?? ID` في فرع الدمج (`status=all`) الذي كان ينهار 500؛ و`ProviderController::toggle` قراءة `status ?? STATUS`.
+
+**التحقق:** `flutter analyze` (services+employee_portal+home) = **No issues found!** ·
+`flutter test` (services + home_catalog + ibac + responsive) = **98 ناجحًا** ·
+`vendor/bin/pint` للمتحكّمين = **passed** · `php artisan test --filter=ServicesSectionTest` = **6 passed** (ضد أوراكل الحيّة).

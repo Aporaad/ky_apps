@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (97 كوداً في 18 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (127 كوداً في 23 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -144,6 +144,46 @@ class Perm {
   static const String appConfigUpdate = 'app_config.update';
   static const String appConfigApiManage = 'app_config.api_manage';
 
+  // ── الخدمات والمزودون / services ─────────────────────────
+  static const String servicesWildcard = 'services.*';
+  static const String servicesView = 'services.view';
+  static const String servicesUpdate = 'services.update';
+  static const String servicesSettingsManage = 'services.settings_manage';
+
+  // ── إدارة المزودين / providers ───────────────────────────
+  static const String providersWildcard = 'providers.*';
+  static const String providersView = 'providers.view';
+  static const String providersCreate = 'providers.create';
+  static const String providersUpdate = 'providers.update';
+  static const String providersDelete = 'providers.delete';
+  static const String providersToggle = 'providers.toggle';
+  static const String providersSubscriptionsManage = 'providers.subscriptions_manage';
+  static const String providersRevealCredentials = 'providers.reveal_credentials';
+
+  // ── خدمة الرسائل النصية / sms ────────────────────────────
+  static const String smsWildcard = 'sms.*';
+  static const String smsView = 'sms.view';
+  static const String smsCreate = 'sms.create';
+  static const String smsUpdate = 'sms.update';
+  static const String smsDelete = 'sms.delete';
+  static const String smsToggle = 'sms.toggle';
+
+  // ── خدمة رسائل واتساب / whatsapp ─────────────────────────
+  static const String whatsappWildcard = 'whatsapp.*';
+  static const String whatsappView = 'whatsapp.view';
+  static const String whatsappCreate = 'whatsapp.create';
+  static const String whatsappUpdate = 'whatsapp.update';
+  static const String whatsappDelete = 'whatsapp.delete';
+  static const String whatsappToggle = 'whatsapp.toggle';
+
+  // ── إدارة المهام الزمنية / jobs ──────────────────────────
+  static const String jobsWildcard = 'jobs.*';
+  static const String jobsView = 'jobs.view';
+  static const String jobsCreate = 'jobs.create';
+  static const String jobsUpdate = 'jobs.update';
+  static const String jobsDelete = 'jobs.delete';
+  static const String jobsToggle = 'jobs.toggle';
+
   // ── النظام / system ──────────────────────────────────────
   /// منح شامل: من يملك `system.*` يملك كل شيء (نفس قاعدة `PermissionResolver::can`)
   /// The all-encompassing grant: `system.*` covers every code (same rule as the server resolver).
@@ -249,6 +289,36 @@ const List<String> allPermissionCodes = [
   Perm.appConfigView,
   Perm.appConfigUpdate,
   Perm.appConfigApiManage,
+  Perm.servicesWildcard,
+  Perm.servicesView,
+  Perm.servicesUpdate,
+  Perm.servicesSettingsManage,
+  Perm.providersWildcard,
+  Perm.providersView,
+  Perm.providersCreate,
+  Perm.providersUpdate,
+  Perm.providersDelete,
+  Perm.providersToggle,
+  Perm.providersSubscriptionsManage,
+  Perm.providersRevealCredentials,
+  Perm.smsWildcard,
+  Perm.smsView,
+  Perm.smsCreate,
+  Perm.smsUpdate,
+  Perm.smsDelete,
+  Perm.smsToggle,
+  Perm.whatsappWildcard,
+  Perm.whatsappView,
+  Perm.whatsappCreate,
+  Perm.whatsappUpdate,
+  Perm.whatsappDelete,
+  Perm.whatsappToggle,
+  Perm.jobsWildcard,
+  Perm.jobsView,
+  Perm.jobsCreate,
+  Perm.jobsUpdate,
+  Perm.jobsDelete,
+  Perm.jobsToggle,
   Perm.systemWildcard,
 ];
 
@@ -272,6 +342,11 @@ const List<String> permModuleOrder = [
   'sessions',
   'settings',
   'app_config',
+  'services',
+  'providers',
+  'sms',
+  'whatsapp',
+  'jobs',
   'system',
 ];
 
@@ -295,6 +370,11 @@ const Map<String, String> permModuleLabels = {
   'sessions': 'الجلسات النشطة',
   'settings': 'إعدادات الأمان',
   'app_config': 'إعدادات التطبيق',
+  'services': 'الخدمات والمزودين',
+  'providers': 'إدارة المزودين',
+  'sms': 'خدمة الرسائل النصية',
+  'whatsapp': 'خدمة رسائل واتساب',
+  'jobs': 'إدارة المهام الزمنية',
   'system': 'النظام',
 };
 
@@ -321,6 +401,9 @@ const Map<String, String> permActionLabels = {
   'terminate': 'إنهاء الجلسة',
   'security_manage': 'إدارة حساسة',
   'api_manage': 'إدارة اتصال API',
+  'settings_manage': 'إدارة إعدادات الخدمات',
+  'subscriptions_manage': 'إدارة الاشتراكات',
+  'reveal_credentials': 'إظهار بيانات الدخول',
 };
 
 /// اسم القسم المستخرج من الكود (`customers.view` ⇒ `customers`)

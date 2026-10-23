@@ -930,3 +930,56 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 - [x] اختبار توازن: |منتصف الكتلة − منتصف البطاقة| < 6dp.
 
 **التحقق:** `flutter analyze` = No issues found! · `flutter test` **198 ناجحًا / 0 فاشلة / 5 معلّقة**.
+
+
+---
+
+### [2026-10-23 10:30] — قسم جديد: «الخدمات والمزودين» (مزودون/رسائل SMS/واتساب/إعدادات/مهام)
+**النموذج المنفّذ:** Qoder Agent
+**المطلب / Requirement:** إنشاء قسم في بوابة الموظف يغطي خمس وظائف فوق جداول أوراكل الإرثية
+(`PROVIDERS`/`PROVIDERS_DTL`/`SERVICES`/`CORP`/`MSG_QUEUE`/`MSG_ARCHIVE`/`W_MSG_QUEUE`/`W_MSG_ARCHIVE`)
+وحزم `*_TAPI` و`DBMS_SCHEDULER`، بصلاحيات IBAC دقيقة «لكل قسم ولكل عملية»، والإرسال عبر الطابور فقط.
+
+**المرحلة 0 — كتالوج الصلاحيات:**
+- [x] خمس وحدات جديدة في `PermissionCatalog.php` (`services`/`providers`/`sms`/`whatsapp`/`jobs`) = 30 كودًا → الكتالوج **127**؛ توسيع `humanize()`.
+- [x] بثّ الكتالوج عبر `02_ibac_seed.php` (idempotent، بلا DDL).
+- [x] مرآة العميل `permission_codes.dart`: ثوابت `Perm.*` + `allPermissionCodes` + `permModuleOrder/Labels` + `permActionLabels`.
+- [x] تحديث `IbacCoreTest.php:54` العدد 97 → **127**.
+
+**المرحلة 1 — الخلفية Laravel (`App\Http\Controllers\Services`):**
+- [x] `ProviderController` (CRUD + toggle + اشتراكات PROVIDERS_DTL)؛ توليد معرّف `NVL(MAX,0)+1`؛ أقنعة `***` للاعتبارات وكشف خلف `providers.reveal_credentials` موثّق في `ActivityLogger`.
+- [x] `MessageChannelController` مجردة + `SmsController`/`WhatsappController` (فلاتر حالة في `WHERE`، Projection للمعاينة، enqueue فقط بـ `IS_SENT='N'`).
+- [x] `ServiceConfigController` (CORP singleton UPDATE + SERVICES)؛ `JobController` عبر `DBMS_SCHEDULER`.
+- [x] مسارات `api.php` كلها خلف `auth:sanctum` + `permission:<code>`.
+
+**المرحلة 2 — الأمامية Flutter (`lib/features/services/`):**
+- [x] 7 نماذج + 7 مستودعات (Dio) + مزوّدي Riverpod (إهالة 300ms + حارس تسابق + CancelToken).
+- [x] أدوات `message_status_segments`/`credential_field` + 11 شاشة (لوحة/مزودون/سجلات/تحرير/إعدادات/مهام) بحالاتها الأربع.
+
+**المرحلة 3 — تسجيل القسم:**
+- [x] `PortalSectionTitles.services` + حالة `of()`؛ تسجيل `PortalSection(id:'services', viewCodes: [5])` خارج الشريط السفلي؛ `ServicesSection` رقيق فوق اللوحة؛ بطاقات الرئيسية الستّ `defaultOn:false` و`services.section` يعكس `viewCodes` حرفيًا.
+
+**المرحلة 4 — الاختبارات:**
+- [x] Dart: `test/features/services/` (نماذج موجيباك/أرقام كنص/مفاتيح مزدوجة، مستودع بمحوّل وهمي، مُزوِّد بإهالة وحارس تسابق) = **19 ناجحًا**.
+- [x] Pest: `ServicesSectionTest.php` (401 جلسة، 403 لكل عملية بالاسم، فصل كشف الاعتبارات، غلاف + أقنعة) = **6 ناجحًا**.
+
+**التحقق / Verification:** `flutter analyze lib/features/services lib/features/employee_portal lib/features/home` = **No issues found!** ·
+بوابة الاختبارات (`home_catalog`/`ibac`/`home_notifier`/`responsive_layout`) = **89 ناجحًا** ·
+`vendor/bin/pint --dirty` = **passed** · `php artisan route:list --path=api` يُظهر كل مسارات القسم محروسة ·
+`php artisan test --filter=ServicesSectionTest` = **6 passed**. (الانهيارات الوحيدة في مجموعة
+الاختبارات الكاملة تقع في `account_group_statement_screen_test.dart` (خطأ `list[1]` دون فحص طول)
+وهي سابقة لهذا العمل ومُثبتة عند HEAD بتخزين تعديلاتنا المؤقت — لا علاقة لها بقسم الخدمات.)
+
+---
+
+## إصلاح خلل عرض قسم «الخدمات والمزودين» — 2026-10-23 07:32 (منفذ: Qoder agent)
+
+**الجذر:** الخادم (yajra-oci8) يُرجع أسماء الأعمدة بحروف صغيرة snake_case (`provider_id`)،
+بينما كانت موديلات القسم تقرأ camelCase/UPPERCASE فقط → بيانات فارغة في كل الشاشات.
+
+- [x] **الموديلات (7):** provider/provider_subscription/message/oracle_job/job_run/corp/service → قراءة `UPPER ?? lower_snake` مطابقةً لـ `CustomerModel`.
+- [x] **Backend:** `MessageChannelController::index` عند `status=all` كان يقرأ `['ID']` فينهار 500 («Undefined array key "ID"») → قراءة `id` احتياطياً `ID`.
+- [x] **Backend:** `ProviderController::toggle` كان يقرأ `['STATUS']` → قراءة `status` أولًا.
+- [x] **UI:** إعادة تصميم بلاطات اللوحة (ارتفاع ثابت محسوب + تخطيط أفقي مدمج، بلا تجاوز)، وإصلاح تجاوز ورقة تفاصيل الرسالة (تمرير محّدود الارتفاع)، وجعل الاشتراكات مفهومة (اسم الخدمة + قائمة منسدلة بدل رقم خام).
+- [x] **تحديث اختبار النموذج:** اختبار camelCase البالي أعيد توجيهه إلى snake_case الحقيقي (كان يفترض العقد الخاطئ نفسه).
+- [ ] **تشغيلي:** يُنشر إصلاح الـ API إلى `ky.alx.luxe` ليختفي انهيار تبويب «الكل» قبل إعادة النشر.
