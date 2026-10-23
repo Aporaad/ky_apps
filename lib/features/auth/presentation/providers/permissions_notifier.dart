@@ -67,6 +67,14 @@ class PermissionsState {
 /// استدعاء يقرأ جدول المنح بعد إسقاط نسخة الخادم منه (`forget()` في `myPermissions`).
 /// The 15 s floor exists because resume fires constantly and each call re-reads the grant table
 /// after dropping the server-side cache copy.
+///
+/// سياسة الفشل المعتمَدة: إن لم تصل لقطة صالحة تُنهى الجلسة إلى شاشة الدخول. البديل القديم كان
+/// يرسم بوابة بلا أقسام مع توكن حيّ — واجهة نصف-ميّتة لا يستطيع المستخدم أن يفعل فيها شيئاً،
+/// وهي بالضبط ما كان يرمي بالتطبيق على «الإعدادات» وحده. الآن: إمّا منح صالحة أو شاشة دخول.
+/// Accepted failure policy: without a valid snapshot the session ends at the login screen. The old
+/// alternative drew a section-less portal over a live token — a half-dead UI the user could not act
+/// on, and precisely what used to drop the app onto «الإعدادات» alone. Now: either valid grants or
+/// the login screen.
 class PermissionsNotifier extends Notifier<PermissionsState>
     with WidgetsBindingObserver {
   static const Duration minRefreshGap = Duration(seconds: 15);
@@ -131,14 +139,35 @@ class PermissionsNotifier extends Notifier<PermissionsState>
 
     final snapshot = await repository.fetchPermissions(cancelToken: token);
 
-    // إلغاء الطلب يعني أن شاشة أخرى/استدعاءً أحدث تولى الأمر: لا نكتب حالة ولا نرفع وسماً
-    // A cancelled call means a newer refresh took over: write nothing, flag nothing.
+    // إلغاء الطلب يعني أن شاشة أخرى/استدعاءً أحدث تولى الأمر: لا نكتب حالة ولا نُنهي جلسة
+    // ولا نرفع وسماً — الإلغاء قرار داخلي لا خبر عن الصلاحيات ولا عن الجلسة
+    // A cancelled call means a newer refresh took over: write nothing, end nothing, flag nothing —
+    // cancelling is an internal decision, not news about grants or about the session.
     if (token.isCancelled) {
-      return snapshot;
+      return _snapshotOf(ref.read(authNotifierProvider));
     }
 
     if (identical(token, _cancelToken)) {
       _cancelToken = null;
+    }
+
+    // لا لقطة صالحة: فشل شبكة أو ردّ غير متوقع أو إنكار من الخادم. القرار المعتمَد هو إنهاء
+    // الجلسة لا ترك واجهة نصف حيّة؛ والتخزين يُمسح في `forceLogout` فلا تُستعاد الحالة الفارغة
+    // No valid snapshot: a network failure, an unexpected body, or a server denial. The accepted
+    // call is to end the session rather than keep a half-alive UI; storage is cleared by
+    // `forceLogout`, so the empty state cannot come back on the next start.
+    if (snapshot == null) {
+      state = state.copyWith(
+        isSyncing: false,
+        isStale: true,
+        lastSyncedAt: () => DateTime.now(),
+        errorMessage: () => 'تعذّر التحقق من الصلاحيات، تم إنهاء الجلسة',
+      );
+      ref.read(authNotifierProvider.notifier).forceLogout(
+        reason: 'تعذّر التحقق من الصلاحيات أو انتهت الجلسة، يرجى تسجيل الدخول مجدداً',
+      );
+
+      return PermissionSnapshot.denied;
     }
 
     ref.read(authNotifierProvider.notifier).applyPermissions(snapshot);
@@ -146,12 +175,24 @@ class PermissionsNotifier extends Notifier<PermissionsState>
     state = state.copyWith(
       isSyncing: false,
       hasSynced: true,
+      // منح فارغة لمستخدم ليس مديراً = لا صلاحيات فعلاً؛ الوسم هنا خبر للقارئ لا فشل جلب
+      // An empty grant set for a non-admin really means no access: flagged as fact, not as a fetch error
       isStale: snapshot.isEmpty && !snapshot.isAdmin,
       lastSyncedAt: () => DateTime.now(),
       errorMessage: () => null,
     );
 
     return snapshot;
+  }
+
+  /// إسقاط الحالة الحالية إلى لقطة — تُستخدم حين يلغى الطلب فلا جديد يُبلَّغ
+  /// Project the current auth state as a snapshot — used when a call is cancelled and nothing new is known.
+  PermissionSnapshot _snapshotOf(AuthState auth) {
+    return PermissionSnapshot(
+      userId: auth.user?.id ?? 0,
+      isAdmin: auth.isAdmin,
+      permissions: auth.permissions.toList(growable: false),
+    );
   }
 
   /// إجبار التحديث بعد تعديل صلاحيات المستخدم نفسه من شاشة الإدارة

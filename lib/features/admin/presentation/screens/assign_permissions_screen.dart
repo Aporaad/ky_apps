@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
+import '../../../auth/presentation/providers/permissions_notifier.dart';
 import '../providers/admin_users_provider.dart';
 import '../providers/assign_permissions_provider.dart';
 import '../widgets/permissions_picker_widget.dart';
@@ -176,6 +177,17 @@ class _AssignPermissionsScreenState extends ConsumerState<AssignPermissionsScree
     // إعادة تحميل قائمة المستخدمين: عدّاد «صلاحيات: N» مصدره الخادم
     // Reload the list: the card's grant count is server-derived.
     ref.read(adminUsersProvider.notifier).refresh();
+
+    // تعديل المستخدم منحَ نفسه؟ تُعاد المزامنة فوراً حتى تظهر الأقسام الجديدة بلا إعادة دخول
+    // Editing one's own grants? Re-sync at once so newly granted sections appear without a re-login
+    final selfId = ref.read(authNotifierProvider).user?.id;
+    if (selfId == widget.userId) {
+      await ref.read(permissionsNotifierProvider.notifier).refreshNow();
+      // الشاشة قد تُغلق أثناء المزامنة؛ لا سياق بعدئذٍ
+      // The screen can close mid-sync, so there is no context to use afterwards
+      if (!mounted) return;
+    }
+
     Navigator.of(context).pop(true);
   }
 

@@ -513,8 +513,21 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
         addTearDown(tester.view.resetPhysicalSize);
 
+        // جلسة بمَنح حتى لا تسقط الشبكة على «لا قسم متاح»: البوابة الكاملة تُرسَم فقط لمن يملك منحاً،
+        // وحالة «الإعدادات» وحدها أصبحت الآن شاشة إرشاد صريحة لا تجاوزها عنوان «بوابة الموظف».
+        // An authorised session, so the safety net does not intercept: the full portal (and its
+        // «بوابة الموظف» header) now renders only when grants exist — empty grants show the guidance screen.
         await tester.pumpWidget(
-          const ProviderScope(child: MaterialApp(home: EmployeeMainLayout())),
+          ProviderScope(
+            overrides: [
+              authNotifierProvider.overrideWith(
+                () => _StubAuthNotifier(
+                  _stateWith(codes: const [], isAdmin: true),
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: EmployeeMainLayout()),
+          ),
         );
 
         await tester.pumpAndSettle();
@@ -533,7 +546,16 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
 
         await tester.pumpWidget(
-          const ProviderScope(child: MaterialApp(home: EmployeeMainLayout())),
+          ProviderScope(
+            overrides: [
+              authNotifierProvider.overrideWith(
+                () => _StubAuthNotifier(
+                  _stateWith(codes: const [], isAdmin: true),
+                ),
+              ),
+            ],
+            child: const MaterialApp(home: EmployeeMainLayout()),
+          ),
         );
 
         await tester.pumpAndSettle();
@@ -644,10 +666,11 @@ void main() {
     testWidgets('the guidance screen explains a portal with no sections', (
       tester,
     ) async {
-      // هذه الشاشة لا يصلها التصميم عبر البوابة: «الإعدادات» بلا شرط ظهور فيبقى قسم واحد دائماً.
-      // تُختبر مباشرة لأنها فرع الدفاع ضد `IndexedStack` فارغ — لا عن حالة واقعية الآن.
-      // The layout can't reach this screen today: «الإعدادات» is ungated, so one section always
-      // survives. It is a defence against an empty IndexedStack, so it is tested directly.
+      // كان المسار المباشر وحده الموكول بهذه الشاشة قبل شبكة الأمان؛ الآن البوابة تفضي إليها فعلاً
+      // حين تصل لقطة بلا منح (انظر group «EmployeeMainLayout — no silent drop» في
+      // session_expiry_fix_test.dart). يبقى هذا اختباراً لوحدة الرسم نفسها بلا سياق البوابة.
+      // The layout now really routes here on an empty snapshot (covered in session_expiry_fix_test);
+      // this stays a direct render test of the widget's own layout, independent of the shell.
       await tester.pumpWidget(
         const MaterialApp(home: NoSectionAvailable(onLogout: null)),
       );

@@ -6,7 +6,7 @@ void main() {
   group('ApiConfigRepository Tests', () {
     test('normalizeUrl removes trailing slashes and trims', () {
       expect(
-        ApiConfigRepository.normalizeUrl('  http://192.168.0.11:8000/api/  '),
+        ApiConfigRepository.normalizeUrl('  http://192.168.0.9:8000/api/  '),
         'http://192.168.0.11:8000/api',
       );
       expect(

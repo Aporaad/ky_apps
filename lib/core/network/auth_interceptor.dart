@@ -13,7 +13,13 @@ class AuthInterceptor extends Interceptor {
   /// تجاهله يجعل حارس الموعد المحلي يحكم على موعد تسجيل الدخول لا على موعد الجلسة.
   /// The server slides the deadline on every request, so only the response carries the live value;
   /// ignoring it would let the local watchdog judge the sign-in time instead of the session's.
-  final void Function(String deadline)? onSessionDeadline;
+  ///
+  /// `serverNow` ترويسة `X-Server-Now` المقابلة: تسمح للعميل بقياس إزاحة الساعتين في لحظة واحدة
+  /// فلا يقارن موعداً مكتوباً على ساعة أوراكل بساعة جهازه. غيابها (خادم أقدم) يعني افتراض التطابق.
+  /// `serverNow` comes from `X-Server-Now`: it lets the client measure the clock offset at a single
+  /// instant instead of comparing an Oracle-clock deadline against a device clock. Absent on older
+  /// API builds, where the clocks are assumed to agree.
+  final void Function(String deadline, String? serverNow)? onSessionDeadline;
 
   AuthInterceptor(this._storage, {this.onSessionDeadline});
 
@@ -34,7 +40,10 @@ class AuthInterceptor extends Interceptor {
   void onResponse(Response response, ResponseInterceptorHandler handler) {
     final deadline = response.headers.value('x-session-expires-at');
     if (deadline != null && deadline.trim().isNotEmpty) {
-      onSessionDeadline?.call(deadline.trim());
+      // ساعة الخادم اختيارية: غيابها لا يُبطل الموعد، بل يتركه بلا تصحيح إزاحة
+      // The server clock is optional: its absence does not void the deadline, it just skips the offset fix.
+      final serverNow = response.headers.value('x-server-now');
+      onSessionDeadline?.call(deadline.trim(), serverNow?.trim());
     }
 
     return handler.next(response);

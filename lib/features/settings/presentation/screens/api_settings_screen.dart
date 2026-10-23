@@ -224,10 +224,10 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                                 fontWeight: FontWeight.w600,
                               ),
                               decoration: InputDecoration(
-                                hintText: 'http://192.168.0.11:8000/api',
+                                hintText: 'http://192.168.0.9:8000/api',
                                 hintStyle: TextStyle(
                                   fontFamily: 'monospace',
-                                  fontSize: textScaler.scale(12.5).clamp(10.0, 16.0),
+                                  fontSize: textScaler.scale(7.5).clamp(7.0, 9.0),
                                   color: AppColors.textMuted,
                                 ),
                                 prefixIcon: Icon(
@@ -271,8 +271,8 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
 
                           // اختصارات سريعة
                           Wrap(
-                            spacing: 6,
-                            runSpacing: 6,
+                            spacing: 3,
+                            runSpacing: 3,
                             children: [
                               _QuickChip(
                                 icon: Icons.refresh,
@@ -292,9 +292,17 @@ class _ApiSettingsScreenState extends ConsumerState<ApiSettingsScreen> {
                               ),
                               _QuickChip(
                                 icon: Icons.phone_android,
-                                label: '10.0.2.2',
+                                label: '192.168.0.9',
                                 onTap: () {
-                                  _urlController.text = 'http://10.0.2.2:8000/api';
+                                  _urlController.text = 'http://192.168.0.9:8000/api';
+                                  setState(() => _isDirty = true);
+                                },
+                              ),
+                              _QuickChip(
+                                icon: Icons.phone_android,
+                                label: 'النشط حاليا',
+                                onTap: () {
+                                  _urlController.text =state.activeApiUrl;
                                   setState(() => _isDirty = true);
                                 },
                               ),
@@ -440,8 +448,8 @@ class _QuickChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ActionChip(
-      avatar: Icon(icon, size: 14),
-      label: Text(label, style: const TextStyle(fontSize: 12)),
+      avatar: Icon(icon, size: 12),
+      label: Text(label, style: const TextStyle(fontSize: 10)),
       onPressed: onTap,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       visualDensity: VisualDensity.compact,

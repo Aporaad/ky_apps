@@ -45,6 +45,9 @@ class AuthRepository {
         if (authResponse.user != null) {
           await _storage.saveUserId(authResponse.user!.id);
           await _storage.saveUserData(jsonEncode(authResponse.user!.toJson()));
+          // المنح تُكتب هنا أيضاً: الإقلاع البارد التالي يجب أن يرسم الأقسام من القرص
+          // Grants are written here too, so the next cold start can paint sections from disk
+          await _persistUserPermissions(authResponse.user!);
         }
       }
 
@@ -143,6 +146,9 @@ class AuthRepository {
           await _storage.saveUserData(
             jsonEncode(authResponse.user!.toJson()),
           );
+          // نفس عقد الدخول العادي: البصمة تُرجع المنح نفسها، فتُخزَّن مثلها
+          // Same contract as a password sign-in: biometric login carries the same grants
+          await _persistUserPermissions(authResponse.user!);
         }
       }
 
@@ -182,16 +188,22 @@ class AuthRepository {
   /// جلب الصلاحيات الفعّالية للمستخدم الحالي (GET /auth/permissions)
   /// Fetch the effective IBAC state for the signed-in user.
   ///
-  /// التفرقة الحساسة هنا: إن **أجابت** الخادم بخطأ (401/403/500) فالمنح تُسقط ويُرجع رفض شامل،
-  /// لأن الخادم أعلمنا أن الحالة لم تعد صحيحة. أما إن تعذّر الوصول أصلاً (شبكة، مهلة، خادم موصول
-  /// حديثاً) فتبقى آخر لقطة معروفة بلا إبادة: القرار الأمني ينفّذه الخادم في كل طلب على أي حال،
-  /// وإلا تحوّل انقطاع الواي فاي في المحل إلى تطبيق مقفل بلا أقسام حتى إعادة التشغيل.
-  /// The split that matters: if the server *answered* with an error the grants are dropped — the
-  /// server told us the state is no longer valid. If it was unreachable at all (network, timeout,
-  /// a server still starting) the last known snapshot survives, because the server still enforces
-  /// every call and a Wi-Fi hiccup would otherwise lock the app until a restart.
-  /// Cancelling a request on dispose is neither of those: it simply returns what is stored.
-  Future<PermissionSnapshot> fetchPermissions({CancelToken? cancelToken}) async {
+  /// تُرجع اللقطة حين أجابت الخادم ببيانات سليمة، و**null** في كل ما عدا ذلك: لا لقطة صالحة.
+  /// الفرق جوهري: من قبل كانت حالة الفشل تُخلط مع `PermissionSnapshot.denied` فتُقرأ في المتحكّم
+  /// كأنها قرار «لا صلاحيات» وتُمحي الأقسام من الشاشة والتخزين معاً رغم أن التوكن لا يزال صالحاً —
+  /// وهو سبب بقاء التطبيق على قسم «الإعدادات» وحده بعد أي انقطاع أو ردّ غريب.
+  /// Returns the snapshot when the server answered with a usable payload, and **null** for anything
+  /// else — no valid snapshot. The distinction is the whole point: failure used to be conflated with
+  /// `PermissionSnapshot.denied`, so the notifier read a network blip as a "no permissions" verdict
+  /// and wiped the sections from both the screen and storage while the token was still valid.
+  ///
+  /// لا يمسح هذا المسار التخزين أبداً: قرار إنهاء الجلسة يتخذه المتحكّم، ومسح التوكن عند 401 يتم في
+  /// `ErrorInterceptor`. الطلب الملغى يُحوَّل إلى ردّ 200 مصطنع ({success:false, cancelled:true}) من
+  /// نفس المعترض، فلا يكاد `CancelToken.isCancel` يعمل — لذلك تُقرأ إشارة `cancelled` صراحةً هنا.
+  /// This path never clears storage: ending the session is the notifier's call, and a 401 wipes the
+  /// token inside ErrorInterceptor. A cancelled request arrives as a synthetic 200 from that same
+  /// interceptor, so `CancelToken.isCancel` barely fires — hence the explicit `cancelled` read here.
+  Future<PermissionSnapshot?> fetchPermissions({CancelToken? cancelToken}) async {
     try {
       final response = await _client.dio.get(
         ApiConstants.permissions,
@@ -199,46 +211,61 @@ class AuthRepository {
       );
 
       final body = response.data;
-      if (body is! Map<String, dynamic> || body['success'] != true) {
-        await _storage.clearPermissions();
-        return PermissionSnapshot.denied;
-      }
+      if (body is! Map<String, dynamic>) return null;
+
+      // إلغاء الطلب ليس معلومة عن الصلاحيات: لا جديد ولا دليل على تغيير المنح
+      // A cancellation is not a statement about permissions: nothing new, no evidence of a change
+      if (body['cancelled'] == true) return null;
+      if (body['success'] != true) return null;
 
       final data = body['data'];
-      final snapshot = data is Map<String, dynamic>
-          ? PermissionSnapshot.fromJson(data)
-          : PermissionSnapshot.denied;
+      if (data is! Map<String, dynamic>) return null;
 
+      final snapshot = PermissionSnapshot.fromJson(data);
       await _persistPermissions(snapshot);
 
       return snapshot;
-    } on DioException catch (e) {
-      if (CancelToken.isCancel(e)) {
-        return restorePermissions();
-      }
-
-      if (e.response != null) {
-        await _storage.clearPermissions();
-        return PermissionSnapshot.denied;
-      }
-
-      // بلا إجابة من الخادم: النسخة المخزّنة هي أفضل معلومة متوفرة، والمهلة تُعلَم في المتحكّم
-      // No answer from the server: the cached copy is the best known truth; staleness is flagged
-      // by the notifier, not by wiping access.
-      return restorePermissions();
+    } on DioException {
+      // 401: المعترض طهّر التخزين وأسقط الجلسة، وبقية الأخطاء (5xx/شبكة/مهلة/إلغاء) فشل عابر
+      // A 401 was already handled by the interceptor; every other error is a transient failure
+      return null;
     } catch (_) {
-      await _storage.clearPermissions();
-      return PermissionSnapshot.denied;
+      return null;
     }
   }
 
   /// قراءة الحالة المخزّنة بعد إعادة تشغيل التطبيق (بلا شبكة)
   /// Read the stored state after a cold start, without touching the network.
+  ///
+  /// مسار ترميم ضروري: إصدارات سابقة لم تكن تكتب `ky_user_permissions` إطلاقاً (كان مزود المزامنة
+  /// لا يُستهلك)، فترك تلك الأجهزة بلا منح يعني إبقاء العطل حيّاً بعد التنصيب الجديد. حزمة المستخدم
+  /// المخزّنة تحمل المنح نفسها التي أرسلها الخادم عند الدخول، فتُقرأ منها عند غياب المفاتيح.
+  /// A necessary repair path: older builds never wrote `ky_user_permissions` (the sync provider was
+  /// never consumed), and leaving those devices grant-less would keep the bug alive after the fix.
+  /// The cached user blob carries the very grants the server sent at sign-in, so it is read when the
+  /// dedicated keys are missing.
   Future<PermissionSnapshot> restorePermissions() async {
-    final codes = await _storage.getPermissions();
-    final isAdmin = await _storage.getIsAdmin();
+    var codes = await _storage.getPermissions();
+    var isAdmin = await _storage.getIsAdmin();
     final expiresAt = await _storage.getSessionExpiresAt();
     final cachedUser = await getCachedUser();
+
+    // الترميم مشروط بغياب الاثنين معاً: مدير بلا أكواد حالة صحيحة لا تُلمس
+    // Repair only when both are absent: an admin with no codes is a valid state, left untouched
+    if (codes.isEmpty && !isAdmin && cachedUser != null) {
+      codes = cachedUser.permissions;
+      isAdmin = cachedUser.isAdmin;
+      if (codes.isNotEmpty || isAdmin) {
+        await _persistPermissions(
+          PermissionSnapshot(
+            userId: cachedUser.id,
+            isAdmin: isAdmin,
+            permissions: codes,
+            modules: _deriveModules(codes),
+          ),
+        );
+      }
+    }
 
     return PermissionSnapshot(
       userId: cachedUser?.id ?? 0,
@@ -249,12 +276,37 @@ class AuthRepository {
     );
   }
 
+  /// كتابة لقطة مشتقة من استجابة الدخول — كي لا ينتظر الإقلاع البارد أول طلب شبكة
+  /// Persist the snapshot embedded in a sign-in response, so a cold start needs no first request.
+  Future<void> _persistUserPermissions(UserModel user) async {
+    final codes = user.permissions;
+
+    await _persistPermissions(
+      PermissionSnapshot(
+        userId: user.id,
+        isAdmin: user.isAdmin,
+        permissions: codes,
+        modules: _deriveModules(codes),
+      ),
+    );
+  }
+
   /// كتابة الحالة إلى المفاتيح المخصصة — يفرضها مسار واحد فقط حتى لا تتباعد النسخ
   /// Persist the state to its dedicated keys; one write path keeps the copies from diverging.
+  ///
+  /// الموعد لا يُمسح بغيابه: `sessionExpiresAt` فارغ في لقطة الدخول لأن الموعد يخصّ التوكن لا
+  /// الحساب، والمسح هنا كان يمحو موعداً محفوظاً من ترويسة ردّ سابق فيفقد الحارس مرجعه.
+  /// An absent deadline does not erase the stored one: a sign-in snapshot carries no deadline (it
+  /// belongs to the token, not the account), and clearing it here would wipe a deadline already
+  /// learned from a response header and leave the watchdog without a reference.
   Future<void> _persistPermissions(PermissionSnapshot snapshot) async {
     await _storage.savePermissions(snapshot.permissions);
     await _storage.saveIsAdmin(snapshot.isAdmin);
-    await _storage.saveSessionExpiresAt(snapshot.sessionExpiresAt);
+
+    final deadline = snapshot.sessionExpiresAt;
+    if (deadline != null && deadline.isNotEmpty) {
+      await _storage.saveSessionExpiresAt(deadline);
+    }
   }
 
   /// الأقسام المشتقة من الأكواد — نفس اشتقاق `payloadFor` في الخادم

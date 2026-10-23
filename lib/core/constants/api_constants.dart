@@ -3,7 +3,7 @@
 class ApiConstants {
   // الرابط الأساسي للـ API
   // الرابط الأساسي الافتراضي للـ API
-  static const String defaultBaseUrl = 'http://192.168.0.11:8000/api';
+  static const String defaultBaseUrl = 'http://192.168.0.9:8000/api';
   static const String baseUrl = defaultBaseUrl;
 
   // مسار فحص الاتصال بالخادم

@@ -1723,3 +1723,110 @@ snake_case كما يثبت سجل الخادم الذي يُرجع `corp_name`/`
 
 **ملاحظة تشغيلية:** يجب نشر تعديلَي الـ API (الترتيب + إصلاح `status=all` السابق) على `ky.alx.luxe`، وإعادة
 بناء التطبيق، حتى تظهر كل الإصلاحات في بيئة الاختبار الحالية (سجل المستخدم ما زال يُظهر الـ 500 أي لم يُنشَر بعد).
+
+---
+
+## 2026-10-23 22:40 — إصلاح عطل التنقل: «السقوط على الإعدادات واختفاء الأقسام» (المراحل 1–5) — Qoder agent
+
+**العطل:** عند الخروج من التطبيق والرجوع، أو تركه مفتوحاً فترة، كان يوجَّه المستخدم إلى قسم
+«الإعدادات» وحده مع إخفاء كل الأقسام الأخرى، ويبقى الشريط العلوي يقول «متصل».
+
+**السبب الجذري:** `permissionsNotifierProvider` كان معرَّفاً ولا يُستهلك في أي مكان؛ فـ
+`PermissionsNotifier.build()` لا ينفّذ أبداً، ولا يُستدعى `GET /auth/permissions` ولا تُكتب مفاتيح
+IBAC في التخزين الآمن. عند أي إعادة إقلاع/استعادة تجيء `AuthState.permissions` فارغة، و«الإعدادات»
+هو القسم الوحيد بلا شرط ظهور في `portal_sections.dart`، فتُفلتر بقية الأقسام ويسقط `IndexedStack`
+عليه. وكان حارس الجلسة يقارن نص موعد الخادم (ساعة أوراكل) بـ `DateTime.now()` مباشرةً، فيطيّر
+اختلافُ الساعتين جلسةً حيّة.
+
+**الملفات المتغيّرة (Flutter/client):**
+- `lib/core/utils/session_clock.dart` **(جديد)** — `SessionClock.parseServerText` و`resolve`:
+  يقيس الإزاحة من `X-Server-Now` ويطرحها من الموعد فيبقى كل حساب على ساعة الجهاز.
+- `lib/core/network/auth_interceptor.dart` — تمرير `X-Server-Now` مع الموعد إلى `onSessionDeadline`.
+- `lib/core/network/dio_client.dart` — أسلاك جديدة لموعد الجلسة النسبي.
+- `lib/core/storage/secure_storage_service.dart` — مفاتيح IBAC وعدم إمحاء الكاش عشوائياً.
+- `lib/features/auth/data/repositories/auth_repository.dart` — حفظ المنح عند الدخول وترميمها من
+  حزمة المستخدم، و`fetchPermissions` يفرّق الإلغاء عن الفشل.
+- `lib/features/auth/presentation/providers/auth_notifier.dart` — حساب الموعد بوقت الجهاز، رميم
+  الجلسة المستعادة، رسالة إنهاء الجلسة، وإطلاق جلب الصلاحيات عند الحاجة بدل البقاء فارغاً.
+- `lib/features/auth/presentation/providers/permissions_notifier.dart` — سياسة الفشل = إنهاء
+  الجلسة؛ مراقبة دورة الحياة للتجديد عند الرجوع؛ حدّ 15 ثانية بين استدعاءين.
+- `lib/features/employee_portal/presentation/screens/employee_main_layout.dart` — شبكة الأمان
+  `NoSectionAvailable` (سابقاً كان «الإعدادات» وحده يمرّ بصمت)؛ تخزين الاختيار بمعرّف القسم لا فهرسه.
+- `lib/features/admin/presentation/screens/assign_permissions_screen.dart` — `refreshNow()` بعد
+  تعديل منح المستخدم نفسه لتظهر الأقسام دون إعادة دخول.
+- `lib/features/settings/presentation/screens/api_settings_screen.dart` — تهيئة مسار الأساس المرمّز.
+
+**اختبارات جديدة/مصحّحة:** `test/session_expiry_fix_test.dart` (جديد)؛ `test/responsive_layout_test.dart`
+(اختبارا «renders without overflow» أصبحا يوفّران جلسة بمَنح لأن السقوط القديم لم يعد السلوك الصحيح).
+
+**النتيجة:** لا مسار يترك توكنًا حيًّا بلا منح ظاهر. إمّا صلاحيات تُرسم أقسامها، أو شاشة إرشاد
+بإعادة محاولة، أو خروج نظيف إلى الدخول.
+
+---
+
+## 2026-10-24 — إخفاء الصفحة الترحيبية Laravel على عنوان الخادم
+
+**الطلب:** عند فتح عنوان خادم PHP بالمتصفح تظهر صفحة `welcome.blade.php` الترحيبية. المطلوب عدم إظهار أي صفحة.
+
+**التحليل:** الخادم موجه كـ API فقط (`kyApp_API`) ومسار `/` في `routes/web.php` كان يعرض `view('welcome')`. فحص الاتصال الذي يستخدمه التطبيق يستدعي `/api/hello` (في `routes/api.php`) وليس المسار العام لذا إزالة الصفحة لا يكسر شيئا.
+
+**التغييرات:**
+- `routes/web.php`: مسار `/` صار `response('', 204)` (No Content — صفحة فارغة تماما بالمتصفح) بدل عرض `welcome`.
+- `routes/web.php`: `/hello` العام أبقي كنقطة احتياطية واختصر رده إلى `ok`.
+- حذف `resources/views/welcome.blade.php` (لم يعد مشارا إليه من أي مسار أو اختبار).
+
+**التحقق:** لا يوجد اختبار أو مسار يشير إلى `welcome` (تم البحث في `tests/`). نقطة فحص الاتصال بالتطبيق عبر `/api/hello` لم تتأثر.
+
+---
+
+## 2026-10-24 10:15 — استبدال شاشة «لا صلاحيات» بتوجيه صامت إلى تسجيل الدخول — Qoder agent
+
+**الدافع:** طلب المستخدم إلغاء أي شاشة تحذير من انعدام الصلاحيات؛ بدلاً منها إعادة المستخدم إلى
+شاشة الدخول مباشرةً وبصمت.
+
+**التنفيذ (Flutter/client):**
+- `lib/features/auth/presentation/providers/auth_notifier.dart` — أضيف الوسم `silent` إلى
+  `forceLogout({String? reason, bool silent = false})`. عند `silent: true` تُضبط
+  `errorMessage = null` فلا تعرض شاشة الدخول أي تنبيه أحمر. الأثر والقرار كما هما (مسح التخزين
+  عبر `clearAll()` والإسقاط إلى غير مُصادق)، والفرق الوحيد هو غياب الرسالة.
+- `lib/features/employee_portal/presentation/screens/employee_main_layout.dart` — في فرع
+  «الإعدادات وحده + غير مدير + بلا منح»:
+  - `sync.isSyncing || !sync.hasSynced` ⇒ `Scaffold` بمؤشر `CircularProgressIndicator` فقط
+    (انتظار محايد؛ لا طرد استباقي).
+  - خلاف ذلك (حسم بالفراغ) ⇒ `addPostFrameCallback` ينادي `forceLogout(silent: true)`، وإطار
+    فاصل `SizedBox.shrink()` ريثما يُزيل `KyApp` هذه الشاشة.
+  - حقل جديد `_noGrantsRedirectScheduled` (لمرة واحدة) يمنع جدولة الخروج في كل بناء.
+
+**السلوك السابق الظاهر في نفس الطلب:** كان `NoSectionAvailable` يرسم عنواناً وسبباً وزر
+«إعادة محاولة تحميل الصلاحيات». Widget لا يزال يُستخدم كدفاع في فرع `visible.isEmpty` غير
+القابل للوصول عملياً (لأن «الإعدادات» غير مشروط)، لكنه لم يعد يظهر في مسار انعدام المنح.
+
+**التحقّق:** `flutter analyze` على الملفات المعدّلة = No issues found!. `flutter test` =
+223 ناجحًا / 5 متخطّاة / 3 إخفاقات سابقة في `account_group_statement` (خارج النطاق).
+
+---
+
+## 2026-10-24 10:15 — استبدال شاشة «لا صلاحيات» بتوجيه صامت إلى تسجيل الدخول — Qoder agent
+
+**الدافع:** طلب المستخدم إلغاء أي شاشة تحذير من انعدام الصلاحيات؛ بدلاً منها إعادة المستخدم إلى
+شاشة الدخول مباشرةً وبصمت.
+
+**التنفيذ (Flutter/client):**
+- `lib/features/auth/presentation/providers/auth_notifier.dart` — أضيف الوسم `silent` إلى
+  `forceLogout({String? reason, bool silent = false})`. عند `silent: true` تُضبط
+  `errorMessage = null` فلا تعرض شاشة الدخول أي تنبيه أحمر. الأثر والقرار كما هما (مسح التخزين
+  عبر `clearAll()` والإسقاط إلى غير مُصادق)، والفرق الوحيد هو غياب الرسالة.
+- `lib/features/employee_portal/presentation/screens/employee_main_layout.dart` — في فرع
+  «الإعدادات وحده + غير مدير + بلا منح»:
+  - `sync.isSyncing || !sync.hasSynced` ⇒ `Scaffold` بمؤشر `CircularProgressIndicator` فقط
+    (انتظار محايد؛ لا طرد استباقي).
+  - خلاف ذلك (حسم بالفراغ) ⇒ `addPostFrameCallback` ينادي `forceLogout(silent: true)`، وإطار
+    فاصل `SizedBox.shrink()` ريثما يُزيل `KyApp` هذه الشاشة.
+  - حقل جديد `_noGrantsRedirectScheduled` (لمرة واحدة) يمنع جدولة الخروج في كل بناء.
+
+**السلوك السابق الظاهر في نفس الطلب:** كان `NoSectionAvailable` يرسم عنواناً وسبباً وزر
+«إعادة محاولة تحميل الصلاحيات». Widget لا يزال يُستخدم كدفاع في فرع `visible.isEmpty` غير
+القابل للوصول عملياً (لأن «الإعدادات» غير مشروط)، لكنه لم يعد يظهر في مسار انعدام المنح.
+
+**التحقّق:** `flutter analyze` على الملفات المعدّلة = No issues found!. `flutter test` =
+223 ناجحًا / 5 متخطّاة / 3 إخفاقات سابقة في `account_group_statement` (خارج النطاق).

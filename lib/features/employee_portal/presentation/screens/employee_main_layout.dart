@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
+import '../../../auth/presentation/providers/permissions_notifier.dart';
 import '../../domain/portal_sections.dart';
 import '../widgets/collapsible_side_drawer.dart';
 import '../widgets/portal_section_scope.dart';
@@ -33,6 +34,10 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
   /// The last section picked from the bottom bar — used while the open section is outside the bar.
   String _lastBarSectionId = portalSections.first.id;
   bool _isCollapsed = false;
+
+  /// مرة واحدة فقط: بعد توجيه بلا منح إلى الدخول لا نُعيد جدولة الخروج عند كل بناء لاحق
+  /// Fire-once: after a no-grants session is redirected to login, later builds must not reschedule it.
+  bool _noGrantsRedirectScheduled = false;
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
 
   Future<void> _handleLogout() async {
@@ -137,6 +142,58 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
 
     if (visible.isEmpty) {
       return NoSectionAvailable(onLogout: _handleLogout);
+    }
+
+    // شبكة أمان: جلسة حيّة بلا أي منح تصل.
+    // «الإعدادات» هو القسم الوحيد بلا شرط ظهور، فأي تصفية للمنح تُبقيَه وحده تجعل البوابة تبدو
+    // كأنها قرار إداري بينما هي لقطة صلاحيات لم تصل. المتطلَّب الآن: لا شاشة تنبيه إطلاقاً —
+    // إن لم تكن هناك منح صالحة يُوجَّه المستخدم إلى تسجيل الدخول مباشرةً وبصمت.
+    // A live session that loaded no grants used to render as an «الإعدادات»-only portal. The accepted
+    // behaviour now: no warning screen at all — with no valid grants the user is sent straight back to
+    // the login screen, quietly.
+    final onlySettingsVisible =
+        visible.length == 1 && visible.single.id == 'settings';
+    if (onlySettingsVisible &&
+        !authState.isAdmin &&
+        authState.permissions.isEmpty) {
+      // مراقبة المزود هنا مقصودة مزدوجة: تُبقيه حيّاً فيُرفق مراقب دورة الحياة فتتجدد المنح عند
+      // الرجوع من الخلفية، وتصل اللقطة الأولى التي تقرّر إن كان هناك منح أصلاً.
+      // Watching the provider keeps the notifier alive (so its lifecycle observer re-syncs on resume)
+      // and yields the first snapshot that decides whether any grants exist.
+      final sync = ref.watch(permissionsNotifierProvider);
+
+      // لم تُحسم اللقطة بعد (جارٍ الجلب أو أول إطار قبل أي ردّ): لا يجوز طرد جلسةٍ منحُها على وشك
+      // الوصول. انتظار محايد بلا تنبيه؛ وفشل الجلب يُنهي الجلسة بنفسه من `PermissionsNotifier`.
+      // Not resolved yet: never bounce a session whose grants are about to arrive. A neutral wait, no
+      // warning; a failed fetch ends the session itself inside `PermissionsNotifier`.
+      if (sync.isSyncing || !sync.hasSynced) {
+        return Scaffold(
+          backgroundColor: AppColors.background,
+          body: Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          ),
+        );
+      }
+
+      // حسم الخادم: موظف غير مدير بلا أي منح. لا شاشة تنبيه — إنهاء الجلسة بصمت، فيسمع `KyApp`
+      // سقوط «مُصادق» ويوجّه إلى /login بلا أي رسالة.
+      // The server confirmed a non-admin with zero grants: end the session silently; KyApp's auth
+      // listener drops from signed-in and routes to /login with no message shown.
+      if (!_noGrantsRedirectScheduled) {
+        _noGrantsRedirectScheduled = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ref
+              .read(authNotifierProvider.notifier)
+              .forceLogout(silent: true);
+        });
+      }
+
+      // إطار فاصل بلا واجهة حتى يلتقط المستمعُ السقوطَ ويُزيل هذه الشاشة من الشجرة.
+      // A single blank frame until the listener tears this screen out of the tree.
+      return Scaffold(
+        backgroundColor: AppColors.background,
+        body: const SizedBox.shrink(),
+      );
     }
 
     final currentIndex = _indexOfVisible(visible, _currentSectionId);
@@ -412,20 +469,47 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
   }
 }
 
-/// شاشة «لا قسم متاح» — تصلها حالة واحدة فقط: مستخدم بلا أي صلاحية قسم
-/// The "no section available" screen — reached in exactly one case: a user with no section rights.
+/// شاشة «لا قسم متاح» — تصلها حالتان: مستخدم بلا أي صلاحية قسم، أو جلسة لم تُحمّل منحها بعد
+/// The "no section available" screen — reached in two cases: a user with no section rights, or a
+/// session whose grants have not loaded.
 ///
 /// وجودها ليس ترفيقاً: الحجب الافتراضي يعني أن موظفاً جديداً لم يُمنح بعد يصل إلى بوابة بلا أي
 /// قسم، ولو مُرّر فهرسٌ إلى `IndexedStack` فارغ لانهارت الشاشة بدل أن تشرح للمستخدم ما الناقص.
-/// مخرجها الوحيد تسجيل الخروج — فلا شيء هنا يمكن أن يفعله بلا منح، ولا معنى لإبقاء واجهة ميتة.
-/// This isn't decoration: deny-by-default means a freshly created, not-yet-granted worker arrives
-/// at a portal with no sections, and an index into an empty `IndexedStack` would crash the screen
-/// instead of explaining what is missing. Its only exit is logging out — there is nothing here a
-/// user without grants could act on.
+/// مخرجها الأول تسجيل الخروج، وأُضيف ثاني: إعادة محاولة الجلب — فالحالة الثانية ليست قراراً
+/// إدارياً بل عطل وصول مؤقت، وترْك المستخدم بلا خيار هو ما حوّل العطل إلى شكوى يومية.
+/// This isn't decoration: deny-by-default means a freshly created, not-yet-granted worker arrives at a
+/// portal with no sections, and an index into an empty `IndexedStack` would crash the screen instead of
+/// explaining what is missing. Logging out is one exit; a retry is the other, because the second case
+/// is not an administrative verdict but a transient fetch failure — and offering no option is what
+/// turned that failure into a daily complaint.
 class NoSectionAvailable extends StatelessWidget {
-  const NoSectionAvailable({super.key, this.onLogout});
+  const NoSectionAvailable({
+    super.key,
+    this.onLogout,
+    this.onRetry,
+    this.isBusy = false,
+    this.headline,
+    this.details,
+  });
 
   final VoidCallback? onLogout;
+
+  /// إعادة الجلب — تُعرض حين لم تصل الصلاحيات، وتغيب حين أجابت الخادم فعلاً برفض
+  /// Re-fetch — offered while grants have not arrived; absent when the server truly answered "none".
+  final VoidCallback? onRetry;
+
+  /// مزامنة جارية: spinner بدل الأزرار، حتى لا يُنقر طلب مكرر أثناء طلب حيّ
+  /// A sync in flight: a spinner instead of buttons, so no duplicate fetch is tapped.
+  final bool isBusy;
+
+  /// نصّان قابلان للتخصيص: الحالة الإدارية وحالة «لم تصل البيانات» — نفس التخطيط
+  /// Two overridable strings: the administrative case and the not-loaded case, same layout.
+  final String? headline;
+  final String? details;
+
+  static const String _defaultHeadline = 'لم تُمنح بعد أي صلاحية دخول';
+  static const String _defaultDetails =
+      'يرجى مراجعة مدير النظام لتفعيل صلاحياتك، ثم تسجيل الخروج والدخول مجدداً';
 
   @override
   Widget build(BuildContext context) {
@@ -439,13 +523,15 @@ class NoSectionAvailable extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  Icons.lock_outline_rounded,
+                  isBusy
+                      ? Icons.cloud_sync_outlined
+                      : Icons.lock_outline_rounded,
                   size: 56,
                   color: AppColors.textMuted,
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'لم تُمنح بعد أي صلاحية دخول',
+                  headline ?? _defaultHeadline,
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 18,
@@ -455,7 +541,7 @@ class NoSectionAvailable extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'يرجى مراجعة مدير النظام لتفعيل صلاحياتك، ثم تسجيل الخروج والدخول مجدداً',
+                  details ?? _defaultDetails,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
                     fontSize: 13,
@@ -463,7 +549,27 @@ class NoSectionAvailable extends StatelessWidget {
                     height: 1.6,
                   ),
                 ),
-                if (onLogout != null) ...[
+                if (isBusy) ...[
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                ] else if (onRetry != null) ...[
+                  // زر إعادة المحاولة هو المخرج الثاني: فشل الجلب كان يُترك بلا أي خيار
+                  // The retry is the second exit: a fetch failure used to be left with no option at all
+                  const SizedBox(height: 24),
+                  ElevatedButton.icon(
+                    onPressed: onRetry,
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text('إعادة محاولة تحميل الصلاحيات'),
+                  ),
+                ],
+                if (!isBusy && onLogout != null) ...[
                   const SizedBox(height: 24),
                   ElevatedButton.icon(
                     onPressed: onLogout,

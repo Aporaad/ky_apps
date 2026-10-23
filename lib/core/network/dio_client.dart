@@ -18,7 +18,7 @@ class DioClient {
   /// المحلي في `AuthNotifier` ليُخرج المستخدم حين ينتهي دون انتظار طلب جديد.
   /// The deadline slides on every request, so the device only learns it from a response; it feeds
   /// AuthNotifier's local watchdog, which can then evict the user without waiting for another call.
-  final void Function(String deadline)? onSessionDeadline;
+  final void Function(String deadline, String? serverNow)? onSessionDeadline;
 
   DioClient({
     required this.storage,

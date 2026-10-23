@@ -6,9 +6,11 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/biometric_service.dart';
 import '../../../../core/utils/device_id_helper.dart';
 import '../../../../core/utils/permission_check.dart';
+import '../../../../core/utils/session_clock.dart';
 import '../../data/models/permission_snapshot_model.dart';
 import '../../data/models/user_model.dart';
 import '../../data/repositories/auth_repository.dart';
+import 'permissions_notifier.dart';
 
 /// مزود خدمة التخزين الآمن
 final secureStorageProvider = Provider<SecureStorageService>((ref) {
@@ -26,8 +28,10 @@ final dioClientProvider = Provider<DioClient>((ref) {
     // موعد الجلسة يصل من ترويسة كل رد، ويُبلَّغ للحارس المحلي في نفس اللحظة التي يجددها الخادم
     // The deadline arrives on every response and goes straight to the watchdog, in the same moment
     // the server slid it.
-    onSessionDeadline: (deadline) {
-      ref.read(authNotifierProvider.notifier).updateSessionDeadline(deadline);
+    onSessionDeadline: (deadline, serverNow) {
+      ref
+          .read(authNotifierProvider.notifier)
+          .updateSessionDeadline(deadline, serverNow: serverNow);
     },
   );
 });
@@ -63,8 +67,8 @@ class AuthState {
   /// System-admin flag: bypasses the grant table on both sides (decision D1).
   final bool isAdmin;
 
-  /// نهاية الجلسة الحالية؛ null = بلا موعد معلوم (جلسة قديمة أو تركات غير محدّدة)
-  /// Current session deadline; null means nothing was asserted about expiry.
+  /// نهاية الجلسة الحالية بوقت الجهاز؛ null = بلا موعد معلوم (جلسة قديمة أو تركات غير محدّدة)
+  /// Current session deadline **on the device clock**; null means nothing was asserted about expiry.
   final DateTime? sessionExpiresAt;
 
   const AuthState({
@@ -135,28 +139,34 @@ class AuthState {
 
   /// تطبيق لقطة صلاحيات على الحالة — المسار الوحيد الذي يكتب هذا الثالوث
   /// Apply an IBAC snapshot to the state — the only path that writes this trio of fields.
-  AuthState withPermissions(PermissionSnapshot snapshot) {
+  ///
+  /// `deadlineOverride` يُمرَّر من استعادة القرص: اللقطة تحمل نص الخادم، والحارس يحتاج الوقت
+  /// بساعة الجهاز، فيُمرَّر المحسوب مسبقاً بدل إعادة تفسير النص الخام.
+  /// `deadlineOverride` comes from the disk restore: the snapshot carries the server's text, while the
+  /// watchdog needs device time, so the already-converted value wins over re-reading the raw text.
+  AuthState withPermissions(
+    PermissionSnapshot snapshot, {
+    DateTime? deadlineOverride,
+  }) {
     return copyWith(
       permissions: snapshot.permissions.toSet(),
       isAdmin: snapshot.isAdmin,
-      sessionExpiresAt: () => _parseServerDate(snapshot.sessionExpiresAt),
+      sessionExpiresAt: () =>
+          deadlineOverride ??
+          SessionClock.resolve(deadlineText: snapshot.sessionExpiresAt),
     );
   }
 }
 
-/// تحويل نص تاريخ الخادم `YYYY-MM-DD HH:MM:SS` إلى وقت محلي آمن
-/// Parse the server's `YYYY-MM-DD HH:MM:SS` text into a local time, or null if unreadable.
+/// تحويل نص تاريخ الخادم إلى وقت، مع إلغاء إزاحة الساعتين إن وُجد مرجع لها
+/// Parse the server's date text into device time, cancelling the clock skew when a reference exists
 ///
-/// الخادم يرسل التوقيت بتوقيت أوراكل المحلي بلا معلومات منطقة، فلا خيار سوى معاملته كوقت محلي
-/// حتى تُقارن الدقائق المتبقية بوقت الجهاز نفسه.
-/// The server sends Oracle-local time with no zone marker, so it must be compared as local time
-/// for the "minutes left" figure to mean anything on this device.
-DateTime? _parseServerDate(String? raw) {
-  final text = raw?.trim();
-  if (text == null || text.isEmpty) return null;
-
-  return DateTime.tryParse(text.replaceFirst(' ', 'T'));
-}
+/// يُلجأ إلى `SessionClock.resolve` مباشرة: مع `X-Server-Now` تُحسب الإزاحة في لحظة الردّ،
+/// وبدونِها (خادم أقدم لم يُنشر له التصحيح بعد) يُفترض تطابق الساعتين كما كان السلوك القديم.
+/// Everything goes through `SessionClock.resolve`: with `X-Server-Now` the offset is measured at the
+/// instant of the response; without it (an older API build) the clocks are assumed to agree.
+DateTime? _resolveDeadline(String? raw, [String? serverNow]) =>
+    SessionClock.resolve(deadlineText: raw, serverNowText: serverNow);
 
 /// إدارة حالة المصادقة عبر Riverpod Notifier الحديث
 class AuthNotifier extends Notifier<AuthState> {
@@ -198,14 +208,28 @@ class AuthNotifier extends Notifier<AuthState> {
   /// The guard must not fall back to the sign-in time: the server slides EXPIRES_AT on every request,
   /// so the stale value would evict an active user after one idle window. It is persisted here too, so
   /// the deadline is still correct when the app closes and reopens while the session idles.
-  void updateSessionDeadline(String raw) {
-    final deadline = _parseServerDate(raw);
+  ///
+  /// يُخزَّن الموعد بصيغتين: نصّ الخادم الخام (للعرض وللتوافق مع الإصدارات السابقة) ووقت الجهاز
+  /// المحسوب (وهو ما يقرؤه الحارس بعد إعادة التشغيل). الثاني هو التصحيح: بدونه كان أي اختلاف بين
+  /// ساعة أوراكل (+03:00) وساعة الجهاز يقرر مصير الجلسة.
+  /// Two forms are stored: the server's raw text (display + backward compatibility) and the converted
+  /// device time — which is what the watchdog reads after a restart. The second is the correction:
+  /// without it, any disagreement between the Oracle clock and the device clock decided the session.
+  void updateSessionDeadline(String raw, {String? serverNow}) {
+    final deadline = _resolveDeadline(raw, serverNow);
     if (deadline == null || !state.isAuthenticated) return;
 
     if (state.sessionExpiresAt == deadline) return;
 
     state = state.copyWith(sessionExpiresAt: () => deadline);
-    unawaited(_storage.saveSessionExpiresAt(raw.trim()));
+    unawaited(_persistDeadlines(raw, deadline));
+  }
+
+  /// حفظ صيغتي الموعد معاً — مسار كتابة واحد حتى لا تتباعد النسخة الخام عن المحوَّلة
+  /// Persist both deadline forms through one path so the raw text and the converted time diverge never.
+  Future<void> _persistDeadlines(String raw, DateTime deviceDeadline) async {
+    await _storage.saveSessionExpiresAt(raw.trim());
+    await _storage.saveSessionDeadlineLocal(deviceDeadline.toIso8601String());
   }
 
   /// انتهى الموعد؟ — الفحص الوحيد المستخدم من الحارس ومن فحص البداية
@@ -239,6 +263,11 @@ class AuthNotifier extends Notifier<AuthState> {
   /// `PermissionsNotifier` بتحديثها من الخادم حالما يُستهلك أول مرة.
   /// Grants come back from secure storage immediately so sections render without waiting on the
   /// network; `PermissionsNotifier` then refreshes them from the server on first use.
+  ///
+  /// الحارس يقرأ وقت الجهاز المحفوظ لا نصّ الخادم: النص القديم كان يُفسَّر بساعة الجهاز مباشرةً
+  /// فأي انحراف بينهما يطرد المستخدم عند أول نبضة أو يُبقيه بعد الموعد.
+  /// The watchdog reads the stored device time, not the server's text: interpreting raw server text on
+  /// the device clock meant any skew either evicted the user on the first tick or kept them past it.
   Future<void> checkAuthStatus() async {
     // تحميل وتهيئة رابط الـ API المخصص من الذاكرة المشفرة
     final client = ref.read(dioClientProvider);
@@ -251,6 +280,14 @@ class AuthNotifier extends Notifier<AuthState> {
       final cachedUser = await _repository.getCachedUser();
       final snapshot = await _repository.restorePermissions();
 
+      // تدرّج آمن: موعد بوقت الجهاز إن وُجد، وإلا نصّ الخادم كما كان (تنصيب قديم أو تركة بلا تحويل)
+      // Safe gradation: a device-clock deadline when stored, otherwise the raw server text as before
+      final localDeadline = _resolveDeadline(
+        await _storage.getSessionDeadlineLocal(),
+      );
+      final restoredDeadline =
+          localDeadline ?? _resolveDeadline(snapshot.sessionExpiresAt);
+
       state = AuthState(
         isAuthenticated: true,
         isLoading: false,
@@ -262,13 +299,23 @@ class AuthNotifier extends Notifier<AuthState> {
         selectedUserType: state.selectedUserType,
         biometricCapability: state.biometricCapability,
         isBiometricEnabled: state.isBiometricEnabled,
-      ).withPermissions(snapshot);
+      ).withPermissions(snapshot, deadlineOverride: restoredDeadline);
 
       // انتهت أثناء إغلاق التطبيق؟ تُغلق محلياً قبل أي طلب: الموعد استُعيد من التخزين المشفّر،
       // وانتظار 401 يعني رسم البوابة كاملة ثم إسقاطها
       // A session that expired while the app was closed ends here, before any request: the deadline
       // came back from secure storage, and waiting for a 401 would draw the whole portal first.
       _enforceDeadline();
+
+      // جلسة حيّة بلا أي منح على القرص؟ تُطلَب مزامنة فوراً بدل رسم بوابة نصف فارغة.
+      // الحالة متوقعة فقط على تنصيبات قديمة لم تكتب المنح إطلاقاً؛ والتوصيف المعتمَد: فشل
+      // التحقق يُنهي الجلسة إلى شاشة الدخول، لا يترك واجهة صامتة على «الإعدادات».
+      // A live session with no grants on disk syncs at once instead of painting a hollow portal.
+      // Only older builds can land here (they never persisted grants); the accepted policy sends a
+      // failed verification to the login screen rather than leaving a silent settings-only UI.
+      if (state.isAuthenticated && !state.isAdmin && state.permissions.isEmpty) {
+        unawaited(ref.read(permissionsNotifierProvider.notifier).refresh());
+      }
     } else {
       state = state.copyWith(
         isAuthenticated: false,
@@ -282,8 +329,18 @@ class AuthNotifier extends Notifier<AuthState> {
 
   /// تطبيق حالة IBAC القادمة من الخادم على حالة المصادقة — الكاتب الوحيد لهذا الثالوث
   /// Apply a server-side IBAC snapshot to the auth state; the only writer of those three fields.
+  ///
+  /// يُحفظ موعد الجلسة الحالي: الترويسة مرّت بالفعل عبر `updateSessionDeadline` وحوّلت الإزاحة،
+  /// أما حقل `session_expires_at` داخل اللقطة فنصّ خام على ساعة أوراكل — استبداله كان يفسد
+  /// التصحيح ويعيد الطرد المبكّر.
+  /// The current deadline is preserved: the header already went through `updateSessionDeadline` and
+  /// had its offset removed, while the snapshot's own field is raw Oracle-clock text — letting it win
+  /// would undo the correction and bring the early eviction back.
   void applyPermissions(PermissionSnapshot snapshot) {
-    state = state.withPermissions(snapshot);
+    state = state.withPermissions(
+      snapshot,
+      deadlineOverride: state.sessionExpiresAt,
+    );
   }
 
   /// إسقاط الصلاحيات محلياً (خروج، 401، أو فشل تحديث مؤكد)
@@ -409,8 +466,8 @@ class AuthNotifier extends Notifier<AuthState> {
     );
   }
 
-  /// تسجيل الخروج الإجباري (عند 401 أو عند انتهاء الموعد محلياً)
-  /// Forced logout: on a 401, or when the local watchdog finds the deadline passed.
+  /// تسجيل الخروج الإجباري (عند 401 أو انتهاء الموعد محلياً أو فشل التحقق من المنح)
+  /// Forced logout: a 401, an expired local deadline, or a failed permission verification.
   ///
   /// يمسح التخزين بنفسه لأن مسار الحارس لا يمر بـ `ErrorInterceptor`: بلا ذلك يبقى التوكن على
   /// الجهاز ويُستعاد «مسجّل الدخول» عند أول إعادة تشغيل بعد الخروج. `clearAll()` تُبقي أثر البصمة
@@ -419,14 +476,23 @@ class AuthNotifier extends Notifier<AuthState> {
   /// token survives on the device and the next app start reads back as "signed in". clearAll keeps
   /// the biometric enrollment and the API URL, exactly as a normal logout does, so an idle timeout
   /// never costs the user their fingerprint sign-in.
-  void forceLogout() {
+  void forceLogout({String? reason, bool silent = false}) {
     unawaited(_storage.clearAll());
 
     state = AuthState(
       selectedUserType: state.selectedUserType,
       biometricCapability: state.biometricCapability,
       isBiometricEnabled: state.isBiometricEnabled,
-      errorMessage: 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً',
+      // `reason` ظاهري بحت: القرار وأثره واحدان، والفرق فقط أن المستخدم يرى سبب الشاشة
+      // `reason` is display-only: the decision and its effect are identical, the difference is that
+      // the user is told why the login screen appeared.
+      // `silent` يترك شاشة الدخول بلا أي تنبيه: يُستخدم حين لا يملك الجلسة أي منح أصلاً، فيُعاد
+      // المستخدم إلى الدخول بهدوء بدل إظهار رسالة تحذير.
+      // `silent` leaves the login screen with no message at all — used when a session simply holds
+      // no grants, so the user is returned to sign-in quietly instead of being shown a warning.
+      errorMessage: silent
+          ? null
+          : (reason ?? 'انتهت صلاحية الجلسة، يرجى تسجيل الدخول مجدداً'),
     );
   }
 

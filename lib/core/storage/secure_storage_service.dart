@@ -28,6 +28,9 @@ class SecureStorageService {
   static const String _permissionsKey = 'ky_user_permissions';
   static const String _isAdminKey = 'ky_is_admin';
   static const String _sessionExpiresAtKey = 'ky_session_expires_at';
+  /// نفس الموعد لكن بوقت الجهاز — يقرؤه الحارس المحلي مباشرةً
+  /// The same deadline expressed in device time — what the local watchdog actually compares against
+  static const String _sessionDeadlineLocalKey = 'ky_session_deadline_local';
   // مفاتيح تهيئة التطبيق — على مستوى الجهاز، تبقى بعد تسجيل الخروج كالرابط المخصص
   // App-config keys — device-level, kept across logout just like the custom API URL.
   static const String _appConfigKey = 'ky_app_config'; // كاش JSON للتهيئة العامة
@@ -102,6 +105,7 @@ class SecureStorageService {
     await _storage.delete(key: _permissionsKey);
     await _storage.delete(key: _isAdminKey);
     await _storage.delete(key: _sessionExpiresAtKey);
+    await _storage.delete(key: _sessionDeadlineLocalKey);
     // لا نمسح بيانات البصمة عند الخروج حتى يستطيع المستخدم الدخول بها مجدداً
   }
 
@@ -164,12 +168,30 @@ class SecureStorageService {
     return await _storage.read(key: _sessionExpiresAtKey);
   }
 
+  /// حفظ موعد النهاية بوقت الجهاز (`toIso8601String` لوقت محلي بلا علامة منطقة)
+  /// Store the deadline converted to device time, so the watchdog never compares two different clocks.
+  Future<void> saveSessionDeadlineLocal(String? isoText) async {
+    if (isoText == null || isoText.isEmpty) {
+      await _storage.delete(key: _sessionDeadlineLocalKey);
+      return;
+    }
+
+    await _storage.write(key: _sessionDeadlineLocalKey, value: isoText);
+  }
+
+  /// قراءة موعد النهاية بوقت الجهاز
+  /// Read the device-clock deadline text.
+  Future<String?> getSessionDeadlineLocal() async {
+    return await _storage.read(key: _sessionDeadlineLocalKey);
+  }
+
   /// حذف حالة IBAC وحدها عند فشل تحديث الصلاحيات بعد 401
   /// Drop only the IBAC state when a post-401 permission refresh fails.
   Future<void> clearPermissions() async {
     await _storage.delete(key: _permissionsKey);
     await _storage.delete(key: _isAdminKey);
     await _storage.delete(key: _sessionExpiresAtKey);
+    await _storage.delete(key: _sessionDeadlineLocalKey);
   }
 
   // ── البصمة والمصادقة الحيوية ─────────────────────────────
