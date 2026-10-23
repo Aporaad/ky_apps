@@ -46,3 +46,6 @@ app.*.map.json
 
 /REPORTS
 .qoder/
+# „·›«  „Œ—Ã«  «·≈’œ«—«  «·„Êﬁ⁄… (APK) - ﬂ»Ì—… «·ÕÃ„ Ê·«  Õﬂ„
+# Signed release artifacts - large binaries, keep out of git
+/release_artifacts/

@@ -1125,3 +1125,58 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 مرة واحدة، انتظار محايد عند عدم الحسم، لا أثر لـ `NoSectionAvailable` في هذا المسار).
 `flutter analyze` لا أخطاء في ملفات التعديل · `flutter test` = 223 ناجحًا / 5 متخطّاة / 3 إخفاقات
 سابقة غير متعلقة (`account_group_statement`).
+
+
+## [2026-10-24 01:55] الإصدار الأول APK جاهز للنشر — توقيع حقيقي + معرّف نهائي + حواجز الإطلاق · Qoder Agent
+
+**المهمة:** «قم بعمل الاصدار الاول للتطبيق بصيغه APK ويكون جاهز للنشر ومع التوقيع الرقمي وكل مايلزم»
+
+- [x] **مفتاح التوقيع** — `android/ky_release.jks` (alias `ky_apps`، RSA-2048، صلاحية 10٬000 يوم حتى
+  2054، DN=`CN=Al-Kaboodi Tailoring...`)؛ البصمة SHA-256‏ `811E477C…DADA5D0F`. بياناته في
+  `android/key.properties` — وكلاهما خارج git (`.gitignore` الخاص بـ android كان يغطيهما مسبقاً).
+- [x] **معرّف التطبيق النهائي** — `com.alkaboudy.app` (بإملاء المستخدم) بدل `com.example.ky_apps`
+  في namespace وapplicationId، مع نقل `MainActivity.kt` إلى الحزمة الجديدة وحذف القديمة.
+- [x] **ربط التوقيع في Gradle** — `signingConfigs.create("release")` قارئاً `key.properties`
+  (مع تراجع إلى debug إذا غاب الملف حتى لا ينكسر بناء أي جهاز آخر)، وتفعيل
+  `isMinifyEnabled`/`isShrinkResources` ‏(R8) مع `proguard-rules.pro` جديد.
+- [x] **أذن `INTERNET` في Manifest الرئيسي** — كانت debug-only؛ أضيفت `usesCleartextTraffic="true"`
+  لأن عنوان API يُدخل وقت التشغيل (LAN host:port) فلا تصلح قائمة بيضاء ثابتة — موثّق بتعليق.
+- [x] **عقبتا بناء تم إصلاحهما:** أسماء Kotlin DSL الجديدة `isMinifyEnabled` (وليس `minifyEnabled`)؛
+  و`-dontwarn com.google.android.play.core.**` لأن تغليف Flutter يشير إلى Play Core بلا مكوّنات مؤجّلة.
+- [x] **البناء والتحقق** — `flutter build apk --release --split-per-abi` + universal:
+  arm64-v8a ‏31.8MB · armeabi-v7a ‏29.9MB · x86_64 ‏33.7MB · universal 87.2MB.
+  `apksigner verify` ✓ موقع V2 بالشهادة أعلاه، و`aapt2 dump` يؤكد
+  `package=com.alkaboudy.app versionName=1.0.0 versionCode=2001 label=الكبودي minSdk=23`
+  (versionCode=2001 هو اشتقاق flutter-tools القياسي لـ `1.0.0+1`).
+- [x] **الحزمة النهائية** — `release_artifacts/v1.0.0+1/` (4 ملفات APK بإسماء نظيفة + `mapping.txt`
+  لفك تشويش الانهيارات مستقبلاً)؛ أُضيف `release_artifacts/` إلى `.gitignore` الجذر.
+- [x] **البوابات** — `flutter analyze` = 3 تحذيرات سابقة غير متعلقة (لا جديدة) ·
+  `flutter test` = 222 ناجحًا / 5 متخطّاة / 4 إخفاقات: 3 منها `account_group_statement` (موثقة سابقاً)
+  ورابع `api_config_test` **بيئي** — الجهاز يخدم الآن على `192.168.0.9` بينما ثابت الاختبار
+  `192.168.0.11`؛ لا علاقة له بتعديلات Android (لم تُمسّ أي ملفات Dart).
+- **تنبيهات للنشر:** لا تضيع `ky_release.jks` — بدونه يستحيل تحديث التطبيق المنشور؛ انسخه هو
+  و`key.properties` و`mapping.txt` إلى مكان آمن خارج الجهاز. Google Play يتطلب AAB وليس APK —
+  إن استُهدف المتجر لاحقاً: `flutter build appbundle --release` بنفس المفتاح.
+
+
+## [2026-10-24 02:12] توثيق: دليل البناء والتوقيع والإصدارات الكامل · Qoder Agent
+
+**المهمة:** «اعطني شرح مفصل وكامل لكيفية عمل البناء مع التوقيع بطريقة آمنة + كيفية عمل
+الإصدارات الجديدة وتحديثه + احفظ الشرح في ملف نصي بالمشروع»
+
+- [x] **الملف:** `android_release_guide.md` (جديد في جذر المشروع، ~310 سطر، عربي مع
+  المصطلحات الإنجليزية) — خمسة أجزاء:
+  1. آلية التوقيع الآمنة: لماذا، المفردات (jks/alias/بصمة SHA-256)، الملفات الثلاثة
+     ومواضعها من git، شرح تدفق Gradle سطراً بسطراً (قراءة key.properties → R8 → التوقيع
+     → fallback debug)، سبب المسار المطلق، أوامر `apksigner`/`aapt2` الإلزامية.
+  2. الترقيم: `version:` في pubspec → versionName/versionCode، جدول semver المعتمد
+     (+N يزيد دائماً)، تجاوز `--build-name/--build-number`.
+  3. إجراءات إصدار نسخة جديدة: pre-flight checklist → رفع الإصدار → البناء الثلاث →
+     التحقق → التجربة فوق القديمة → الأرشفة مع mapping.txt → التوزيع المباشر → التوثيق.
+  4. سيناريوهات حرجة: ضياع المفتاح (لا استعادة — وقاية بالنسخ الاحتياطي)، نسيان كلمة
+     السر، رفض التحديث (فحص عكسي مرتّب)، جهاز/مسار جديد، Google Play وPlay App Signing،
+     متى يتغير applicationId (أبداً إلا بإملاء).
+  5. خلاصة تشغيلية Quick Reference + 5 ثوابت لا تُنكسر.
+- [x] **أمان التوثيق:** الدليل **لا يذكر كلمة سر المفتاح إطلاقاً** — يحيل إلى
+  `android/key.properties` المحلي ومدير كلمات السر فقط، التزاماً بقاعدة عدم تسجيل الأسرار.
+- **ملاحظة:** لم يُنفَّذ أي بناء أو تعديل كود في هذه الجولة — وثيقة مرجعية بحتة.

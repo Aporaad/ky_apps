@@ -1830,3 +1830,110 @@ IBAC في التخزين الآمن. عند أي إعادة إقلاع/استع�
 
 **التحقّق:** `flutter analyze` على الملفات المعدّلة = No issues found!. `flutter test` =
 223 ناجحًا / 5 متخطّاة / 3 إخفاقات سابقة في `account_group_statement` (خارج النطاق).
+
+
+## [2026-10-24 01:55] الإصدار الأول (v1.0.0) بصيغة APK موقع وجاهز للنشر · Qoder Agent
+
+**السياق:** كان البناء السابق لـ release يوقَّع بمفتاح debug افتراضياً، والمعرّف
+`com.example.ky_apps` تجريبياً، وأذن `INTERNET` لا تظهر إلا في manifests التطوير — وهي
+حواجز إطلاق `android/` الموثقة في `todo.md` سابقة. نُفِّذت كلها الآن بإملاء المستخدم
+(المعرّف `com.alkaboudy.app` وكلمة سر المفتاح المختارة منه).
+
+**ما أُنجِز:**
+
+1. **مفتاح التوقيع الرقمي**
+   - `android/ky_release.jks` — أنشئ بـ `keytool` (JDK 21): RSA-2048، alias `ky_apps`،
+     صلاحية 10٬000 يوم (من 2026-10-24 حتى 2054-03-11)،
+     DN: `CN=Al-Kaboodi Tailoring, OU=KY Apps, O=Al-Kaboodi, L=Sanaa, ST=Sanaa, C=YE`.
+   - بصمة الشهادة SHA-256: `81:1E:47:7C:85:1A:BA:17:7B:65:04:F0:A5:7B:DA:C0:05:E6:40:00:12:A9:BE:47:6C:57:78:D6:DA:DA:5D:0F`.
+   - `android/key.properties` يحمل البيانات الأربع؛ الملفان محجوبان عن git بنمط
+     `android/.gitignore` الموجود (`key.properties`, `**/*.keystore`, `**/*.jks`).
+2. **`android/app/build.gradle.kts`**
+   - استيراد `java.util.Properties` + تحميل `rootProject.file("key.properties")` بشرط وجوده.
+   - `namespace` و`applicationId` ⇒ `com.alkaboudy.app`.
+   - `signingConfigs { create("release") { … } }` وربطه بـ buildType release مع تراجع إلى
+     debug عند غياب الملف (لا يكسر أجهزة أخرى).
+   - R8 مفعّل: `isMinifyEnabled = true` و`isShrinkResources = true` مع
+     `proguard-android-optimize.txt` + `proguard-rules.pro`.
+3. **`android/app/proguard-rules.pro`** (جديد) — keep لـ `io.flutter.**` و`MainActivity`،
+   و`-dontwarn com.google.android.play.core.**` (إلزامي: مراجع Flutter embedding إلى
+   Play Core بلا deferred components تُفشل R8 بدونه).
+4. **نقل `MainActivity.kt`** من `kotlin/com/example/ky_apps/` إلى `kotlin/com/alkaboudy/app/`
+   (نفس المحتوى `FlutterFragmentActivity` لدعم biometric، مع تعليق) وحذف الملف القديم —
+   لأنه أصبح خارج نطاق namespace ولا يجمع معه.
+5. **`android/app/src/main/AndroidManifest.xml`**
+   - `<uses-permission android:name="android.permission.INTERNET"/>` في الرئيسي (كانت debug-only).
+   - `android:usesCleartextTraffic="true"` مع تعليق ثنائي اللغة: عنوان API يُدخل ويُعدَّل
+     وقت التشغيل (LAN IP/_port)، فقائمة النطاقات الثابتة غير عملية؛ التوصية بترحيل الخادم
+     إلى HTTPS لاحقاً (جرّبنا شبكة xml allowlist ثم أُهملت لنفس السبب).
+6. **`.gitignore` الجذر** — استثناء `release_artifacts/` (ثنائيات كبيرة).
+
+**البناء والناتج** (`flutter build apk --release --split-per-abi` ثم universal):
+
+| الملف | الحجم |
+|---|---|
+| `alkaboodi-v1.0.0-arm64-v8a.apk` | 31.8MB |
+| `alkaboodi-v1.0.0-armeabi-v7a.apk` | 29.9MB |
+| `alkaboodi-v1.0.0-x86_64.apk` | 33.7MB |
+| `alkaboodi-v1.0.0-universal.apk` | 87.2MB |
+| `mapping-v1.0.0.txt` (R8، لفك التشويش) | 10.6MB |
+
+في `release_artifacts/v1.0.0+1/`. Tree-shaking للأيقونات فعّال تلقائياً (−97.6%‏/−99.7%).
+
+**التحقق:** `apksigner verify --print-certs` ⇒ signer DN هو شهادة Al-Kaboodi نفسها
+وتطابق بصمة المفتاح (تحذيرات META-INF/*.version اعتيادية من AAR ولا تمس صحة التوقيع V2/V3)؛
+`aapt2 dump badging` ⇒ `package name='com.alkaboudy.app' versionName='1.0.0' versionCode='2001'
+sdkVersion 23 / targetSdk 35 / label الكبودي`. (versionCode=2001 هو اشتقاق flutter-tools القياسي
+من `1.0.0+1` وليس خطأً.)
+
+**البوابات:** `flutter analyze` = 3 تحذيرات سابقة لا جديدة · `flutter test` = 222 ناجحًا /
+5 متخطّاة / 4 إخفاقات — 3 منها `account_group_statement` موثقة سابقاً، ورابع `api_config_test`
+(يعكس أن API يخدم على `192.168.0.9` بينما الثابت `192.168.0.11`؛ بيئي بحت، لا ملفات Dart عُدلت).
+
+**عقبان واقعيان استهلا إعادة بناء:** (أ) `minifyEnabled` غير موجودة في Kotlin DSL الحديث ⇒
+`isMinifyEnabled`؛ (ب) R8 يتعثر بمراجع Play Core المفردة ⇒ `-dontwarn` أعلاه.
+
+**ما يتعمَّدنا عدم فعله:** لا commit (لم يُطلب)؛ لا رفع للمتجر؛ لا تغيير كلمة سر/مفتاح بديل.
+**تحذير أبدي:** ضياع `ky_release.jks` يعني استحالة إصدار تحديثات بنفس المعرّف — نسخة آمنة
+خارج الجهاز إلزامية.
+
+
+## [2026-10-24 02:12] إضافة دليل البناء والتوقيع والإصدارات (android_release_guide.md) · Qoder Agent
+
+**الدافع:** بعد إنجاز أول إصدار APK موقع (v1.0.0) في نفس اليوم، طلب المستخدم توثيقاً
+مفصّلاً وكاملاً لكيفية عمل البناء مع التوقيع بطريقة آمنة، وكيفية إصدار نسخ جديدة
+وتحديث التطبيق — محفوظاً في ملف بالمشروع.
+
+**ما أُنجز:** أُنشئ `android_release_guide.md` في جذر المشروع (~310 أسطر، عربية مع
+مصطلحات إنجليزية) مقسّم خمسة أجزاء تشغيلية:
+
+1. **التوقيع الرقمي — لماذا وكيف:** شرح مبسط للأصالة والسلامة، وأن هوية التطبيق =
+   مفتاح + معرّف (ولماذا ضياع المفتاح قاتل للتحديثات). جدول المفردات المرتبط بمشروعنا
+   فعلياً: `ky_release.jks`، alias `ky_apps`، RSA-2048/SHA384، DN الشركة، بصمة
+   SHA-256 الكاملة، صلاحية حتى 2054، مخطّط V2. خريطة الملفات الثلاثة ومواضعها من git
+   (المفتاح وkey.properties خارج git بنمطات `android/.gitignore`). شرح تدريجي لتدفق
+   Gradle: قراءة key.properties (`build.gradle.kts:13-17`) ← R8 (isMinify/isShrink +
+   قواعد proguard-rules.pro وسبب كل سطر فيها) ← التوقيع ← آلية fallback إلى debug عند
+   غياب الملف (ولماذا لا تنكسر الأجهزة الأخرى). سبب المسار المطلق لـ storeFile.
+   أوامر `apksigner verify --print-certs` و`aapt2 dump badging` الإلزامية وكيفية قراءة
+   الخرج (بما فيه أن تحذيرات META-INF عادية).
+2. **الترقيم:** مصدر واحد `version: X.Y.Z+N` في pubspec → versionName/versionCode،
+   مع رصد حقيقي أن `1.0.0+1` أنتج versionCode=2001 (اشتقاق flutter-tools قياسي).
+   جدول semver معتمد للمشروع + القاعدة الذهبية (+N يزيد دائماً ولا يتكرر). تجاوز
+   `--build-name/--build-number`.
+3. **إجراء إصدار نسخة جديدة:** pre-flight (البوابات + الإخفاقات المقبولة الموثقة) ←
+   رفع الإصدار ← `--split-per-abi`/universal/appbundle ← تحقق إلزامي ← تثبيت فوق
+   القديمة لاختبار بقاء البيانات ← أرشفة في `release_artifacts/vX/` مع mapping.txt ←
+   توزيع مباشر (واتساب/فلاش/شبكة) وشرح «تعارض التوقيع» ← توثيق في الملفات الثلاثة.
+4. **سيناريوهات حرجة:** ضياع المفتاح (لا استعادة؛ الحل إعادة توليد + حذف كل الأجهزة
+   مع توضيح ما يضيع وما لا يضيع في Oracle + الوقاية بالنسخ الاحتياطي)، نسيان كلمة السر،
+   رفض التثبيت (فحص عكسي مرتّب: versionCode ← بصمة ← معرّف ← معمارية)، نقل لجهاز/مسار
+   جديد، النشر على Google Play وقرار Play App Signing، ومتى يتغير applicationId (لا).
+5. **Quick Reference:** سكربت PowerShell كامل لإصدار من الصفر + 5 ثوابت تشغيلية.
+
+**التزام أمني مقصود:** الدليل لا يذكر كلمة سر المفتاح في أي موضع — يحيل فقط إلى
+`android/key.properties` المحلي ومدير كلمات السر، تماشياً مع قاعدة عدم تسجيل الأسرار
+في أي ملف موثق.
+
+**الأثر:** لا تعديل كود ولا بناء في هذه الجولة؛ ملف توثيق جديد فقط. لم يُنفَّذ commit
+(لا طلب).

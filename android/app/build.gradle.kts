@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,8 +8,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// تحميل بيانات مفتاح التوقيع من ملف key.properties (غير محكوم في git)
+// Load release signing credentials from key.properties (git-ignored).
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
+
 android {
-    namespace = "com.example.ky_apps"
+    namespace = "com.alkaboudy.app"
     compileSdk = 36
     ndkVersion = "27.0.12077973"
 
@@ -20,8 +31,9 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
-        applicationId = "com.example.ky_apps"
+        // معرّف التطبيق النهائي للنشر — لا يجب تغييره بعد إصدار أول نسخة
+        // Final published application ID — must never change after first release.
+        applicationId = "com.alkaboudy.app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = 23
@@ -30,11 +42,35 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        // إعداد التوقيع الرقمي لإصدار النشر من ملف key.properties
+        // Release signing config sourced from key.properties.
+        create("release") {
+            if (keystorePropertiesFile.exists()) {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // التوقيع بمفتاح النشر الحقيقي بدل مفتاح debug
+            // Sign with the real release key instead of debug keys.
+            signingConfig = if (keystorePropertiesFile.exists()) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
+            // تمكين ضغط وتقليل الكود (R8/ProGuard) مع ملفات قواعد Flutter الافتراضية
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
 }
