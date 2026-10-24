@@ -64,6 +64,26 @@ class _CatalogBodyState extends State<_CatalogBody> {
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
 
+  // الأقسام المطويّة — الفتح افتراضي، والطيّ أداة تصفّق لا طقس إخفاء. عند البحث تُفتح
+  // الأقسام تلقائياً (يُتجاهل الطيّ) حتى لا يخفى عن المراجع ما طابق بحثه.
+  // Collapsed sections: expanded by default; folding is a skimming aid, not an act of hiding.
+  // While searching, folding is ignored so a match never hides behind a collapsed header.
+  final Set<String> _collapsed = <String>{};
+  bool get _allCollapsed =>
+      widget.modules.isNotEmpty && _collapsed.length >= widget.modules.length;
+
+  void _toggleModule(String code) => setState(() {
+    if (!_collapsed.add(code)) _collapsed.remove(code);
+  });
+
+  void _toggleAll() => setState(() {
+    if (_allCollapsed) {
+      _collapsed.clear();
+    } else {
+      _collapsed.addAll(widget.modules.map((module) => module.moduleCode));
+    }
+  });
+
   @override
   void dispose() {
     _searchCtrl.dispose();
@@ -158,6 +178,28 @@ class _CatalogBodyState extends State<_CatalogBody> {
                   ),
                 ),
               ),
+              // زر طي/توسيع الكل — يظهر فقط خارج البحث لأن الأقسام تُفتح تلقائياً أثناءه
+              // Collapse/expand-all toggle — only shown outside search, since sections auto-open then.
+              if (_query.isEmpty && widget.modules.length > 1)
+                TextButton.icon(
+                  onPressed: _toggleAll,
+                  icon: Icon(
+                    _allCollapsed
+                        ? Icons.unfold_more_rounded
+                        : Icons.unfold_less_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    _allCollapsed ? 'توسيع الكل' : 'طي الكل',
+                    style: const TextStyle(fontSize: 12),
+                  ),
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.primary,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ),
             ],
           ),
         ),
@@ -169,10 +211,21 @@ class _CatalogBodyState extends State<_CatalogBody> {
                   padding: const EdgeInsets.fromLTRB(12, 4, 12, 24),
                   itemCount: modules.length,
                   separatorBuilder: (_, __) => const SizedBox(height: 10),
-                  itemBuilder: (context, index) => _ModuleCard(
-                    module: modules[index],
-                    compact: widget.compact,
-                  ),
+                  itemBuilder: (context, index) {
+                    final module = modules[index];
+                    // أثناء البحث تُفتح الأقسام قسراً حتى لا يختبئ المطابقة خلف طيّ
+                    // While searching, sections are forced open so a match never hides behind a fold.
+                    final expanded =
+                        _query.trim().isNotEmpty ||
+                        !_collapsed.contains(module.moduleCode);
+                    return _ModuleCard(
+                      module: module,
+                      compact: widget.compact,
+                      expanded: expanded,
+                      showToggle: _query.trim().isEmpty,
+                      onToggle: () => _toggleModule(module.moduleCode),
+                    );
+                  },
                 ),
         ),
       ],
@@ -180,13 +233,22 @@ class _CatalogBodyState extends State<_CatalogBody> {
   }
 }
 
-/// بطاقة قسم: رأس بالرمز اللاتيني ثم صف لكل صلاحية
-/// A section card: a header with the Latin code, then one row per permission.
+/// بطاقة قسم: رأس بالرمز اللاتيني ثم صف لكل صلاحية — الرأس قابل للطيّ لتصفّق المراجعة
+/// A section card: Latin-code header, then one row per permission. The header folds to help skim.
 class _ModuleCard extends StatelessWidget {
   final AppPermissionModule module;
   final bool compact;
+  final bool expanded;
+  final bool showToggle;
+  final VoidCallback onToggle;
 
-  const _ModuleCard({required this.module, required this.compact});
+  const _ModuleCard({
+    required this.module,
+    required this.compact,
+    required this.expanded,
+    required this.showToggle,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -204,60 +266,83 @@ class _ModuleCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                Icon(
-                  Icons.folder_outlined,
-                  size: 18,
-                  color: AppColors.primary,
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    module.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
+            // الرأس كله قابل للنقر — مساحة النقر أكبر من السهم وحده، فالتصفح باللمس أسهل
+            // Whole header is tappable — larger hit target than a chevron alone for touch skimming.
+            InkWell(
+              onTap: showToggle ? onToggle : null,
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 2),
+                child: Row(
+                  children: [
+                    Icon(
+                      expanded
+                          ? Icons.folder_open_rounded
+                          : Icons.folder_outlined,
+                      size: 18,
+                      color: AppColors.primary,
                     ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${module.permissions.length}',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textSecondary,
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        module.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 15,
+                        ),
+                      ),
                     ),
-                  ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        '${module.permissions.length}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                    if (showToggle) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 20,
+                        color: AppColors.textMuted,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (expanded) ...[
+              if (wildcard != null) ...[
+                const SizedBox(height: 8),
+                _PermissionRow(
+                  permission: wildcard,
+                  tone: AppColors.accent,
+                  compact: compact,
                 ),
               ],
-            ),
-            if (wildcard != null) ...[
-              const SizedBox(height: 8),
-              _PermissionRow(
-                permission: wildcard,
-                tone: AppColors.accent,
-                compact: compact,
-              ),
-            ],
-            const Divider(height: 18),
-            for (final permission in module.corePermissions)
-              _PermissionRow(permission: permission, compact: compact),
-            if (module.extraPermissions.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              _ExtrasExpander(
-                permissions: module.extraPermissions,
-                compact: compact,
-              ),
+              const Divider(height: 18),
+              for (final permission in module.corePermissions)
+                _PermissionRow(permission: permission, compact: compact),
+              if (module.extraPermissions.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                _ExtrasExpander(
+                  permissions: module.extraPermissions,
+                  compact: compact,
+                ),
+              ],
             ],
           ],
         ),

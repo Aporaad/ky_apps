@@ -30,6 +30,19 @@ class PermissionModuleGroup extends StatelessWidget {
   /// Whole-group disable — used for a system admin, where extra grants mean nothing.
   final bool disabled;
 
+  /// هل جسم المجموعة ظاهر؟ الطيّ تصفّق لا إخفاء، والفتح هو الافتراضي كي لا تنكسر اختبارات المنح
+  /// Is the body visible? Folding is skimming, not hiding; default expanded so grant tests still pass.
+  final bool expanded;
+
+  /// نقر رأس المجموعة للطي/التوسيع — لا معنى له أثناء البحث لأن الأقسام تُفتح قسراً
+  /// Header tap toggles folding — meaningless while searching, when sections are force-open.
+  final VoidCallback? onToggleCollapse;
+
+  /// إظهار السهم وزر الطيّ — يخفى أثناء البحث حتى لا يبدو الرأس قابلاً للنقر وهو لا يُطوى
+  /// Whether to render the chevron — hidden during search so the header does not look tappable
+  /// when tapping it would be a no-op.
+  final bool showCollapseToggle;
+
   /// رسالة البحث: تطابق الاسم العربي أو اللاتيني أو الكود، وتُطوى المجموعة الفارغة
   /// Search text: matches the Arabic name, English name, or code; empty groups get hidden.
   final String searchQuery;
@@ -41,6 +54,9 @@ class PermissionModuleGroup extends StatelessWidget {
     required this.onSetMany,
     required this.canGrantOne,
     this.disabled = false,
+    this.expanded = true,
+    this.onToggleCollapse,
+    this.showCollapseToggle = false,
     this.searchQuery = '',
     super.key,
   });
@@ -78,78 +94,105 @@ class PermissionModuleGroup extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Header(
-              title: module.title,
-              moduleCode: module.moduleCode,
-              selectedHere: selectedHere,
-              total: allCodes.length,
-              isFull: isFull,
-              disabled: disabled,
-            ),
-            if (coreCodes.isNotEmpty && !isSearchOn && !disabled) ...[
-              const SizedBox(height: 6),
-              _QuickRow(
-                isFull: isFull,
-                selectedHere: selectedHere,
-                onSelectAll: () => onSetMany(allCodes, !isFull),
-                onSelectCore: () =>
-                    onSetMany(coreCodes, !_onlyCoreSelected(coreCodes)),
-                onClear: () => onSetMany(allCodes, false),
-              ),
-            ],
-            const SizedBox(height: 10),
-            if (wildcard.isNotEmpty)
-              _PermissionChip(
-                permission: wildcard.first,
-                isSelected: selected.contains(wildcard.first.permissionCode),
-                grantable: canGrantOne(wildcard.first),
-                disabled: disabled,
-                isWildcard: true,
-                onTap: () => onToggle(wildcard.first.permissionCode),
-              ),
-            if (core.isNotEmpty) ...[
-              const SizedBox(height: 10),
-              // العرض الأقصى لكل شريحة من LayoutBuilder: `Wrap` يعطي أبناءه عرضاً غير محدود،
-              // فاسم صلاحية طويل كان يتجاوز البطاقة بدل أن يُقطع
-              // Each chip gets the card's width as its budget: Wrap measures children unbounded, so
-              // a long permission name would run past the card instead of truncating.
-              LayoutBuilder(
-                builder: (context, constraints) => Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
+            // الرأس قابل للنقر — يَطوى الجسم ليبقى السياق المرئي مختصراً عند تصفّق الأقسام
+            // Header is tappable; tapping folds the body so skimming many sections stays short.
+            InkWell(
+              onTap: showCollapseToggle ? onToggleCollapse : null,
+              borderRadius: BorderRadius.circular(8),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
                   children: [
-                    for (final permission in core)
+                    Expanded(
+                      child: _Header(
+                        title: module.title,
+                        moduleCode: module.moduleCode,
+                        selectedHere: selectedHere,
+                        total: allCodes.length,
+                        isFull: isFull,
+                        disabled: disabled,
+                      ),
+                    ),
+                    if (showCollapseToggle) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        expanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 20,
+                        color: AppColors.textMuted,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+            if (expanded) ...[
+              if (coreCodes.isNotEmpty && !isSearchOn && !disabled) ...[
+                const SizedBox(height: 6),
+                _QuickRow(
+                  isFull: isFull,
+                  selectedHere: selectedHere,
+                  onSelectAll: () => onSetMany(allCodes, !isFull),
+                  onSelectCore: () =>
+                      onSetMany(coreCodes, !_onlyCoreSelected(coreCodes)),
+                  onClear: () => onSetMany(allCodes, false),
+                ),
+              ],
+              const SizedBox(height: 10),
+              if (wildcard.isNotEmpty)
+                _PermissionChip(
+                  permission: wildcard.first,
+                  isSelected: selected.contains(wildcard.first.permissionCode),
+                  grantable: canGrantOne(wildcard.first),
+                  disabled: disabled,
+                  isWildcard: true,
+                  onTap: () => onToggle(wildcard.first.permissionCode),
+                ),
+              if (core.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                // العرض الأقصى لكل شريحة من LayoutBuilder: `Wrap` يعطي أبناءه عرضاً غير محدود،
+                // فاسم صلاحية طويل كان يتجاوز البطاقة بدل أن يُقطع
+                // Each chip gets the card's width as its budget: Wrap measures children unbounded, so
+                // a long permission name would run past the card instead of truncating.
+                LayoutBuilder(
+                  builder: (context, constraints) => Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final permission in core)
+                        _PermissionChip(
+                          permission: permission,
+                          isSelected: selected.contains(permission.permissionCode),
+                          grantable: canGrantOne(permission),
+                          disabled: disabled,
+                          maxWidth: constraints.maxWidth,
+                          onTap: () => onToggle(permission.permissionCode),
+                        ),
+                    ],
+                  ),
+                ),
+              ],
+              if (extras.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                _ExtrasTile(
+                  count: extras.length,
+                  selectedCount: extras
+                      .where((item) => selected.contains(item.permissionCode))
+                      .length,
+                  childrenBuilder: (maxWidth) => [
+                    for (final permission in extras)
                       _PermissionChip(
                         permission: permission,
                         isSelected: selected.contains(permission.permissionCode),
                         grantable: canGrantOne(permission),
                         disabled: disabled,
-                        maxWidth: constraints.maxWidth,
+                        maxWidth: maxWidth,
                         onTap: () => onToggle(permission.permissionCode),
                       ),
                   ],
                 ),
-              ),
-            ],
-            if (extras.isNotEmpty) ...[
-              const SizedBox(height: 4),
-              _ExtrasTile(
-                count: extras.length,
-                selectedCount: extras
-                    .where((item) => selected.contains(item.permissionCode))
-                    .length,
-                childrenBuilder: (maxWidth) => [
-                  for (final permission in extras)
-                    _PermissionChip(
-                      permission: permission,
-                      isSelected: selected.contains(permission.permissionCode),
-                      grantable: canGrantOne(permission),
-                      disabled: disabled,
-                      maxWidth: maxWidth,
-                      onTap: () => onToggle(permission.permissionCode),
-                    ),
-                ],
-              ),
+              ],
             ],
           ],
         ),

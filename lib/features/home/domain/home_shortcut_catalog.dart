@@ -157,7 +157,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     icon: Icons.summarize_rounded,
     sectionId: 'workers',
     target: ScreenTarget(WorkerGroupWorkReportScreen.new),
-    codes: [Perm.cuttersStatement, Perm.tailorsStatement],
+    codes: [Perm.cuttersStatementWork, Perm.tailorsStatementWork],
   ),
 
   HomeShortcut(
@@ -210,7 +210,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     icon: Icons.request_quote_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountStatementScreen.new),
-    codes: [Perm.accountsStatement],
+    codes: [Perm.accountsStatementFinancial],
     defaultOn: true,
   ),
   HomeShortcut(
@@ -219,7 +219,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     icon: Icons.balance_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountGroupStatementScreen.new),
-    codes: [Perm.accountsStatement],
+    codes: [Perm.accountsStatementGroup],
     defaultOn: true,
   ),
   HomeShortcut(
@@ -228,7 +228,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     icon: Icons.analytics_rounded,
     sectionId: 'accounts',
     target: ScreenTarget(AccountStatementDetailScreen.new),
-    codes: [Perm.accountsStatement],
+    codes: [Perm.accountsStatementDetail],
   ),
   HomeShortcut(
     id: 'accounts.create',

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../../core/constants/permission_codes.dart';
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/utils/responsive.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/customer_model.dart';
 import '../widgets/customer_picker_screen.dart';
 import 'add_customer_screen.dart';
@@ -10,15 +13,15 @@ import 'all_customers_screen.dart';
 import 'customer_statement_screen.dart';
 
 /// واجهة قسم العملاء الرئيسية - بطاقات عمليات مرتبة بألوان وأحجام التطبيق الرسمية
-class CustomersDashboardScreen extends StatelessWidget {
+class CustomersDashboardScreen extends ConsumerWidget {
   const CustomersDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isMobile = Responsive.isMobile(context);
     final padding = isMobile ? 16.0 : 24.0;
 
-    final actions = _buildActions(context);
+    final actions = _buildActions(context, ref.watch(authNotifierProvider));
 
     return SingleChildScrollView(
       padding: EdgeInsets.all(padding),
@@ -121,8 +124,12 @@ class CustomersDashboardScreen extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildActions(BuildContext context) {
+  List<Widget> _buildActions(BuildContext context, AuthState auth) {
+    // كل بطاقة عملية خلف صلاحيتها: لا تُبنى أصلاً بلا منح، فلا خلية فارغة في الشبكة
+    // Each action card sits behind its own grant — it isn't built at all when denied, so the
+    // grid keeps no empty cell.
     return [
+      if (auth.can(Perm.customersCreate))
       _CustomerActionCard(
         title: 'إضافة عميل',
         subtitle: 'تسجيل عميل جديد في النظام',
@@ -134,6 +141,7 @@ class CustomersDashboardScreen extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const AddCustomerScreen()),
             ),
       ),
+      if (auth.can(Perm.customersUpdate))
       _CustomerActionCard(
         title: 'تعديل عميل',
         subtitle: 'تحديث بيانات عميل موجود',
@@ -160,6 +168,7 @@ class CustomersDashboardScreen extends StatelessWidget {
           }
         },
       ),
+      if (auth.can(Perm.customersDelete))
       _CustomerActionCard(
         title: 'حذف عميل',
         subtitle: 'إزالة عميل من النظام',
@@ -186,6 +195,7 @@ class CustomersDashboardScreen extends StatelessWidget {
           }
         },
       ),
+      if (auth.can(Perm.customersStatement))
       _CustomerActionCard(
         title: 'كشف حساب',
         subtitle: 'عرض حركات وأرصدة العميل',
@@ -217,6 +227,7 @@ class CustomersDashboardScreen extends StatelessWidget {
           }
         },
       ),
+      if (auth.can(Perm.customersView))
       _CustomerActionCard(
         title: 'كل العملاء',
         subtitle: 'استعراض قائمة العملاء كاملة',

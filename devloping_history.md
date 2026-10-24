@@ -1937,3 +1937,129 @@ sdkVersion 23 / targetSdk 35 / label الكبودي`. (versionCode=2001 هو ا�
 
 **الأثر:** لا تعديل كود ولا بناء في هذه الجولة؛ ملف توثيق جديد فقط. لم يُنفَّذ commit
 (لا طلب).
+
+
+## [2026-10-24 14:30] توسيع IBAC: كشوف دقيقة + حجب أزرار + طيّ أقسام الصلاحيات · Qoder Agent
+
+**الدافع:** خطة `تطوير_وتوسيع_نظام_الصلاحيات_IBAC` (مرفقة في المحادثة). ثلاث مشكلات
+جوهرية: أكواد كشف عامة تسترهين تفاصيل المستخدم، قوائم المنتقي تنهار بـ 403 لأن
+`/accounts/chart` محروس بـ `.view` وحده، وأزرار الشاشات تعرض لمن لا صلاحية له،
+بالإضافة إلى ضعف التصفح في شاشتي عرض الصلاحيات عند وجود أقسام كثيرة.
+
+**ما أُنجز — الخادم (kyApp_API):**
+1. **`app/Support/PermissionCatalog.php`:** مصفوفة `MODULES` تُستبدل فيها أربعة
+   أكواد عامة بتسعة دقيقة:
+   - `accounts.statement` → `accounts.statement_financial` +
+     `accounts.statement_group` + `accounts.statement_detail`.
+   - `employees/cutters/tailors.statement` → `<w>.statement_financial` +
+     `<w>.statement_work` لكل قسم.
+   `humanize()` يعرف الأفعال الأربعة الجديدة. صافي العدد: −4 + 9 = +5؛ 127 → 132.
+2. **`app/Http/Middleware/EnsurePermission.php`:** `handle($request, $next, string
+   ...$codes)` + تقسيم الفاصلة + `PermissionResolver::canAny` — التوافق الرجعي
+   مع كود واحد محفوظ؛ لا كسر لأي مسار حارسه كود واحد.
+3. **`routes/api.php`:** إعادة توزيع الحراسة:
+   - `/accounts/chart` ← `accounts.view,accounts.statement_financial`.
+   - `/accounts/account|main|sub|sub-group|tree` ← أربع أكواد OR (view +
+     structure_manage + statement_group + statement_detail).
+   - `/accounts/chart/{accNo}/statement` ← `accounts.statement_financial`؛
+     `/accounts/statement-detail` ← `statement_detail`؛ `/accounts/group-statement`
+     ← `statement_group`.
+   - `/workers/{emp|cut|tai}/{id}/statement` ← `<w>.statement_financial`؛
+     `/workers/{cut|tai}/{id}/work-report` وgroup ← `<w>.statement_work`.
+4. **`tests/Feature/IbacCoreTest.php`:** العدد المتوقع 127 → 132.
+5. **`tests/Feature/BusinessRoutesSealedTest.php`:** العنصر الثالث في كل حالة
+   يقبل قائمة أو نص؛ الحلقة تصير `$expected = is_array($code) ? $code : [$code]`.
+   تحديث مسارات الكشوف إلى الأكواد الجديدة، والمسارات المتعددة إلى قوائم OR.
+6. **Pint:** نظيف على كل الملفات الخمسة. **Pest:** اختبار تطابق الكتالوج (24
+   assertion) واختبارا فحص المسارات نجحا؛ `BusinessRoutesSealedTest` الكامل
+   يتطلب Oracle حيّ غير متاح هنا — Assertions مُحدّثة لتطابق شكل `errors.permission`
+   الجديد (array للمسارات OR، string للمسارات أحادية الكود).
+
+**ما أُنجز — Oracle (تسليم، بلا تنفيذ):**
+- `database/oracle/06_ibac_statement_split.sql` — كتلة PL/SQL مجهولة: خريطة
+  عام→قائمة دقيق، cursor على الأكواد العامة الأربعة، تكرار على منحها،
+  INSERT لكل دقيق مقابل (مع فحص المكرر بـ `l_dup`)؛ ثم DELETE منح العامة
+  وصفوف العامة من `APP_PERMISSIONS`؛ RAISE_APPLICATION_ERROR(-20011) إن كان
+  دقيق مفقود (يذكّر بالتشغيل بعد البذر)؛ COMMIT في النهاية. لا literals عربية
+  (سائق AL32UTF8 يسقطها في CP1256 غير مهيّأ).
+- `database/oracle/07_ibac_statement_split_verify.sql` — خمسة تحققات: الأكواد
+  العامة المتبقية=0، عرض التسعة الجديدة مع IS_ACTIVE، منح يتيمة=0، حاملو
+  العامة غير مغطى=0 (عبر BAK_06)، عدد الأكواد الحيّ=132.
+- `02_ibac_seed.php` لا تعديل — idempotent ومُغذّى من `PermissionCatalog::rows()`
+  أصلاً، فالتشغيل اللاحق يُدرج التسعة تلقائياً.
+- الترقيم 06/07 (لا 05/06): `05_app_settings_company_en.sql` موجود.
+
+**ما أُنجز — العميل (lib/):**
+1. **`core/constants/permission_codes.dart`:** حذف 4 constants عامة (`accountsStatement`،
+   `employeesStatement`، `cuttersStatement`، `tailorsStatement`)؛ إضافة 9 دقيقة
+   مع تعليقات ثنائية اللغة عن سبب التقسيم؛ تحديث `allPermissionCodes` بترتيب
+   الكتالوج (wildcard → core → extras لكل قسم)؛ توسيع `permActionLabels` بأربع
+   تسميات عربية جديدة. التعليقات المرجعية 127 → 132.
+2. **حجب الأزرار — شاشات الحسابات:** `accounts_dashboard_screen.dart` تحوّل
+   `_buildModernActionTile` من `Widget` إلى `Widget?` بمعامل `String? permission`؛
+   كل بطاقة كشف (مالي/تحليلي/مجموعة) تحمل كودها؛ إضافة/تعديل/شجرة/عملات كذلك؛
+   الشبكة `.whereType<Widget>().toList()`. `account_statement_detail_screen.dart`
+   — الطباعة/التصدير كانا يستندان `Perm.accountsStatement` القديم؛ استُبدلا
+   بـ `Perm.accountsPrint`/`Perm.accountsExport`. الشاشتان الأخريان للمجموعة
+   والمالي كانتا محجوبتين أصلاً بشكل صحيح.
+3. **حجب العاملين:** `worker_action_icons.dart` أُعيدت كتابته بالكامل من
+   StatelessWidget إلى ConsumerWidget؛ قائمة `(String? code, Widget btn)` تُصفّى
+   بـ `auth.can` ثم تُعاد لصقها بفواصل `SizedBox(width:4)` بعد التصفية (تجنّب
+   فاصل زائد في الآخر). أكواد: `<apiPath>.statement_financial/statement_work/update/toggle/delete`.
+   `workers_dashboard_screen.dart` تحوّل ConsumerWidget مع قائمة بطاقات مُرشّحة
+   بـ collection-if (`.view` لكل فئة، و`canAny([cutters.statement_work,
+   tailors.statement_work])` لبطاقة «كشف عمل مجموعة»)، ورأس القسم + الفواصل
+   كلها مشروطة بـ `if (cards.isNotEmpty)`. `workers_list_screen.dart` — زر
+   الإضافة مشروط بـ `ref.watch(authNotifierProvider.select((auth) =>
+   auth.can('${workerType.apiPath}.create')))`. شاشتا كشف المالي和工作 للعاملين
+   كانتا محفوظتين أصلاً.
+4. **حجب العملاء:** `customers_dashboard_screen.dart` — StatelessWidget →
+   ConsumerWidget مع `_buildActions(BuildContext, AuthState)`، كل بطاقة
+   من الخمس (إضافة/تعديل/حذف/كشف/قائمة) خلف كودها. `all_customers_screen.dart`
+   — الأزرار المضمّنة (كشف/تعديل) داخل صفوف القائمة لُفّت بـ `PermissionGate`.
+   `customer_statement_screen.dart` كان محفوظاً أصلاً.
+5. **`home_shortcut_catalog.dart`:** إعادة ربط الاختصارات —
+   `accounts.statement`→`accountsStatementFinancial`،
+   `accounts.group`→`accountsStatementGroup`،
+   `accounts.analysis`→`accountsStatementDetail`،
+   `workers.group_work`→`[cuttersStatementWork, tailorsStatementWork]`.
+   معرفات الاختصارات (`id`) بقيت كما هي لئلا تنكسر سجلات المستخدم.
+6. **طيّ المنتقي (`permission_module_group.dart` + `permissions_picker_widget.dart`):**
+   أضيفت `expanded`/`onToggleCollapse`/`showCollapseToggle` إلى المجموعة؛ الرأس
+   صار `InkWell` داخل صف يحمل سهم `expand_less`/`expand_more`؛ الجسم كله
+   (QuickRow + wildcard + chips + ExtrasTile) داخل `if (expanded)`. الحالة
+   `_collapsed: Set<String>` في `_PermissionsPickerWidgetState` مع
+   `_toggleModule` و`_toggleAll`، وتمرير عبر `_Groups`. شريط الحالة أضاف زر
+   «طي الكل/توسيع الكل» بجانب «مسح كل المحدد». أثناء البحث `expanded`
+   يُفرض=true لأن مطابقة البحث خلف رأس مطوي تضرّ بالمراجع.
+7. **طيّ الكتالوج (`permissions_catalog_screen.dart`):** نفس النمط في
+   `_CatalogBodyState` مع `_collapsed`/`_toggleModule`/`_toggleAll`؛ `_ModuleCard`
+   يقبل `expanded`/`showToggle`/`onToggle`؛ رأس tappable مع Chevron وأيقونة
+   مجلد تتبدل `folder_outlined`↔`folder_open_rounded`؛ الجسم كامل داخل
+   `if (expanded) ...[ ... ]`. «طي الكل» بجانب نص العدّاد.
+
+**البوابات:**
+- `flutter analyze lib/features/admin lib/features/accounts lib/features/workers
+  lib/features/customers lib/features/home lib/core/constants` → لا مشاكل (0).
+- `flutter test test/ibac_test.dart` → 20/20 ناجح؛ بما فيها الاختبارات الأربعة
+  لسلوك batch actions في `PermissionsPickerWidget` (ما زالت تنجح لأن
+  `_collapsed` افتراضياً فارغ → الأقسام مفتوحة).
+- `flutter test` الكامل → 222 ناجح / ~5 متخطاة / 4 إخفاقات في
+  `account_group_statement_screen_test.dart` (`RangeError at _maybeApplyDefaults:177`)؛
+  مُثبت أنها سابقة لهذا العمل بـ `git stash push -- lib` ثم إعادة تشغيل — نفس
+  الإخفاقات تظهر على baseline، والملف `account_group_statement_screen.dart` لم
+  يُمسّ في هذه الجلسة.
+- **تنبيه:** `flutter analyze lib` يشمل تحذيراً واحداً سابقاً غير متعلق في
+  `biometric_login_button.dart:24` (`unused_local_variable`) — ليس من تعديلاتي.
+
+**القرارات المعمولة:**
+- `.view` يبقى شرط ظهور القسم في `portal_sections.viewCodes`؛ الأكواد الدقيقة
+  تحكم ظهور الأزرار/البطاقات داخل القسم وحراسة مسارات API الخاصة بالكشف، لا
+  ظهور القسم نفسه — متسق مع «يتطلب .view».
+- الترحيل يمنح حامل الكود العام كل الأكواد الدقيقة المكافئة (لا إنقاص)، تاركاً
+  التضييق اليدوي اللاحق عبر شاشة المنح.
+- سكربت Oracle لا يُنفَّذ من طرف الذكاء — لا Oracle MCP متاح؛ التسليم ملف SQL
+  يُراجَع ويُشغَّل يدوياً بعد backup (جدول BAK_06 مُقترح في رأس الملف).
+
+**الأثر:** لا commit (لا طلب)؛ لا تنفيذ SQL؛ قاعدة البيانات لم تُمسّ. كل التعديل
+في العملtree المحلي: 5 ملفات الخادم، 2 ملفات Oracle جديدة، 10 ملفات Flutter.

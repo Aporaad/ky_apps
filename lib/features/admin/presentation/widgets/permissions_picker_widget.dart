@@ -52,11 +52,29 @@ class _PermissionsPickerWidgetState extends ConsumerState<PermissionsPickerWidge
   final TextEditingController _searchCtrl = TextEditingController();
   String _query = '';
 
+  // الأقسام المطويّة — الفتح افتراضي، فالطيّ أداة تصفّق لا طقس إخفاء. أثناء البحث تتجاهل
+  // المجموعة الطيّ حتى لا يختبئ مطابقة خلف رأس مطوي.
+  // Collapsed sections: expanded by default — folding is a skimming aid, not an act of hiding.
+  // While searching, folding is ignored so a match never hides behind a collapsed header.
+  final Set<String> _collapsed = <String>{};
+
   @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();
   }
+
+  void _toggleModule(String code) => setState(() {
+    if (!_collapsed.add(code)) _collapsed.remove(code);
+  });
+
+  void _toggleAll(List<AppPermissionModule> modules) => setState(() {
+    if (modules.isNotEmpty && _collapsed.length >= modules.length) {
+      _collapsed.clear();
+    } else {
+      _collapsed.addAll(modules.map((module) => module.moduleCode));
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +136,9 @@ class _PermissionsPickerWidgetState extends ConsumerState<PermissionsPickerWidge
               grantorIsAdmin: widget.grantorIsAdmin,
               onToggle: widget.onToggle,
               onSetMany: widget.onSetMany,
+              collapsed: _collapsed,
+              onToggleModule: _toggleModule,
+              onToggleAll: () => _toggleAll(modules),
             ),
           ),
         ],
@@ -237,6 +258,9 @@ class _Groups extends StatelessWidget {
   final bool grantorIsAdmin;
   final void Function(String code) onToggle;
   final void Function(List<String> codes, bool select) onSetMany;
+  final Set<String> collapsed;
+  final void Function(String code) onToggleModule;
+  final VoidCallback onToggleAll;
 
   const _Groups({
     required this.modules,
@@ -247,6 +271,9 @@ class _Groups extends StatelessWidget {
     required this.grantorIsAdmin,
     required this.onToggle,
     required this.onSetMany,
+    required this.collapsed,
+    required this.onToggleModule,
+    required this.onToggleAll,
   });
 
   @override
@@ -260,6 +287,11 @@ class _Groups extends StatelessWidget {
       );
     }
 
+    final searching = query.trim().isNotEmpty;
+    final allCollapsed =
+        visibleModules.length > 1 &&
+        collapsed.length >= visibleModules.length;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -267,15 +299,31 @@ class _Groups extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                query.trim().isEmpty
-                    ? 'مرّتبة حسب أقسام النظام كما في الخادم'
-                    : 'أقسام تحتوي المطابقة',
+                searching
+                    ? 'أقسام تحتوي المطابقة'
+                    : 'مرّتبة حسب أقسام النظام كما في الخادم',
                 style: const TextStyle(
                   fontSize: 11,
                   color: AppColors.textMuted,
                 ),
               ),
             ),
+            // زر الطي/التوسيع الشامل — خارج البحث فقط لأن الأقسام تُفتح قسراً أثناء البحث
+            // Collapse-all toggle — hidden while searching, since sections auto-open then.
+            if (!searching && visibleModules.length > 1 && !disabled)
+              TextButton(
+                onPressed: onToggleAll,
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primary,
+                  padding: const EdgeInsets.symmetric(horizontal: 6),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  allCollapsed ? 'توسيع الكل' : 'طي الكل',
+                  style: const TextStyle(fontSize: 11.5),
+                ),
+              ),
             if (!disabled && selected.isNotEmpty)
               TextButton(
                 onPressed: () => onSetMany(selected.toList(growable: false), false),
@@ -301,6 +349,9 @@ class _Groups extends StatelessWidget {
             onSetMany: onSetMany,
             disabled: disabled,
             searchQuery: query,
+            expanded: searching || !collapsed.contains(module.moduleCode),
+            onToggleCollapse: () => onToggleModule(module.moduleCode),
+            showCollapseToggle: !searching,
             canGrantOne: (permission) => canGrant(
               permission,
               granted: grantorPermissions,

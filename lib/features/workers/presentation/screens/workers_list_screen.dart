@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../providers/workers_provider.dart';
 import '../widgets/worker_action_icons.dart';
@@ -225,22 +226,29 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: Row(
               children: [
-                // زر إضافة
-                ElevatedButton.icon(
-                  onPressed: _goToAdd,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: Text(widget.addLabel),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.accentColor,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
+                // زر إضافة — يظهر فقط لمن يملك صلاحية الإضافة لهذا السجل
+                // Add button shows only for holders of this registry's create grant.
+                if (ref.watch(
+                  authNotifierProvider.select(
+                    (auth) => auth.can('${widget.workerType.apiPath}.create'),
+                  ),
+                )) ...[
+                  ElevatedButton.icon(
+                    onPressed: _goToAdd,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: Text(widget.addLabel),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: widget.accentColor,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
+                  const SizedBox(width: 12),
+                ],
                 // حقل بحث
                 Expanded(
                   child: TextField(

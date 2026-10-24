@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/worker_model.dart';
 
 /// أيقونات إجراءات العامل: كشف حساب - كشف عمل/حضور - تعديل - تعطيل - حذف
-class WorkerActionIcons extends StatelessWidget {
+/// كل أيقونة خلف صلاحيتها الدقيقة، وتُلغى تماماً بلا منح (لا تعطيل) حتى لا يلمّح الواجهة
+/// بشيء محجوب. الوحدة مشتقّة من نوع العامل: employees / cutters / tailors.
+/// Every icon sits behind its own precise grant and is removed entirely when absent (never
+/// disabled). The module comes from the worker type: employees / cutters / tailors.
+class WorkerActionIcons extends ConsumerWidget {
   final WorkerModel worker;
   final VoidCallback? onStatement;
   final VoidCallback? onWorkReport;
@@ -26,22 +32,28 @@ class WorkerActionIcons extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isDisabled = worker.isDisabled;
+    // البادئة حسب نوع العامل، مطابقة لتسمية أفعال الصلاحيات في الكتالوج
+    // The prefix follows the worker type, matching the catalog's action naming.
+    final module = worker.type.apiPath;
+    final auth = ref.watch(authNotifierProvider);
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // كشف الحساب
+    // كل صف = (الكود المطلوب، الرمز). الأزرار التي بلا كود تُعرض دائماً؛ والمسنودة تُحجب
+    // إذا لم تُمنح. الترتيب محفوظ كما كان.
+    // Each row is (required code, button). Coded buttons hide without the grant; order preserved.
+    final actions = <(String?, Widget)>[
+      (
+        '$module.statement_financial',
         _ActionBtn(
           icon: Icons.receipt_long_rounded,
           tooltip: 'كشف حساب',
           color: AppColors.primary,
           onTap: onStatement,
         ),
-        const SizedBox(width: 4),
-
-        // كشف عمل / كشف حضور
+      ),
+      (
+        '$module.statement_work',
         _ActionBtn(
           icon: worker.type == WorkerType.employee
               ? Icons.calendar_month_rounded
@@ -50,18 +62,18 @@ class WorkerActionIcons extends StatelessWidget {
           color: const Color(0xFF0D9488),
           onTap: onWorkReport,
         ),
-        const SizedBox(width: 4),
-
-        // تعديل
+      ),
+      (
+        '$module.update',
         _ActionBtn(
           icon: Icons.edit_rounded,
           tooltip: 'تعديل',
           color: const Color(0xFFF59E0B),
           onTap: onEdit,
         ),
-        const SizedBox(width: 4),
-
-        // تعطيل / تفعيل
+      ),
+      (
+        '$module.toggle',
         _ActionBtn(
           icon: isDisabled
               ? Icons.play_circle_rounded
@@ -70,17 +82,34 @@ class WorkerActionIcons extends StatelessWidget {
           color: isDisabled ? AppColors.success : const Color(0xFF6B7280),
           onTap: onToggle,
         ),
-        const SizedBox(width: 4),
-
-        // حذف
+      ),
+      (
+        '$module.delete',
         _ActionBtn(
           icon: Icons.delete_rounded,
           tooltip: 'حذف',
           color: AppColors.error,
           onTap: onDelete,
         ),
-      ],
-    );
+      ),
+    ];
+
+    // فلترة المسموح بها فقط ثم إعادة الفواصل بينها حتى لا تظهر مسافة زائدة
+    // Keep only allowed actions, then re-insert gaps so no trailing spacer shows.
+    final allowed = actions
+        .where((entry) => entry.$1 == null || auth.can(entry.$1!))
+        .map((entry) => entry.$2)
+        .toList();
+
+    if (allowed.isEmpty) return const SizedBox.shrink();
+
+    final spaced = <Widget>[];
+    for (var i = 0; i < allowed.length; i++) {
+      if (i > 0) spaced.add(const SizedBox(width: 4));
+      spaced.add(allowed[i]);
+    }
+
+    return Row(mainAxisSize: MainAxisSize.min, children: spaced);
   }
 }
 

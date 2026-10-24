@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (127 كوداً في 23 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (132 كوداً في 23 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -52,7 +52,10 @@ class Perm {
   static const String employeesUpdate = 'employees.update';
   static const String employeesDelete = 'employees.delete';
   static const String employeesToggle = 'employees.toggle';
-  static const String employeesStatement = 'employees.statement';
+  // كشف مالي وكشف عمل صارت صلاحيتين مستقلّتين لكل سجل عامل، بدل `statement` العام.
+  // Financial and work statements are now two independent grants per worker registry.
+  static const String employeesStatementFinancial = 'employees.statement_financial';
+  static const String employeesStatementWork = 'employees.statement_work';
 
   // ── القصاصين / cutters ───────────────────────────────────
   static const String cuttersWildcard = 'cutters.*';
@@ -61,7 +64,8 @@ class Perm {
   static const String cuttersUpdate = 'cutters.update';
   static const String cuttersDelete = 'cutters.delete';
   static const String cuttersToggle = 'cutters.toggle';
-  static const String cuttersStatement = 'cutters.statement';
+  static const String cuttersStatementFinancial = 'cutters.statement_financial';
+  static const String cuttersStatementWork = 'cutters.statement_work';
 
   // ── الخياطين / tailors ───────────────────────────────────
   static const String tailorsWildcard = 'tailors.*';
@@ -70,7 +74,8 @@ class Perm {
   static const String tailorsUpdate = 'tailors.update';
   static const String tailorsDelete = 'tailors.delete';
   static const String tailorsToggle = 'tailors.toggle';
-  static const String tailorsStatement = 'tailors.statement';
+  static const String tailorsStatementFinancial = 'tailors.statement_financial';
+  static const String tailorsStatementWork = 'tailors.statement_work';
 
   // ── الحسابات / accounts ──────────────────────────────────
   static const String accountsWildcard = 'accounts.*';
@@ -79,7 +84,12 @@ class Perm {
   static const String accountsUpdate = 'accounts.update';
   static const String accountsDelete = 'accounts.delete';
   static const String accountsStructureManage = 'accounts.structure_manage';
-  static const String accountsStatement = 'accounts.statement';
+  // كل كشف مالي له كود مستقل بدل `accounts.statement` العام: المالي، ومجموعة الحسابات
+  // الجزئية (ميزان المراجعة)، والتحليلي المفصّل.
+  // Each financial statement carries its own code instead of one broad grant.
+  static const String accountsStatementFinancial = 'accounts.statement_financial';
+  static const String accountsStatementGroup = 'accounts.statement_group';
+  static const String accountsStatementDetail = 'accounts.statement_detail';
   static const String accountsPrint = 'accounts.print';
   static const String accountsExport = 'accounts.export';
 
@@ -224,28 +234,33 @@ const List<String> allPermissionCodes = [
   Perm.employeesUpdate,
   Perm.employeesDelete,
   Perm.employeesToggle,
-  Perm.employeesStatement,
+  Perm.employeesStatementFinancial,
+  Perm.employeesStatementWork,
   Perm.cuttersWildcard,
   Perm.cuttersView,
   Perm.cuttersCreate,
   Perm.cuttersUpdate,
   Perm.cuttersDelete,
   Perm.cuttersToggle,
-  Perm.cuttersStatement,
+  Perm.cuttersStatementFinancial,
+  Perm.cuttersStatementWork,
   Perm.tailorsWildcard,
   Perm.tailorsView,
   Perm.tailorsCreate,
   Perm.tailorsUpdate,
   Perm.tailorsDelete,
   Perm.tailorsToggle,
-  Perm.tailorsStatement,
+  Perm.tailorsStatementFinancial,
+  Perm.tailorsStatementWork,
   Perm.accountsWildcard,
   Perm.accountsView,
   Perm.accountsCreate,
   Perm.accountsUpdate,
   Perm.accountsDelete,
   Perm.accountsStructureManage,
-  Perm.accountsStatement,
+  Perm.accountsStatementFinancial,
+  Perm.accountsStatementGroup,
+  Perm.accountsStatementDetail,
   Perm.accountsPrint,
   Perm.accountsExport,
   Perm.currenciesWildcard,
@@ -389,6 +404,10 @@ const Map<String, String> permActionLabels = {
   'print': 'طباعة',
   'export': 'تصدير',
   'statement': 'كشف حساب',
+  'statement_financial': 'كشف حساب مالي',
+  'statement_group': 'كشف مجموعة حسابات',
+  'statement_detail': 'كشف تحليلي مفصل',
+  'statement_work': 'كشف عمل',
   'toggle': 'تفعيل/تعطيل',
   'deliver': 'تسليم',
   'edit_limit': 'تعديل السقف',

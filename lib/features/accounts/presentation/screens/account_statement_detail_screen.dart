@@ -189,18 +189,18 @@ class _AccountStatementDetailScreenState
         elevation: 0.5,
         actions: [
           if (transactions.isNotEmpty) ...[
-            // طباعة — محمية بصلاحية كشف الحساب (كبقية التقارير)
+            // طباعة — محمية بصلاحية الطباعة العامة للكشوف
             PermissionGate(
-              code: Perm.accountsStatement,
+              code: Perm.accountsPrint,
               child: IconButton(
                 icon: const Icon(Icons.print_outlined, size: 20),
                 tooltip: 'طباعة',
                 onPressed: _printReport,
               ),
             ),
-            // تصدير PDF — محمي بصلاحية كشف الحساب
+            // تصدير PDF — محمي بصلاحية التصدير العامة للكشوف
             PermissionGate(
-              code: Perm.accountsStatement,
+              code: Perm.accountsExport,
               child: IconButton(
                 icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
                 tooltip: 'تصدير PDF',

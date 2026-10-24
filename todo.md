@@ -1180,3 +1180,53 @@ customer_statement_screen and the worker statements وقم بالاتصال بق
 - [x] **أمان التوثيق:** الدليل **لا يذكر كلمة سر المفتاح إطلاقاً** — يحيل إلى
   `android/key.properties` المحلي ومدير كلمات السر فقط، التزاماً بقاعدة عدم تسجيل الأسرار.
 - **ملاحظة:** لم يُنفَّذ أي بناء أو تعديل كود في هذه الجولة — وثيقة مرجعية بحتة.
+
+
+## [2026-10-24 14:30] توسيع صلاحيات IBAC: كشوف دقيقة + حجب أزرار + طيّ الأقسام · Qoder Agent
+
+**المهمة:** تنفيذ خطة `تطوير_وتوسيع_نظام_الصلاحيات_IBAC` — استبدال أكواد الكشوف
+العامة بأكواد دقيقة لكل كشف، إصلاح مشكلة القوائم المنسدلة في شاشة المنتقي، حجب كل
+زر/بطاقة/أيقونة وراء صلاحيته، وتحسين واجهتي عرض الصلاحيات (المنتقي والكتالوج).
+
+- [x] **الخادم (kyApp_API):**
+  - `PermissionCatalog.php`: استبدال `accounts.statement` بثلاثة أكواد
+    (`statement_financial`/`statement_group`/`statement_detail`) واستبدال
+    `employees/cutters/tailors.statement` بكشفين لكل قسم (`statement_financial` +
+    `statement_work`)؛ عدد الأكواد 127 → 132؛ تحديث `humanize()`.
+  - `EnsurePermission.php`: دعم OR عبر `string ...$codes` + تقسيم الفاصلة +
+    `PermissionResolver::canAny` — توافق رجعي مع كود واحد.
+  - `routes/api.php`: توزيع الأكواد على المسارات المساعدة (chart/tree/…) بمجموعات
+    OR، والكشوف بأكوادها الدقيقة.
+  - `tests/Feature/IbacCoreTest.php`: العدد 127 → 132.
+  - `tests/Feature/BusinessRoutesSealedTest.php`: دعم قائمة الأكواد في assertions.
+  - Pint نظيف على كل الملفات الخمسة؛ Pest: تطابق الكتالوج (24 assertion) + فحص
+    المسارات نجحا.
+- [x] **Oracle (تسليم بلا تنفيذ):**
+  - `database/oracle/06_ibac_statement_split.sql` — كتلة PL/SQL: خريطة، ترحيل منح
+    الكود العام إلى كل دقيقة مكافئة (لا إنقاص صلاحيات)، حذف المنح العامة وصفوف
+    الأكواد العامة، COMMIT؛ بلا literals عربية (تقييد AL32UTF8 driver).
+  - `database/oracle/07_ibac_statement_split_verify.sql` — خمسة تحققات: بقايا
+    عام=0، وجود التسعة، بلا منح يتيمة، لا حامل عام بلا تغطية، عدد حيّ=132.
+  - `02_ibac_seed.php` لا يحتاج تعديل (idempotent، قائدي على `PermissionCatalog::rows`).
+- [x] **العميل (Flutter):**
+  - `core/constants/permission_codes.dart`: حذف 4 constants عامة، إضافة 9 دقيقة،
+    تحديث `allPermissionCodes` بنفس ترتيب الخادم، توسيع `permActionLabels`
+    (`statement_financial`/`statement_group`/`statement_detail`/`statement_work`).
+  - حجب كامل للأزرار: `accounts_dashboard_screen` (بطاقات كشوف + إضافة/تعديل +
+    شجرة + عملات)، `worker_action_icons` (كل أيقونة بكودها)، `workers_dashboard`
+    (بطاقات الفئات + «كشف عمل مجموعة»)، `workers_list` (زر الإضافة)،
+    `customers_dashboard` (5 بطاقات)، `all_customers_screen` (سطر كل عميل)،
+    `account_statement_detail_screen` (طباعة/تصدير بأكوادها).
+  - `home_shortcut_catalog`: إعادة ربط الاختصارات الأربعة بالأكواد الجديدة.
+- [x] **تحسين الواجهتين (طي الأقسام):**
+  - `permissions_picker_widget` + `permission_module_group`: حالة `_collapsed` في
+    State الوامض، نقل `expanded`/`onToggleCollapse`/`showCollapseToggle` إلى
+    المجموعة، رأس قابل للنقر مع سهم، و«طي الكل/توسيع الكل» في شريط الحالة.
+  - `permissions_catalog_screen`: نفس النمط في `_CatalogBodyState` مع
+    `_ModuleCard` قابل للطيّ. البحث يُبقي الأقسام مفتوحة قسراً في الشاشتين.
+- [x] **بوابة الجودة:** `flutter analyze` نظيف على 6 أدلة معدّلة؛ `flutter test
+    test/ibac_test.dart` = 20/20 ناجح؛ `flutter test` كامل = 222 ناجح / 4 إخفاقات
+    موثقة مسبقاً (`account_group_statement`) مثبتة بـ `git stash push -- lib`.
+- [x] **التوثيق:** إلحاقات في `devloping_history.md` و`user_commends.md` و
+    `DBdevloping_history.md` و`db_commends.md` بنفس التاريخ والطابع.
+- **لا commit** — لا طلب من المستخدم. **لا تنفيذ SQL** — لا Oracle MCP متاح.

@@ -1,17 +1,81 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../screens/employees_list_screen.dart';
 import '../screens/cutters_list_screen.dart';
 import '../screens/tailors_list_screen.dart';
 import '../screens/worker_group_work_report_screen.dart';
 
 /// لوحة تحكم "جاري العاملين" - بطاقات فئات مرتبة بألوان وأحجام التطبيق الرسمية
-class WorkersDashboardScreen extends StatelessWidget {
+class WorkersDashboardScreen extends ConsumerWidget {
   const WorkersDashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final canPop = Navigator.canPop(context);
+    final auth = ref.watch(authNotifierProvider);
+
+    // بطاقات الفئات خلف صلاحية العرض لكل سجل؛ وكشف العمل الجماعي خلف أيٍّ من كودَيه
+    // Category cards sit behind each registry's view grant; the group-work report behind either
+    // of its two codes (cutter or tailor).
+    final cards = <Widget>[
+      if (auth.can(Perm.employeesView))
+        _WorkerCategoryCard(
+          icon: Icons.badge_rounded,
+          title: 'الموظفين',
+          subtitle: 'إدارة بيانات الموظفين وكشف الحضور والحساب',
+          badge: 'موظفون',
+          accent: AppColors.info,
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const EmployeesListScreen()),
+              ),
+        ),
+      if (auth.can(Perm.cuttersView))
+        _WorkerCategoryCard(
+          icon: Icons.content_cut_rounded,
+          title: 'القصاصين',
+          subtitle: 'إدارة بيانات القصاصين وكشف العمل والحساب',
+          badge: 'قصاصون',
+          accent: AppColors.success,
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const CuttersListScreen()),
+              ),
+        ),
+      if (auth.can(Perm.tailorsView))
+        _WorkerCategoryCard(
+          icon: Icons.checkroom_rounded,
+          title: 'الخياطين',
+          subtitle: 'إدارة بيانات الخياطين وكشف العمل والحساب',
+          badge: 'خياطون',
+          accent: AppColors.warning,
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TailorsListScreen()),
+              ),
+        ),
+      if (auth.canAny([
+        Perm.cuttersStatementWork,
+        Perm.tailorsStatementWork,
+      ]))
+        _WorkerCategoryCard(
+          icon: Icons.summarize_rounded,
+          title: 'كشف عمل مجموعة',
+          subtitle: 'عرض أعمال جميع القصاصين أو الخياطين لفترة محددة',
+          badge: 'تقارير',
+          accent: AppColors.primary,
+          onTap:
+              () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const WorkerGroupWorkReportScreen(),
+                ),
+              ),
+        ),
+    ];
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar:
@@ -128,90 +192,30 @@ class WorkersDashboardScreen extends StatelessWidget {
 
             const SizedBox(height: 20),
 
-            // عنوان البطاقات
-            Padding(
-              padding: const EdgeInsets.only(right: 2, bottom: 10),
-              child: Row(
-                children: [
-                  Icon(Icons.category_outlined, size: 16, color: AppColors.primary),
-                  const SizedBox(width: 6),
-                  Text(
-                    'اختر الفئة',
-                    style: TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+            // عنوان البطاقات — يظهر فقط عند وجود فئة مصرّح بها
+            if (cards.isNotEmpty) ...[
+              Padding(
+                padding: const EdgeInsets.only(right: 2, bottom: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.category_outlined, size: 16, color: AppColors.primary),
+                    const SizedBox(width: 6),
+                    Text(
+                      'اختر الفئة',
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
-
-            // بطاقة الموظفين
-            _WorkerCategoryCard(
-              icon: Icons.badge_rounded,
-              title: 'الموظفين',
-              subtitle: 'إدارة بيانات الموظفين وكشف الحضور والحساب',
-              badge: 'موظفون',
-              accent: AppColors.info,
-              onTap:
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const EmployeesListScreen(),
-                    ),
-                  ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // بطاقة القصاصين
-            _WorkerCategoryCard(
-              icon: Icons.content_cut_rounded,
-              title: 'القصاصين',
-              subtitle: 'إدارة بيانات القصاصين وكشف العمل والحساب',
-              badge: 'قصاصون',
-              accent: AppColors.success,
-              onTap:
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const CuttersListScreen(),
-                    ),
-                  ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // بطاقة الخياطين
-            _WorkerCategoryCard(
-              icon: Icons.checkroom_rounded,
-              title: 'الخياطين',
-              subtitle: 'إدارة بيانات الخياطين وكشف العمل والحساب',
-              badge: 'خياطون',
-              accent: AppColors.warning,
-              onTap:
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const TailorsListScreen(),
-                    ),
-                  ),
-            ),
-
-            const SizedBox(height: 12),
-
-            // بطاقة كشف عمل مجموعة
-            _WorkerCategoryCard(
-              icon: Icons.summarize_rounded,
-              title: 'كشف عمل مجموعة',
-              subtitle: 'عرض أعمال جميع القصاصين أو الخياطين لفترة محددة',
-              badge: 'تقارير',
-              accent: AppColors.primary,
-              onTap:
-                  () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const WorkerGroupWorkReportScreen(),
-                    ),
-                  ),
-            ),
+              for (var i = 0; i < cards.length; i++) ...[
+                if (i > 0) const SizedBox(height: 12),
+                cards[i],
+              ],
+            ],
 
             const SizedBox(height: 28),
           ],

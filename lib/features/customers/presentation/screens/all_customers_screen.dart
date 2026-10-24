@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/permission_gate.dart';
 import '../../data/models/customer_model.dart';
 import '../providers/customers_provider.dart';
 import 'customer_statement_screen.dart';
@@ -351,30 +353,36 @@ class _CustomerCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 10),
-            // أزرار الإجراءات السريعة
+            // أزرار الإجراءات السريعة — كل زر خلف صلاحيته الدقيقة
             Row(
               children: [
-                _actionBtn(
-                  icon: Icons.account_balance_wallet_rounded,
-                  label: 'كشف',
-                  color: const Color(0xFF7C3AED),
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => CustomerStatementScreen(
-                        custNo: customer.custNo,
-                        custName: customer.custName,
-                        accNo: customer.accNo,
+                PermissionGate(
+                  code: Perm.customersStatement,
+                  child: _actionBtn(
+                    icon: Icons.account_balance_wallet_rounded,
+                    label: 'كشف',
+                    color: const Color(0xFF7C3AED),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CustomerStatementScreen(
+                          custNo: customer.custNo,
+                          custName: customer.custName,
+                          accNo: customer.accNo,
+                        ),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
-                _actionBtn(
-                  icon: Icons.edit_rounded,
-                  label: 'تعديل',
-                  color: AppColors.accent,
-                  onTap: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const EditCustomerScreen()),
+                PermissionGate(
+                  code: Perm.customersUpdate,
+                  child: _actionBtn(
+                    icon: Icons.edit_rounded,
+                    label: 'تعديل',
+                    color: AppColors.accent,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const EditCustomerScreen()),
+                    ),
                   ),
                 ),
               ],

@@ -1,7 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/permission_gate.dart';
+import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../providers/accounts_provider.dart';
 import '../providers/currency_provider.dart';
 import 'account_statement_detail_screen.dart';
@@ -321,6 +324,7 @@ class _AccountsDashboardScreenState
                       badgeText: 'عام',
                       badgeColor: const Color(0xFFE65100),
                       iconColor: const Color(0xFFE65100),
+                      permission: Perm.accountsStatementFinancial,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -336,6 +340,7 @@ class _AccountsDashboardScreenState
                       badgeText: 'متقدم',
                       badgeColor: const Color(0xFF6A1B9A),
                       iconColor: const Color(0xFF6A1B9A),
+                      permission: Perm.accountsStatementDetail,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -352,6 +357,7 @@ class _AccountsDashboardScreenState
                       badgeText: 'تقرير',
                       badgeColor: const Color(0xFF00695C),
                       iconColor: const Color(0xFF00695C),
+                      permission: Perm.accountsStatementGroup,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -361,7 +367,7 @@ class _AccountsDashboardScreenState
                         );
                       },
                     ),
-                  ],
+                  ].whereType<Widget>().toList(),
                 );
               },
             ),
@@ -392,6 +398,7 @@ class _AccountsDashboardScreenState
                       badgeText: 'الهيكل',
                       badgeColor: const Color(0xFF1565C0),
                       iconColor: const Color(0xFF1565C0),
+                      permission: Perm.accountsView,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -407,6 +414,7 @@ class _AccountsDashboardScreenState
                       badgeText: 'جديد',
                       badgeColor: const Color(0xFF00897B),
                       iconColor: const Color(0xFF00897B),
+                      permission: Perm.accountsCreate,
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
@@ -422,9 +430,10 @@ class _AccountsDashboardScreenState
                       badgeText: 'تعديل',
                       badgeColor: const Color(0xFF00695C),
                       iconColor: const Color(0xFF00695C),
+                      permission: Perm.accountsUpdate,
                       onTap: () => _showEditAccountSelectionDialog(context),
                     ),
-                  ],
+                  ].whereType<Widget>().toList(),
                 );
               },
             ),
@@ -437,19 +446,23 @@ class _AccountsDashboardScreenState
               icon: Icons.currency_exchange_outlined,
             ),
             const SizedBox(height: 8),
-            _buildModernActionTile(
-              title: 'دليل العملات وأسعار الصرف اليومية',
-              subtitle:
-                  'إدارة العملات المعتمدة وسجل تحديثات أسعار الصرف والتنبيهات',
-              icon: Icons.price_change_rounded,
-              badgeText: 'الصرف',
-              badgeColor: const Color(0xFF2E7D32),
-              iconColor: const Color(0xFF2E7D32),
-              onTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const CurrencyScreen()),
-                );
-              },
+            // قسم 3: العملات وأسعار الصرف — خلف صلاحية عرض العملات
+            PermissionGate(
+              code: Perm.currenciesView,
+              child: _buildModernActionTile(
+                title: 'دليل العملات وأسعار الصرف اليومية',
+                subtitle:
+                    'إدارة العملات المعتمدة وسجل تحديثات أسعار الصرف والتنبيهات',
+                icon: Icons.price_change_rounded,
+                badgeText: 'الصرف',
+                badgeColor: const Color(0xFF2E7D32),
+                iconColor: const Color(0xFF2E7D32),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CurrencyScreen()),
+                  );
+                },
+              )!,
             ),
 
             const SizedBox(height: 20),
@@ -540,7 +553,7 @@ class _AccountsDashboardScreenState
     );
   }
 
-  Widget _buildModernActionTile({
+  Widget? _buildModernActionTile({
     required String title,
     required String subtitle,
     required IconData icon,
@@ -548,7 +561,19 @@ class _AccountsDashboardScreenState
     required Color badgeColor,
     required Color iconColor,
     required VoidCallback onTap,
+    String? permission,
   }) {
+    // الحجب التام: لا يُبني البلاط أصلاً بلا صلاحية، فلا خلية فارغة في الشبكة ولا زر معطّل
+    // يلمّح بشيء محجوب. إعادة الرسم تتم عند تغيّر هذا القرار وحده عبر `select`.
+    // Hidden entirely: no tile is built without the grant, so the grid has no empty cell and no
+    // disabled button advertises a withheld capability. Rebuilds only when this decision flips.
+    if (permission != null) {
+      final allowed = ref.watch(
+        authNotifierProvider.select((auth) => auth.can(permission)),
+      );
+      if (!allowed) return null;
+    }
+
     return Material(
       color: AppColors.surface,
       borderRadius: BorderRadius.circular(12),
