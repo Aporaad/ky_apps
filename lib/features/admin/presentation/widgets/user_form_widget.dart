@@ -7,6 +7,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/app_user_model.dart';
 import '../providers/security_settings_provider.dart';
+import 'financial_account_picker.dart';
 import 'permissions_picker_widget.dart';
 
 /// نموذج إنشاء/تعديل مستخدم — نسخة واحدة للحالتين كما يفعل نموذج العميل
@@ -54,6 +55,11 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
   final TextEditingController _branchCtrl = TextEditingController();
   final TextEditingController _noteCtrl = TextEditingController();
   final TextEditingController _cashAccCtrl = TextEditingController();
+  // حقل الحساب المالي (ACC_NO): رقمه في المتحكّم، واسمه للعرض عند الاختيار من المنتقي.
+  // Financial ledger account (ACC_NO): the number lives in the controller; the resolved
+  // name is kept only for display after an in-session pick.
+  final TextEditingController _finAccCtrl = TextEditingController();
+  String? _finAccName;
 
   late int _userType;
   late bool _isActivated;
@@ -81,6 +87,8 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
     _nameArCtrl.text = user?.userNameAr ?? '';
     _branchCtrl.text = user?.branchNo?.toString() ?? '';
     _cashAccCtrl.text = user?.cashAccNo?.toString() ?? '';
+    _finAccCtrl.text = user?.accNo?.toString() ?? '';
+    _finAccName = null;
     _noteCtrl.text = user?.note ?? '';
     _userType = user?.userType ?? 1;
     _isActivated = user?.isActivated ?? true;
@@ -99,6 +107,7 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
     _branchCtrl.dispose();
     _noteCtrl.dispose();
     _cashAccCtrl.dispose();
+    _finAccCtrl.dispose();
     super.dispose();
   }
 
@@ -123,6 +132,24 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
       isAdmin: grantorIsAdmin,
       code: Perm.usersAdminFlagManage,
     );
+
+    // منتقي الحساب المالي يقرأ لائحة CHART_ACC خلف `accounts.view`/`accounts.statement_financial`.
+    // من لا يملك أيًّا منهما لا يُفتح له المنتقي (كان سيصطدم بـ 403 بعد تعبئة النموذج)،
+    // بل يدخل الرقم يدويًا في حقل رقمي — الوظيفة لا تُفقد، بل ينخفض رفاهيتها.
+    // The picker lists CHART_ACC behind accounts.view / accounts.statement_financial. A user
+    // holding neither gets a numeric field instead of a sheet that would 403 after full form work.
+    final canPickAccount =
+        grantorIsAdmin ||
+        canCode(
+          granted: grantor,
+          isAdmin: grantorIsAdmin,
+          code: Perm.accountsView,
+        ) ||
+        canCode(
+          granted: grantor,
+          isAdmin: grantorIsAdmin,
+          code: Perm.accountsStatementFinancial,
+        );
 
     final minLength = _passwordMinLength();
 
@@ -249,9 +276,16 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
           TextFormField(
             controller: _cashAccCtrl,
             keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'رقم الحساب النقدي'),
-            validator: _optionalInt('رقم الحساب يجب أن يكون رقماً غير سالب'),
+            decoration: const InputDecoration(
+              labelText: 'رقم الحساب النقدي (الصندوق)',
+              helperText: 'حساب الصندوق الافتراضي للمستخدم — غير الحساب المالي',
+            ),
+            validator: _optionalInt(
+              'رقم الحساب النقدي يجب أن يكون رقماً غير سالب',
+            ),
           ),
+          const SizedBox(height: 12),
+          _buildFinancialAccountField(canPickAccount),
           const SizedBox(height: 12),
           TextFormField(
             controller: _noteCtrl,
@@ -294,6 +328,68 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
             onSubmit: _submit,
           ),
         ],
+      ),
+    );
+  }
+
+  /// حقل الحساب المالي (ACC_NO): منتقي عند توفّر قراءة اللائحة، وإدخال رقمي عند غيابها.
+  /// The financial-account field (ACC_NO): a picker when the chart list can be read,
+  /// otherwise a plain numeric entry so the value is still settable.
+  Widget _buildFinancialAccountField(bool canPick) {
+    if (!canPick) {
+      return TextFormField(
+        controller: _finAccCtrl,
+        keyboardType: TextInputType.number,
+        decoration: const InputDecoration(
+          labelText: 'الحساب المالي',
+          helperText: 'رقم الحساب في شجرة الحسابات (ACC_NO)',
+        ),
+        validator: _optionalInt(
+          'رقم الحساب المالي يجب أن يكون رقماً غير سالب',
+        ),
+      );
+    }
+
+    final number = int.tryParse(_finAccCtrl.text.trim());
+    final label = _finAccName ??
+        (number != null ? 'مرتبط بالحساب $number' : null);
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () => showFinancialAccountPicker(
+        context,
+        onSelected: (acc) => setState(() {
+          _finAccCtrl.text = acc.accNo.toString();
+          _finAccName = acc.accName;
+        }),
+      ),
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: 'الحساب المالي',
+          helperText: 'اضغط لاختيار حساب مالي وربطه بالمستخدم',
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 12,
+          ),
+          suffixIcon: number != null
+              ? IconButton(
+                  icon: const Icon(Icons.link_off, size: 18),
+                  tooltip: 'إلغاء الربط',
+                  onPressed: () => setState(() {
+                    _finAccCtrl.clear();
+                    _finAccName = null;
+                  }),
+                )
+              : const Icon(Icons.expand_more_rounded, size: 20),
+        ),
+        child: Text(
+          label ?? 'اضغط لاختيار الحساب المالي...',
+          style: TextStyle(
+            fontSize: 14,
+            color: label == null ? AppColors.textMuted : AppColors.textPrimary,
+          ),
+        ),
       ),
     );
   }
@@ -413,11 +509,13 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
     if (branch != null) payload['branch_no'] = branch;
     final cashAcc = _intOrNull(_cashAccCtrl.text);
     if (cashAcc != null) payload['cash_acc_no'] = cashAcc;
+    final finAcc = _intOrNull(_finAccCtrl.text);
 
     if (widget.isCreate) {
       payload['user_password'] = _passwordCtrl.text;
       payload['user_type'] = _userType;
       payload['is_admin'] = _isAdmin ? 1 : 0;
+      if (finAcc != null) payload['acc_no'] = finAcc;
       // المدير لا يحتاج منحاً: تجاوز الخادم يغطي كل شيء، ومجموعة منح فارغة أدق للمراجعة
       // An admin needs no grants: the server-side bypass covers everything, and an empty grant
       // row set is the honest audit state.
@@ -427,6 +525,12 @@ class _UserFormWidgetState extends ConsumerState<UserFormWidget> {
     }
 
     final user = widget.existing!;
+
+    // الحساب المالي أُرسل عند تغيّره فقط؛ null يلغي الربط لأن الخادم يفرّق
+    // بين «لم يُرسل» و«أُرسل فارغاً» عبر array_key_exists على عمود ACC_NO.
+    // The financial account goes out only when it moved; sending null unlinks it, since the
+    // controller distinguishes "not sent" from "sent empty" for the ACC_NO column.
+    if (finAcc != user.accNo) payload['acc_no'] = finAcc;
 
     if (_changePassword && _passwordCtrl.text.isNotEmpty) {
       payload['user_password'] = _passwordCtrl.text;

@@ -41,49 +41,49 @@ class AccountStatementReportFooter extends StatelessWidget {
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
 
           // ── خانة التوقيعات ──
           // ثلاث خانات Expanded بدل ثلاث خانات ثابتة 120px (كانت تفيض 44px
           // عند 1.25×) — كل خانة تتمدد بالتساوي ضمن العرض المتاح.
           // Three Expanded slots instead of three fixed 120px slots (which
           // overflowed 44px at 1.25× text scale) — equal share of the width.
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: const [
-              Expanded(child: _SignatureSlot(label: 'توقيع المحاسب')),
-              SizedBox(width: 8),
-              Expanded(child: _SignatureSlot(label: 'توقيع أمين الصندوق')),
-              SizedBox(width: 8),
-              Expanded(child: _SignatureSlot(label: 'توقيع المدير')),
-            ],
-          ),
+          // Row(
+          //   crossAxisAlignment: CrossAxisAlignment.end,
+          //   children: const [
+          //     Expanded(child: _SignatureSlot(label: 'توقيع المحاسب')),
+          //     SizedBox(width: 8),
+          //     Expanded(child: _SignatureSlot(label: 'توقيع أمين الصندوق')),
+          //     SizedBox(width: 8),
+          //     Expanded(child: _SignatureSlot(label: 'توقيع المدير')),
+          //   ],
+          // ),
 
-          const SizedBox(height: 12),
+          // const SizedBox(height: 12),
 
           // ── إخلاء المسؤولية + ترقيم الصفحة ──
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  'يجب مراجعة هذا الكشف خلال 15 يوماً من تاريخ إصداره، وما بعد ذلك يُعتبر معتمداً.',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Colors.black.withValues(alpha: 0.6),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ),              
-            ],
-          ),
-          Text(
-                'توقيت الإصدار: $timestamp',
-                style: const TextStyle(
-                  fontSize: 7,
-                  color: Colors.black54,
-                ),
-              )
+          // Row(
+          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          //   children: [
+          //     Expanded(
+          //       child: Text(
+          //         'يجب مراجعة هذا الكشف خلال 15 يوماً من تاريخ إصداره، وما بعد ذلك يُعتبر معتمداً.',
+          //         style: TextStyle(
+          //           fontSize: 10.5,
+          //           color: Colors.black.withValues(alpha: 0.6),
+          //         ),
+          //         textAlign: TextAlign.center,
+          //       ),
+          //     ),              
+          //   ],
+          // ),
+          // Text(
+          //       'توقيت الإصدار: $timestamp',
+          //       style: const TextStyle(
+          //         fontSize: 7,
+          //         color: Colors.black54,
+          //       ),
+          //     )
         ],
       ),
     );

@@ -30,6 +30,11 @@ class ApiConstants {
   static const String biometricRegister = '/auth/biometric/register';
   static const String biometricRevoke   = '/auth/biometric/revoke';
 
+  // الكشوفات الشخصية — خاص بالموظف الحالي
+  // Personal statements — scoped to the logged-in employee.
+  static const String myFinancialStatement = '/my-statement/financial';
+  static const String myWorkStatement = '/my-statement/work';
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

@@ -1419,3 +1419,225 @@ SELECT LOG_DATE, RUN_DURATION, SUCCEEDED, STATUS, "ERROR#", ADDITIONAL_INFO
 -- عمليات UPDATE/DELETE للرسائل تُنفَّذ عبر مسارات التطبيق الموجودة (`PUT`/`DELETE /{sms|whatsapp}/messages/{id}`)
 -- على جدول *_QUEUE فقط، خلف صلاحيات sms.update/delete وwhatsapp.update/delete — لا SQL يدوي.
 -- اختبار Pest (ServicesSectionTest) قراءة فقط. لا DDL ولا تغيير هيكل.
+
+-- 2026-10-24 14:30 (Qoder agent) — ترحيل IBAC: تقسيم أكواد الكشوف العامة إلى دقيقة:
+-- نُفِّذ مباشرة عبر oracledb MCP + `php artisan tinker database/oracle/02_ibac_seed.php`.
+-- لا DDL: لا إنشاء/تعديل/حذف لأي جدول أو sequence أو trigger أو FK أو عمود.
+-- الأمر الأول (بذر الكتالوج الجديد — 132 صلاحيّة، inserted=9 updated=123):
+--   (PHP tinker يُشغّل 02_ibac_seed.php؛ لا SQL يدوي هنا — السكربت idempotent قائدي على PermissionCatalog::rows()).
+-- قراءة الجرد قبل الترحيل (صفر منح عامة — لا حاجة لنقل منح):
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS WHERE PERMISSION_ID IN (33, 40, 47, 54);
+--   -- = 0
+-- تنظيف دفاعي (لم يؤثر صفوفاً فعلية لكن يُبقي السجل متسقاً مع 06_ibac_statement_split.sql):
+--   DELETE FROM ACCOUNTS.APP_USERS_PERMISSIONS WHERE PERMISSION_ID IN
+--     (SELECT PERMISSION_ID FROM ACCOUNTS.APP_PERMISSIONS
+--       WHERE PERMISSION_CODE IN ('accounts.statement','employees.statement','cutters.statement','tailors.statement'));
+-- إسقاط الأكواد العامة من الكتالوج:
+--   DELETE FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE IN
+--     ('accounts.statement','employees.statement','cutters.statement','tailors.statement');
+--   -- 4 صفوف
+-- تحققات ما بعد الترحيل (كلها ناجحة):
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;                       -- = 132
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE IN -- = 0
+--     ('accounts.statement','employees.statement','cutters.statement','tailors.statement');
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_ID BETWEEN 129 AND 137; -- = 9
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS up WHERE NOT EXISTS                -- = 0
+--     (SELECT 1 FROM ACCOUNTS.APP_PERMISSIONS p WHERE p.PERMISSION_ID = up.PERMISSION_ID);
+--   SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS WHERE IS_ACTIVE=1;     -- = 132
+-- فحص العربية: ASCIISTR(NAME_AR) أظهرت بايتات CP1256 (\00DF\00D4\00DD = "كشف")، متسق
+-- مع الكتابة عبر ArabicEncoding::toOracleSearchChars(). لا BOM ولا علامات استبدال (0xBF).
+-- لم يُنفَّذ commit (لا طلب من المستخدم). لا تغيير في هيكل.
+
+-- 2026-10-24 18:45 (Qoder agent) — IBAC: صلاحيات تقرير عمل المجموعة (cutters/tailors):
+-- لا DDL: لا إنشاء/تعديل جداول أو sequences أو triggers أو FK أو أعمدة.
+-- شُغِّل `02_ibac_seed.php` عبر `php artisan tinker` بعد تحديث PermissionCatalog::MODULES.
+-- الخرج: PERMISSIONS catalog=134 inserted=2 updated=132 total=134.
+-- أكواد جديدة أُدرجت في ACCOUNTS.APP_PERMISSIONS:
+--   PERMISSION_ID=138, PERMISSION_CODE='cutters.group_work_report', IS_ACTIVE=1
+--   PERMISSION_ID=139, PERMISSION_CODE='tailors.group_work_report', IS_ACTIVE=1
+-- لا INSERT/UPDATE على APP_USERS_PERMISSIONS — كتالوج فقط؛ المنح يقررها المستخدم من الشاشة.
+-- تحققات: SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;  -- = 134
+--          SELECT PERMISSION_ID, PERMISSION_CODE FROM ACCOUNTS.APP_PERMISSIONS
+--            WHERE PERMISSION_CODE LIKE '%.group_work_report';  -- = 138/139
+-- العربية عبر toOracleSearchChars(): بايتات CP1256 سليمة في NAME_AR، كما في الدفعة الأولى.
+-- لم يُنفَّذ commit (لا طلب).
+
+-- 2026-10-24 05:20 (Qoder agent) — الشجرة المحاسبية: استعلامات التحقق والفحص الحيّ:
+-- لا DDL إطلاقاً: لا CREATE/ALTER/DROP على أي جدول أو column أو sequence أو trigger
+-- أو constraint في ACCOUNTS. الحدود مقررة في الخطة («القاعدة ليست ملكنا للترحيل»)،
+-- وكل ما أُضيف حقول مشتقة في أسئلة READ فقط.
+--
+-- (1) جرد الحقائق التي بُنيت عليها الخطة (repeatable proof، أُعيد اليوم وتأكدت):
+--   SELECT 'ACCOUNT' K, COUNT(*) N FROM ACCOUNTS.ACCOUNT
+--   UNION ALL SELECT 'ACC_MAIN', COUNT(*) FROM ACCOUNTS.ACC_MAIN
+--   UNION ALL SELECT 'ACC_SUB', COUNT(*) FROM ACCOUNTS.ACC_SUB
+--   UNION ALL SELECT 'ACC_SUB_GROUP', COUNT(*) FROM ACCOUNTS.ACC_SUB_GROUP
+--   UNION ALL SELECT 'CHART_ACC', COUNT(*) FROM ACCOUNTS.CHART_ACC
+--   UNION ALL SELECT 'CHART_PREFIX_123', COUNT(*) FROM ACCOUNTS.CHART_ACC
+--          WHERE SUBSTR(TO_CHAR(ACC_NO),1,3)='123'
+--   UNION ALL SELECT 'CHART_NULL_GROUP', COUNT(*) FROM ACCOUNTS.CHART_ACC WHERE GROUP_ID IS NULL
+--   UNION ALL SELECT 'ENTRY_SUB', COUNT(*) FROM ACCOUNTS.ENTRY_SUB;
+--   -- ACCOUNT=4, ACC_MAIN=24, ACC_SUB=95, ACC_SUB_GROUP=12, CHART_ACC=20954,
+--   --   CHART_PREFIX_123=20469, CHART_NULL_GROUP=20671, ENTRY_SUB=422408
+--   -- أي الهيكل الكسول الظاهر = 4 + 24 + 95 + 10 مجموعات + 1 حساب = 134 عقدة
+--   -- (من المجموعات الاثنتي عشرة تستثنى المجموعتان تحت الجزئية 123 عرضاً،
+--   --  ويظهر بدلاً منهما 12310000 فقط) — مطابق لخرج /accounts/tree الحيّ 4/24/95/10/1.
+--
+-- (2) إثبات أن قاعدة البادئة الصحيحة عامة لا استثنائية (بديل TRUNC(ACC_NO/10000) المعطوب):
+--   SELECT COUNT(*) FROM ACCOUNTS.CHART_ACC c
+--    WHERE SUBSTR(TO_CHAR(c.ACC_NO),1,3) NOT IN (SELECT TO_CHAR(ACC_PART) FROM ACCOUNTS.ACC_SUB);
+--   -- = 0  (كل حساب مالي ذو ثلاثة أرقام-leading يطابق جزئياً موجوداً)
+--   SELECT COUNT(*) FROM ACCOUNTS.CHART_ACC c WHERE c.GROUP_ID IS NOT NULL
+--     AND NOT EXISTS (SELECT 1 FROM ACCOUNTS.ACC_SUB_GROUP g WHERE g.GROUP_ID = c.GROUP_ID);
+--   -- = 0  (لا مجموعة يتيمة؛ خريطة CHART_ACC -> GROUP_ID سليمة للتجميع)
+--
+-- (3) إثبات أن أعمدة BALANCE ميتة فلا تُستخدم (مبرر القرار 4):
+--   SELECT COUNT(*) FROM ACCOUNTS.ACC_SUB WHERE BALANCE <> 0;    -- = 0  (كل الجزئية صفر)
+--   SELECT COUNT(*) FROM ACCOUNTS.ACC_MAIN WHERE BALANCE <> 0;   -- = 6 من 24 فقط
+--   -- فالأعمدة المخزّنة لا تصلح للتجميع، وهو مبرر القرار 4 (الحساب من ENTRY_SUB).
+--   -- والتجميع الحقيقي من الحركات، وهو جوهر تجميع الأرصدة (movementAggregateSql()
+--   --    + movementBalancesByChart() + movementBalancesFor()، وهو ما سمّته الخطة balanceMap()):
+--   SELECT SUM(CASE WHEN es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END) DR,
+--          SUM(CASE WHEN es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END) CR,
+--          SUM(es.ENTRY_MNT) NET, COUNT(*) CNT
+--     FROM ACCOUNTS.ENTRY_SUB es JOIN ACCOUNTS.CHART_ACC c ON c.ACC_NO = es.ACC_NO
+--    WHERE SUBSTR(TO_CHAR(c.ACC_NO),1,3) = '123';
+--   -- DR=2,079,529,784.48  CR=2,014,835,990.65  NET=64,693,793.83  CNT=155,621
+--   -- (حسابات العملاء مستثناة عرضاً لكن داخلة تجميعاً — وهذا الرقم يثبت ذلك)
+--
+-- (4) الفحص الحيّ عبر php artisan serve (لم يُكتب شيء في القاعدة إلا رمزَي اختبار):
+--   أُنشئ Sanctum token للمستخدم admin (USER_ID=1) على اتصال Oracle الافتراضي،
+--   ثم قُرائت النقاط: /accounts/tree (200, total_nodes=134, balances غير صفرية:
+--   1,037,888,703.43 من 314,584 حركة؛ وبفترة مقيّدة 16,319,728.58 من 4,336)،
+--   /accounts/tree/children (12910003… ص ف1 و12910019… ص2 — مجموعتان متنافيتان،
+--   total=108)، سطر ورقة يثبت الفرق بين المخزن والمحسوب: stored=475,645 مقابل
+--   debit=12,273,914 / credit=9,970,916 / net=2,302,998 / 601 حركة،
+--   /accounts/search?q=… (11010001 مع parent_path)،
+--   /accounts/next-number?level=chart&acc_part=110 -> 11010002، وبلا رمز -> 401.
+--   ملاحظة OCI8: الأسماء تصل صغيرة والقيم نصاً (['c'] => '108')، لذا التحويل في PHP.
+--
+-- (5) التنظيف (DML على جدول Sanctum الموجود فقط، لا هيكل):
+--   SELECT ID, DBMS_LOB.SUBSTR(NAME,30,1) N FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS
+--    WHERE ID IN (263, 264);      -- NAME عمود CLOB؛ الحذف بـ where('name',…) يطلق ORA-00932
+--   DELETE FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS WHERE ID IN (263, 264);  -- 2 صفوف
+--   SELECT COUNT(*) FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS WHERE ID IN (263,264);  -- = 0 (تمّ)
+--   وأُوقف خادم artisan (PID 33956) وحُذفت كل ملفات الفحص المؤقتة من المستودع.
+--
+-- لم يُنفَّذ commit (لا طلب). لا DDL. لم تزد قائمة أعمدة CHART_ACC ولا جُدّد جدول.
+
+-- 2026-10-24 09:24 (Qoder agent) — تصدير الشجرة ودليل العملات: قراءة فقط، بلا DDL ولا DML:
+-- لا CREATE/ALTER/DROP ولا INSERT/UPDATE/DELETE على أي كائن في ACCOUNTS. النقطتان الجديدتان
+-- تقرآن الجداول التراثية نفسها، ولم تُزد أعمدة ولا جداول ولا sequences؛ ولم تُمسَّ
+-- APP_PERMISSIONS (أكواد accounts.export / accounts.print موجودة سابقاً في الكتالوج).
+--
+-- (1) ما يقرأه exportTree لكل طلب (عدد ثابت، لا N+1):
+--   structureRows('ACCOUNT')       → SELECT ACC_NO, ACC_NAME, BALANCE, CUR_NO FROM ACCOUNT ORDER BY ACC_NO
+--   structureRows('ACC_MAIN')      → … FROM ACC_MAIN ORDER BY ACC_NO, ACC_SUB
+--   structureRows('ACC_SUB')       → … FROM ACC_SUB  ORDER BY ACC_SUB, ACC_PART
+--   structureRows('ACC_SUB_GROUP') → … FROM ACC_SUB_GROUP ORDER BY ACC_PART, GROUP_ID
+--   movementBalancesByChart()      → تجميع ENTRY_SUB (مع ENTRY_MAIN عند وجود فترة):
+--     SELECT SUM(CASE WHEN es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END) DR,
+--            SUM(CASE WHEN es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END) CR,
+--            SUM(es.ENTRY_MNT) NET, COUNT(*) CNT, es.ACC_NO
+--       FROM ACCOUNTS.ENTRY_SUB es [JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+--            WHERE em.ENTRY_DATE BETWEEN TO_DATE(:f,'YYYY-MM-DD') AND TO_DATE(:t,'YYYY-MM-DD')]
+--      GROUP BY es.ACC_NO
+--   chartGroupMap(), chartCountBuckets() → خريطة GROUP_ID وعدّ GROUP BY على CHART_ACC.
+--
+-- (2) جلب CHART_ACC مقيّد بالبادئات داخل SQL (لا 20 ألف صف إلى PHP) — القيم مرتبطة:
+--   SELECT ACC_NO, ACC_NAME, GROUP_ID, BALANCE, LIMITED_BALANCE, STOPPING_ACC, SEQ,
+--          TO_CHAR(ACC_DATE,'YYYY-MM-DD') AS ACC_DATE
+--     FROM CHART_ACC
+--    WHERE SUBSTR(TO_CHAR(ACC_NO), 1, 3) IN (:part_0, :part_1, …)
+--      AND (SUBSTR(TO_CHAR(ACC_NO),1,3) <> 123 OR ACC_NO = 12310000)   -- حارس العملاء حتى يُطلب
+--    ORDER BY ACC_NO;
+--   وملاحظة هيكلية مُثبتة: CHART_ACC أعمدته ثمانية ولا عمود عملة فيه، لذا CUR_NO يُورَّث من
+--   ACC_SUB صاحب البادئة — وهو سبب عدم عرض منتقي العملة لمستويي CHART_ACC/ACC_SUB_GROUP في العميل.
+--
+-- (3) دليل العملات (نفس اسم الجدول، صلاحيات الحسابات لا currencies.view):
+--   SELECT CUR_NO, CUR_NAME FROM CURRENCY ORDER BY CUR_NO;
+--   المفاتيح تصل صغيرة والنصوص مشكّلة: array_change_key_case + ArabicEncoding::fixMojibake.
+--
+-- (4) فحوص الاختبارات الحيّة (AccountTreeExportTest — 8 passed / 10,835 assertion):
+--   SELECT COUNT(*) AS C FROM CHART_ACC WHERE SUBSTR(TO_CHAR(ACC_NO), 1, 3) = '123';   -- حجم حسابات العملاء
+--   SELECT m.ACC_NO AS A FROM ACC_MAIN m
+--     WHERE m.ACC_SUB = (SELECT ACC_SUB FROM ACC_SUB WHERE ACC_PART = 110);            -- قسم مُصدَّر للتضييق
+--   SELECT COUNT(*) AS C FROM CURRENCY;                                                 -- دليل = ما يرجع للنموذج
+--   ومقارنة رصيد كل صف مُصدَّر برصيد العقدة في /accounts/tree (تكافؤ المحسوب من ENTRY_SUB).
+--   الاختبارات تستخدم Sanctum::actingAs فلا تُنشئ صفوف PERSONAL_ACCESS_TOKENS (لا تنظيف مطلوب).
+--
+-- ملاحظة OCI8 المتكرّرة: أسماء الأعمدة صغيرة والقيم قد تصل نصوصاً، فتحويل PHP صريح في كل قراءة.
+-- لم يُنفَّذ commit (لا طلب). لا DDL ولا DML.
+
+-- =====================================================================================
+-- [2026-10-24 14:44] جولة إصلاح ثانية (انهيار 52px + حقل العملة + 404 التصدير) — Qoder Agent
+-- لا استعلامات جدیدة. لم يُنفَّذ أي SQL مقابل Oracle في هذه الجولة إطلاقاً:
+--   • لا DDL (لا أعمدة ولا جداول جديدة على schema الحسابات الموروث ACCOUNTS).
+--   • لا DML (لا INSERT/UPDATE/DELETE).
+--   • لا قراءة مباشرة: التحقق كان على طبقة الـ HTTP المحلية فقط —
+--       php artisan route:list --path=accounts        → المساران موجودان
+--       GET 127.0.0.1:8099/api/accounts/export-tree   → 401 (Accept: application/json)
+--       GET 127.0.0.1:8099/api/accounts/currencies    → 401 (نفسه)
+--       GET 127.0.0.1:8099/api/hello                  → 200
+--     (500 الذي ظهر مع Accept: text/html أثَر للفحص: Route [login] not defined في
+--      storage/logs/laravel.log، لأن Sanctum يوجّه غير الـ JSON إلى مسار اسمه login؛
+--      تطبيق Dio يرسل JSON دائماً فلا يواجه هذا.)
+--   • القراءة الوحيدة المؤكَّدة للأعمدة كانت مراجعة توثيق لا اتصالاً: CUR_NO موجود في
+--     ACC_MAIN و ACC_SUB ولا يوجد في CHART_ACC ولا في ACC_SUB_GROUP — وهذا ما جعل حقل
+--     العملة في نموذج الإنشاء «للقراءة فقط/موروث» للمستويين الأخيرين بدل إخفائه.
+-- ملاحظة بيئة: الـ 404 المُبلَّغ عنه من خادم آخر على 192.168.0.9 (مساراته C:\kyApp_API)
+-- وليس من هذه الآلة (192.168.0.11) — لا علاقة لـ Oracle به.
+-- لم يُنفَّذ commit (لا طلب). لا DDL ولا DML.
+
+-- =====================================================================================
+-- [2026-10-25 10:00] الكشوفات الشخصية: DDL على APP_USERS + بذر أكواد my_statement — Qoder Agent
+-- هذه الجولة فيها كتابة فعلية (DDL + DML): ربط الموظف بحسابه المالي يحتاج عموداً جديداً في
+-- جدول تحكمنا APP_USERS، وتحديث كتالوج APP_PERMISSIONS. لم يُمسَّ أي جدول ERP موروث آخر،
+-- ولم تُنشأ FK لأن CHART_ACC خارج نطاق الترحيل. نُفِّذ كل ما يلي مباشرة عبر oracledb MCP.
+
+-- (1) DDL — عمود ACC_NO في APP_USERS (NUMBER nullable، بلا قيد خارجي):
+ALTER TABLE ACCOUNTS.APP_USERS ADD ACC_NO NUMBER;
+COMMENT ON COLUMN ACCOUNTS.APP_USERS.ACC_NO IS 'رقم الحساب المالي المرتبط بالمستخدم (CHART_ACC.ACC_NO)';
+-- تحقق: SELECT DATA_TYPE, NULLABLE FROM ALL_TAB_COLUMNS
+--        WHERE OWNER='ACCOUNTS' AND TABLE_NAME='APP_USERS' AND COLUMN_NAME='ACC_NO';
+--   -- NUMBER / Y  ✓
+
+-- (2) DML — بذر أربعة أكواد my_statement في APP_PERMISSIONS.
+--    استُخدمت IDs صريحة (140–143) لأن SEQ_APP_PERMISSIONS.LAST_NUMBER كان 102 بينما
+--    MAX(PERMISSION_ID)=139 (الـ sequence متأخر عن العدّاد بعد عمليات الحذف السابقة):
+INSERT INTO ACCOUNTS.APP_PERMISSIONS (PERMISSION_ID, PERMISSION_CODE, MODULE_CODE, ACTION_CODE, NAME_AR, NAME_EN, IS_CORE, SORT_ORDER, DESCRIPTION_AR)
+  VALUES (140, 'my_statement.*',         'my_statement', '*',          N'كل صلاحيات الكشوفات الشخصية', 'All my_statement permissions', 0, 2400, N'منح شامل لوحدة الكشوفات الشخصية');
+INSERT INTO ACCOUNTS.APP_PERMISSIONS (PERMISSION_ID, PERMISSION_CODE, MODULE_CODE, ACTION_CODE, NAME_AR, NAME_EN, IS_CORE, SORT_ORDER, DESCRIPTION_AR)
+  VALUES (141, 'my_statement.view',      'my_statement', 'view',       N'عرض الكشوفات الشخصية',         'View my statements',           1, 2401, N'الصلاحية الأساسية للوحدة');
+INSERT INTO ACCOUNTS.APP_PERMISSIONS (PERMISSION_ID, PERMISSION_CODE, MODULE_CODE, ACTION_CODE, NAME_AR, NAME_EN, IS_CORE, SORT_ORDER, DESCRIPTION_AR)
+  VALUES (142, 'my_statement.financial', 'my_statement', 'financial',  N'كشف حسابي المالي الخاص بي',    'My personal financial statement',0, 2402, N'كشف الموظف الحالي المالي');
+INSERT INTO ACCOUNTS.APP_PERMISSIONS (PERMISSION_ID, PERMISSION_CODE, MODULE_CODE, ACTION_CODE, NAME_AR, NAME_EN, IS_CORE, SORT_ORDER, DESCRIPTION_AR)
+  VALUES (143, 'my_statement.work',      'my_statement', 'work',       N'كشف عملي الخاص بي',             'My personal work statement',    0, 2403, N'كشف عمل الموظف الحالي (خياط/قصاص)');
+-- ثم دُفع SEQ_APP_PERMISSIONS فوق 143 (increment ثم restore) ليتولّد الصحيح مستقبلاً بلا تصادم.
+
+-- (3) تحقق ما بعد البذر (حيّ):
+SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;                        -- = 138 (134 + 4)
+SELECT PERMISSION_ID, PERMISSION_CODE, IS_CORE FROM ACCOUNTS.APP_PERMISSIONS
+ WHERE PERMISSION_CODE LIKE 'my_statement%' ORDER BY PERMISSION_ID;
+--   -- 140 my_statement.* /0، 141 my_statement.view /1، 142 my_statement.financial /0، 143 my_statement.work /0  ✓
+-- لا INSERT/UPDATE على APP_USERS_PERMISSIONS — كتالوج فقط؛ المنح قرار المستخدم من الشاشة.
+-- العربية في NAME_AR تُكتب بترميز CP1256 (نفس نمط سائر دفعات البذر). لم يُنفَّذ commit (لا طلب).
+
+---
+
+## 2026-10-24 — مهمّة حقل «الحساب المالي» ACC_NO (Claude)
+
+**لا أوامر SQL يدوية نُفّذت على القاعدة.** لم يتغيّر المخطط: عمود `ACCOUNTS.APP_USERS.ACC_NO`
+(NUMBER, nullable) موجود مسبقاً من مهمة الكشوفات الشخصية (انظر قسم `ALTER TABLE ... ADD ACC_NO`
+أعلاه). التغيير كان في طبقة القراءة داخل التطبيق فقط:
+
+- `UserAdminController::LIST_SQL` أضاف `u.ACC_NO` إلى SELECT الداخلي.
+- `UserAdminController::findUser` أضاف `ACC_NO` إلى قائمة الأعمدة.
+- الاستعلامات الناتجة (على مستوى التطبيق، ليست أوامر يدوية):
+```sql
+-- قائمة المستخدمين (مقتطف من LIST_SQL بعد التعديل)
+SELECT ... u.CASH_ACC_NO, u.ACC_NO, ... FROM ACCOUNTS.APP_USERS u ...
+-- تفاصيل مستخدم (findUser بعد التعديل)
+SELECT USER_ID, ..., CASH_ACC_NO, ACC_NO, ... FROM ACCOUNTS.APP_USERS WHERE USER_ID = :id
+```
+**النموذج:** Claude · **الزمن:** 2026-10-24 · لا DDL/DML ولا commit.

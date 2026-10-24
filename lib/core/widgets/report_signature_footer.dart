@@ -23,6 +23,11 @@ class ReportSignatureFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+        final timestamp =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -45,6 +50,13 @@ class ReportSignatureFooter extends StatelessWidget {
             fontWeight: FontWeight.w600,
           ),
         ),
+        Text(
+                'توقيت الإصدار: $timestamp',
+                style: const TextStyle(
+                  fontSize: 7,
+                  color: Colors.black54,
+                ),
+              )        
       ],
     );
   }

@@ -762,3 +762,306 @@ SELECT * FROM (SELECT em.ENTRY_NO,
 - **كتابة قائمة (UPDATE/DELETE):** مسارات `PUT`/`DELETE /{sms|whatsapp}/messages/{id}` كانت موجودة فعلًا
   وتعمل على جدول `*_QUEUE` فقط (تُرفض صفوف الأرشفة المُرسلة/الفاشلة); لم تُضَف مسارات جديدة — أُضيف
   الربط على جهة العميل (مستودع/notifier/واجهة). لا SQL يدوي مُنفَّذ؛ يتم حصريًا عبر المتحكّم خلف `sms.*`/`whatsapp.*`.
+
+### ترحيل IBAC: استبدال أكواد الكشف العامة بتسعة دقيقة · 2026-10-24 14:30 (Qoder agent)
+
+**السياق:** خطة `تطوير_وتوسيع_نظام_الصلاحيات_IBAC` — أربع أكواد كشف عامة
+(`accounts.statement`، `employees/cutters/tailors.statement`) تستبدل بتسعة دقيقة
+(3 للحسابات + كشفان لكل قسم من أقسام العاملين الثلاثة).
+
+**DDL:** لا. لم يُنشأ أي جدول ولا عُدّل أي هيكل ولا أُضيف/يُحذف أي sequence أو
+trigger أو FK أو column. كل التغيير DML على `ACCOUNTS.APP_PERMISSIONS` فقط
+(INSERT/DELETE صفوف)، و`ACCOUNTS.APP_USERS_PERMISSIONS` (DELETE صفّ — لم يوجد).
+
+**ما نُفِّذ بالترتيب (عبر oracledb MCP + `php artisan tinker database/oracle/02_ibac_seed.php`):**
+
+1. **قراءة البداية:** `SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS` → `127`
+   (الحالة قبل التوسيع؛ الأكواد الأربعة العامة موجودة برقمي 33/40/47/54).
+2. **تشغيل البذر:** `02_ibac_seed.php` — idempotent، قائدي على
+   `PermissionCatalog::rows()`. الخرج:
+   `PERMISSIONS catalog=132 inserted=9 updated=123 total=136`.
+   التسعة الجديدة هم IDs 129..137:
+   - `employees.statement_financial` (129)، `employees.statement_work` (130)
+   - `cutters.statement_financial` (131)، `cutters.statement_work` (132)
+   - `tailors.statement_financial` (133)، `tailors.statement_work` (134)
+   - `accounts.statement_financial` (135)، `accounts.statement_group` (136)،
+     `accounts.statement_detail` (137).
+   العربية كُتبت عبر `ArabicEncoding::toOracleSearchChars()` — فحص
+   `ASCIISTR(NAME_AR)` يُظهر بايتات CP1256 (0xDF/0xD4/0xDD = "كشَف")، متسق مع
+   النمط الذي يقرأه `fixMojibake` عند العرض.
+3. **جرد منح الأكواد العامة قبل الترحيل:**
+   `SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS WHERE PERMISSION_ID IN
+   (33, 40, 47, 54)` → `0`. لا مستخدم يملك أي كود عام، فلا حاجة لترحيل منح.
+4. **DELETE منح العامة (أمان دفاعي):**
+   `DELETE FROM ACCOUNTS.APP_USERS_PERMISSIONS WHERE PERMISSION_ID IN (SELECT
+   PERMISSION_ID FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE IN
+   ('accounts.statement','employees.statement','cutters.statement','tailors.statement'))`
+   — صفر صفوف فعلياً.
+5. **DELETE الأكواد العامة من الكتالوج:**
+   `DELETE FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE IN (...العامة
+   الأربعة...)` — 4 صفوف.
+6. **التحقق:**
+   - `COUNT(*)` = **132** ✓ (مطابق لـ `PermissionCatalog::count()`).
+   - العامة المتبقية = **0** ✓.
+   - الدقيقة الموجودة = **9** ✓.
+   - منح يتيمة (`NOT EXISTS` إلى APP_PERMISSIONS) = **0** ✓.
+   - `IS_ACTIVE=1` = **132** ✓.
+
+**سكربتات التسليم:** `database/oracle/06_ibac_statement_split.sql` و
+`database/oracle/07_ibac_statement_split_verify.sql` — كُتبتا لهذا الترحيل؛
+لكن نظراً لصفر منح عامة، الترحيل الفعلي تمّ ببضع DELETEs مباشرة عبر MCP مع
+تشغيل `02_ibac_seed.php`. السكربت المُسلَّم يبقى صالحاً لإعادة استخدامه إن ظهر
+حامل عام في بيئة أخرى.
+
+**Commit:** لا. لم يُطلب. لا تعديل هيكل/DDL — فقط DML على جدول PIM موجود.
+
+### ترحيل IBAC إضافي: صلاحيات تقرير عمل المجموعة · 2026-10-24 18:45 (Qoder agent)
+
+**DDL:** لا.
+
+**DML:**
+- `02_ibac_seed.php` شُغِّل مرة ثانية بعد إضافة `cutters.group_work_report` و
+  `tailors.group_work_report` في `PermissionCatalog::MODULES['cutters']['extra']`
+  و`['tailors']['extra']`. الخرج: `inserted=2 updated=132 total=134`.
+- الصفوف الجديدة في `ACCOUNTS.APP_PERMISSIONS`: IDs 138 و139 (IS_ACTIVE=1،
+  NAME_AR مكتوبة بـ CP1256 عبر `toOracleSearchChars()`).
+- لا `INSERT` يدوي في `APP_USERS_PERMISSIONS` — التوسيع يضيف الأكواد للكتالوج
+  فقط؛ المستخدم يقرّر لاحقاً عبر شاشة المنح من يملكها.
+
+**تحقق:** `SELECT COUNT(*) FROM APP_PERMISSIONS = 134` ✓؛ العامة = 0؛ الدقيقة
+للكشوف = 9؛ مجموعة العمل = 2؛ منح يتيمة = 0.
+
+
+## [2026-10-24 05:20] الشجرة المحاسبية: قاعدة البيانات والاستعلامات (بلا DDL إطلاقاً) · Qoder Agent
+
+**الحدود:** لا إنشاء/تعديل/حذف لأي جدول أو عمود أو sequence أو trigger أو FK في schema
+`ACCOUNTS` — القاعدة تراثية وليست ملكنا للترحيل. كل ما نُفِّذ هو **استعلامات قراءة**
+وأخطاء في كود PHP أُصلحت لتطابق الواقع المخزّن.
+
+**حقائق تم التحقق منها من `ACCOUNTS` الحيّة (oracledb MCP + Pest مقابل نفس القاعدة):**
+- `ACCOUNT` = **4** أقسام، `ACC_MAIN` = **24**، `ACC_SUB` = **95**، `ACC_SUB_GROUP` = **12** —
+  هذا هو الهيكل كله، وكان لا يظهر منه شيء تقريباً.
+- `CHART_ACC` = **20,954** حساباً؛ **20,671** منها `GROUP_ID = NULL`.
+- حسابات بادئة `123` (العملاء) = **20,469** حساباً، ومجموعتا 123 هما `5` و`6` فقط؛
+  أرصدتها تدخل التجميع وتُستثنى من العرض عدا `12310000` (عملاء الكبودي للخياطة).
+- حركة جزء 123: `DR = 2,079,529,784.48` / `CR = 2,014,835,990.65` / `NET = 64,693,793.83`
+  على **155,621** سطراً من `ENTRY_SUB` — بينما `ACC_SUB.BALANCE` للجزء 123 = **0**.
+- عدد الحسابات لكل مجموعة: `G3 = 108` (الأكبر)، `G4 = 99`، `G7 = 26`، `G8 = 22`، `G2 = 10`،
+  `G6 = 8`، `G11 = 4`، `G5 = 2`، `G9 = 2`، `G1 = 1`، `G12 = 1`، `G10 = 0` (مجموعة فارغة
+  يجب أن تبقى ظاهرة في الهيكل).
+- لا مجموعات يتيمة: كل `CHART_ACC.GROUP_ID` موجود في `ACC_SUB_GROUP`.
+
+**قاعدة التراتب الصحيحة (كانت معطوبة):** `SUBSTR(TO_CHAR(ACC_NO), 1, 3) = ACC_PART`.
+الكود القديم كان يستخدم `TRUNC(ACC_NO/10000)` في `getDetailedStatement` وفي ترقيم
+الإنشاء، فينتج بادئة رباعية الأرقام (`1231`) لا تطابق `ACC_PART` ثلاثياً (`123`). الصيغة
+الصحيحة كانت مستخدمة أصلاً في `getGroupStatement`، فحُدِّت البقية عليها.
+
+**مصدر الأرصدة:** `ENTRY_SUB` وحده. صيغة التجميع المعتمدة في دوال التجميع
+(`movementAggregateSql()`/`movementBalancesByChart()`/`movementBalancesFor()` — وهي
+ما سمّته الخطة `balanceMap()`) وفي أبناء
+الشجرة:
+```sql
+SELECT es.ACC_NO,
+       SUM(CASE WHEN es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END) DR,
+       SUM(CASE WHEN es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END) CR,
+       SUM(es.ENTRY_MNT) NET, COUNT(*) CNT
+FROM ENTRY_SUB es
+[INNER JOIN ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+ WHERE em.ENTRY_DATE BETWEEN TO_DATE(:f,'YYYY-MM-DD') AND TO_DATE(:t,'YYYY-MM-DD')]  -- عند الفترة
+GROUP BY es.ACC_NO
+```
+- `ENTRY_MNT` موقّع: الموجب مدين والسالب دائن، وهو نفس تفسير كشوفات المشروع الحالية.
+- التجميع يُرقَّى عبر `CHART_ACC(ACC_NO → GROUP_ID)` ثم قواعد البادئة
+  (`acc_part = SUBSTR(ACC_NO,1,3)`، `acc_sub ← ACC_SUB.ACC_PART`، `قسم ← ACC_MAIN.ACC_SUB`)،
+  والحسابات بلا مجموعة تُرقى إلى مستوى `acc_part`. أعمدة `BALANCE` المخزّنة تُعرض في ورقة
+  التفاصيل للمقارنة فقط باسم `stored_balance`.
+- `ENTRY_SUB` = **422,408** صفاً، و`ENTRY_SUB_BRW_I1` على `ACC_NO` يجعل الـ JOIN بالتاريخ عملياً؛
+  الفترة اختيارية (`from_date`/`to_date` بصيغة `YYYY-MM-DD`).
+
+**ترقيم Oracle-11g (بلا `FETCH FIRST`):** نمط `ROWNUM` ثلاث طبقات كما في `getChartAccounts`
+- `SELECT * FROM (SELECT a.*, ROWNUM rnum FROM ( …استعلام الصفوف… ) a WHERE ROWNUM <= :max_row) WHERE rnum > :offset`.
+
+**ترقيم الحساب الجديد (بلا sequence لجدول الحسابات):** `ACC_NO = accPart * 100000 + (MAX(اللاحقة) + 1)`
+— التحقق: `110 → 11010002` (معاينة `GET /accounts/next-number` تساوي تماماً ما يفعله
+`POST /accounts/chart`)؛ والعقد الهيكلية تأخذ `MAX+1` داخل نطاقها (`ACC_MAIN.ACC_SUB` داخل
+القسم، و`ACC_SUB.ACC_PART = ACC_SUB*10 + التالي متاح`).
+
+**OCI8 gotcha موثّق:** أعمدة النتائج تصل **أحرفاً صغيرة** و**نصوصاً** (`SELECT COUNT(*) AS C`
+تصل `['c'] => '108'`)؛ لذا كل قراءة خام في المتحكم والاختبارات تفحص المفتاحين وتحوّل
+الصريح إلى رقم.
+
+**نتيجة الفحص الحيّ (php artisan serve + رمز Sanctum حقيقي):**
+- `GET /api/accounts/tree` → 200، `total_nodes = 134` (4/24/95/10 + حساب عملاء واحد معروض)،
+  رصيد `ACCOUNT=1` المحسوب `1,037,888,703.43` على **314,584** حركة.
+- بنفس الطلب مع `from_date=2024-01-01&to_date=2024-01-31` → الرصيد `16,319,728.58` على 4,336
+  حركة: التقويض بالفترة يعمل.
+- `GET /api/accounts/tree/children?level=group&group_id=3` → 200، `total = 108`،
+  صفحة 1 تبدأ `12910003` وصفحة 2 تبدأ `12910019` (متصلة بلا تراكب)، والصفيف الكامل يعيد
+  `stored_balance = 475,645` مقابل `debit = 12,273,914 / credit = 9,970,916 / balance = 2,302,998`
+  على 601 حركة — دليل مباشر على أن العمود المخزّن ميت وأن المحسوب هو الصحيح.
+- `GET /api/accounts/search?q=1101` → يعيد `11010001` مع `parent_path`.
+- بلا رمز → **401** على `/accounts/tree`.
+
+**عدد الاستعلامات (توضيح دقيق عن رقم الخطة):** قالت الخطة «5 استعلامات» و**النُفِّذ 7
+ثابتة العدد** لكل طلب هيكل: أربعة `structureRows` (المستويات الأربعة) +
+`movementBalancesByChart` + `chartGroupMap` + `chartCountBuckets` (تجميع `GROUP BY`
+واحد على `CHART_ACC` بدل عدّ كل عقدة على حدة). المهم الوظيفي — إلغاء N+1 (كان
+~140 استعلاماً) وجعل العدد مستقلاً عن عدد الحسابات — محقق؛ وزمن الاستجابة الحيّ
+≈ 1 ث للهيكل الكامل مقابل مهلة 30 ث في المستودع. لم تُزد استعلامات حسب حجم البيانات.
+
+---
+
+## [2026-10-24 09:24] نقطتا `/accounts/export-tree` و`/accounts/currencies` — قراءة فقط، بلا DDL · Qoder Agent
+
+**لا شيء هيكليًا:** لم يُنشأ جدول ولا عمود ولا sequence؛ لم تُعدَّل `APP_PERMISSIONS` ولا
+`APP_SETTINGS`. الكودان `accounts.export` و`accounts.print` مستقرّان في الكتالوج منذ الجولة
+السابقة، والنقطتان الجديدتان تُقرآن الجداول التراثية نفسها
+(`ACCOUNT`/`ACC_MAIN`/`ACC_SUB`/`ACC_SUB_GROUP`/`CHART_ACC`/`ENTRY_SUB`/`CURRENCY`).
+
+**قرارات مقرونة بالقاعدة:**
+- **`CHART_ACC` لا يملك عمود عملة** (أعمدته الثمانية: `ACC_NO, ACC_NAME, GROUP_ID, BALANCE,
+  LIMITED_BALANCE, STOPPING_ACC, SEQ, ACC_DATE`) — لذا يورَّث `CUR_NO` من الحساب الجزئي صاحب
+  البادئة، وفي العميل لا يُعرض منتقي العملة إلا لـ `ACC_MAIN` و`ACC_SUB` (وهما الجدولان اللذان
+  يخزّنانه). إنشاء مجموعة/مالية لا يرسل عملة لأن الخادم سيرميها بصمت.
+- **التصدير يقرأ من القاعدة لا من حالة الشاشة:** الشجرة كسولة (مستوى-بمستوى) فأسطر العرض لا
+  تحتوي إلا ما فتحه المستخدم؛ `exportTree` يجلب `CHART_ACC` بالبادئات المطلوبة فقط —
+  `SUBSTR(TO_CHAR(ACC_NO),1,3) IN (:part_0, :part_1, …)` مع ربط القيم (لا إلصاق نصي)،
+  وحارس العملاء `SUBSTR(TO_CHAR(ACC_NO),1,3) <> 123 OR ACC_NO = 12310000` إلا بطلب صريح.
+- **الأرصدة لا تُقرأ من `BALANCE` المخزّن:** تستخدم النقطة نفس
+  `movementBalancesByChart()` + `chartGroupMap()` + `chartCountBuckets()` + `rollUpBalances()`
+  التي تستخدمها `/accounts/tree`، واختبار التكافؤ يقارن رصيد كل صف مُصدَّر برصيد العقدة في
+  الشجرة مقابل Oracle حيّ — فلا تتباعد المطبوعة عن الشاشة رقمًا.
+- **`/accounts/currencies` بصلاحيات الحسابات:** `SELECT CUR_NO, CUR_NAME FROM CURRENCY ORDER BY CUR_NO`
+  خلف `accounts.view,create,update,structure_manage` لا `currencies.view`؛ المنطق أن الاستعلام
+  يخدم نموذج إنشاء حساب، ومن يملك الإنشاء يجب أن يقرأ الدليل. إعادة تسمية المفاتيح الصغيرة
+  (`array_change_key_case`) وإصلاح التشكيل (`ArabicEncoding::fixMojibake`) كما في كل قراءة Oracle.
+- **`levels` أبيض-list:** `{account,main,sub,group,chart}`؛ قيم غير معروفة تُسقط، والفارغ =
+  الكل. لا يُمرَّر أي مدخل إلى SQL خارج هذه القائمة، والربط دائمًا بالـ bind parameters.
+
+**ما نُفِّذ فعليًا مقابل القاعدة في هذه الجولة (كله `SELECT`):** استعلامات `structureRows`
+الأربعة + `movementBalancesByChart` (تجميع `ENTRY_SUB` بفترة اختيارية) + `chartGroupMap` +
+`chartCountBuckets` + قراءة `CHART_ACC` بالبادئات + `SELECT CUR_NO, CUR_NAME FROM CURRENCY`،
+وفحوص الاختبارات:
+```sql
+SELECT COUNT(*) AS C FROM CHART_ACC WHERE SUBSTR(TO_CHAR(ACC_NO), 1, 3) = '123';
+SELECT m.ACC_NO AS A FROM ACC_MAIN m
+ WHERE m.ACC_SUB = (SELECT ACC_SUB FROM ACC_SUB WHERE ACC_PART = 110);
+SELECT COUNT(*) AS C FROM CURRENCY;
+```
+ولا `INSERT/UPDATE/DELETE` إطلاقاً — الاختبارات تستخدم `Sanctum::actingAs` فلا تكتب صفوف
+`PERSONAL_ACCESS_TOKENS` (بخلاف جولة الفحص الحيّ السابقة التي أنشأت رمزَين وحذفهما).
+
+**البوابات:** Pest `AccountTreeExportTest` = 8 passed / **10,835 assertion** مقابل Oracle حيّ،
+`BusinessRoutesSealedTest` = 6 passed، `pint --dirty` = passed.
+
+---
+
+## [2026-10-24 14:44] جولة إصلاح ثانية — لا DDL ولا DML، وتثبيت حقيقة أعمدة العملة (Qoder Agent)
+
+**لم يُنفَّذ أي أمر مقابل Oracle في هذه الجولة** (لا DDL، لا DML، ولا قراءة مباشرة). ما يلي توثيق
+حقيقة مخطط قائمة موجودة مسبقاً هي التي حدّدت شكل الإصلاح في الواجهة، لأن المستخدم بلّغ أن «حقل
+اختيار العملة غير موجود» في نموذج إنشاء حساب.
+
+### أعمدة `CUR_NO` في مستويات دليل الحسابات — المرجع الحاسم
+
+| الجدول | `CUR_NO`؟ | النتيجة في نموذج الإنشاء |
+|---|---|---|
+| `ACC_MAIN` (الحساب الرئيسي — مفتاحه الظاهر `ACC_SUB`) | **نعم** | منتقي عملات حقيقي (`DropdownButtonFormField`) |
+| `ACC_SUB` (الحساب الجزئي) | **نعم** | منتقي عملات حقيقي |
+| `CHART_ACC` (دليل الحسابات — 8 أعمدة) | **لا** | حقل **للقراءة فقط** يعرض عملة `ACC_SUB` الأعلى |
+| `ACC_SUB_GROUP` (المجموعة) | **لا** | حقل **للقراءة فقط** كما أعلاه |
+| `CURRENCY` / `CUR_CODE` / `CUR_PRICE` | — | مصدر القائمة (`/accounts/currencies`)؛ لا تغيير عليها |
+
+- **لماذا هذا مهم:** لا يمكن إضافة عمود عملة إلى `CHART_ACC`/`ACC_SUB_GROUP` — المخطط ملك نظام
+  ERP آخر ونحن قرّاء له فقط (لا migrations لأعمال `ACCOUNTS`). لذلك كان الحلّ الصحيح هو إظهار
+  العملة **الموروثة** بدل إخفاء السطر كله (وهو الخطأ الذي بلّغ عنه المستخدم) وبدل إضافة عمود.
+- **المسار الوراثي المستخدم:** الحساب الجزئي المختار (`ACC_PART`) → صفّه من `ACC_SUB` → عموده
+  `CUR_NO`، وتُقرأ على جانب العميل عبر `parentAccSubProvider(accSub)`؛ لا استعلام Oracle جديد ولا
+  endpoint جديد.
+- **`AccountModel` / `AccMainModel` / `AccSubModel`** كلها تعرّف `curNo` أصلاً، فالحقل الموروث لم
+  يحتج أي تعديل نموذج أو أي تغيير في مخطط.
+- **التصدير/الطباعة:** لا علاقة لـ Oracle بالـ 404 المُبلَّغ عنه — سببه خادم API أقدم على جهاز آخر
+  (192.168.0.9، مسارات `C:\kyApp_API`) لا يعرف `accounts/export-tree`. لا تنفيذ SQL جديد لهذا أيضاً.
+
+**خلاصة:** صفر تغيير مخطط، صفر SQL، صفر DDL — التوثيق أعلاه تثبيت لحقيقة قائمة لا اكتشاف جديد.
+
+---
+
+## [2026-10-24 15:20] جولة 3 — عملة الحساب المالي في الخانة الرابعة من رقمه (تثبيت قاعدة، بلا DDL)
+
+**الحقيقة المخطّطية المُثبّتة بالتحقق القراءة فقط عبر oracledb MCP:** جدول `CHART_ACC` لا يملك
+عمود `CUR_NO`، وليس خطأً بل تصميم النظام التراثي: **عملة الحساب المالي مشفَّرة في رقم نفسه**.
+القاعدة: `ACC_NO = ACC_PART(3 خانات) + CUR_NO(خانة واحدة = الرابعة من اليسار) + التسلسل(4)`.
+القراءة من اليسار ثابتة للأرقام ثمانية الأرقام (عادية) وتسعة الأرقام (العملاء 123110000…).
+أمر إضافة عمود أو جدول مرفوض صراحةً من المستخدم، فالحلّ كلّه بلا أي DDL.
+
+**التحقق القراءة فقط (Oracle 11g):**
+- `ALL_TAB_COLUMNS`: `ACCOUNT`/`ACC_MAIN`/`ACC_SUB` تملك `CUR_NO NUMBER NULLABLE`؛
+  `ACC_SUB_GROUP` ثلاثة أعمدة فقط؛ `CHART_ACC` ثمانية أعمدة بلا `CUR_NO`؛ `ENTRY_SUB` تسعة أعمدة
+  (`SEQ_PRICE` تحمل سعر العملة في الحركة، لا في الحساب).
+- توزيع الخانة الرابعة: `SUBSTR(TO_CHAR(ACC_NO),4,1)` أعطت 1=10425، 2=41، 3=22 (و1 في العملاء
+  تسعة الأرقام) — لا قيمة رابعة مستخدمة فعليًا.
+- `CURRENCY` (بـ ASCIISTR): 1 ريال، 2 دولار، 3 سعودي، 4 يورو.
+- دليل النطاق: الجزء 251 → 25110017(عملة1) / 25120016(عملة2) / 25130011(عملة3)؛ الجزء 121 →
+  1212000x و1213000x. أي كل عملة داخل نطاق عشرة آلاف رقم خاص بها.
+
+**تصحيح منطق ترقيم (تطبيقي لا مخطّطي):** كان `MAX(ACC_NO)` على `[part*100000, +100000)` يمتد
+عبر كل العملات فيأخذ أعلى عملة ترتيبًا؛ النطاق الصحيح `[part*100000+cur*10000, +10000)` يعزل
+كل عملة. أُضيفت قراءة `cur_no` مشتقة من الرقم في كل مسارات الشجرة/البحث/التفاصيل/التصدير.
+
+**خلاصة:** صفر DDL، صفر DML، صفر إنشاء جدول/عمود — استعلامات `SELECT` توثيقية فقط للتحقق،
+والمتغيّر الوحيد في القاعدة أنه صار يُقرأ من الرقم ويُتحقّق منه بدل أن يُفتَرَض.
+
+---
+
+## [2026-10-25 10:00] الكشوفات الشخصية: عمود `ACC_NO` في `APP_USERS` + بذر أكواد `my_statement` · Qoder Agent
+
+هذه الجولة نفّذت **DDL وDML حقيقيين** مقابل Oracle عبر oracledb MCP (على خلاف الجولات السابقة
+القراءة‑فقط) — لأن ربط الموظف بحسابه المالي يتطلب عموداً جديداً في `APP_USERS` (جدول تحكمنا).
+
+**DDL:**
+```sql
+ALTER TABLE ACCOUNTS.APP_USERS ADD ACC_NO NUMBER;
+COMMENT ON COLUMN ACCOUNTS.APP_USERS.ACC_NO IS 'رقم الحساب المالي المرتبط بالمستخدم (CHART_ACC.ACC_NO)';
+```
+- `NUMBER` **nullable** (`ALL_TAB_COLUMNS` بعد التنفيذ: `NUMBER/Y`) — العملاء والمدراء بلا حساب
+  عامل يبقون `NULL` بلا كسر؛ `AuthController::userPayload` يعيد `acc_no: null` لهم.
+- **بلا `FOREIGN KEY`:** `CHART_ACC` مخطط نظام ERP آخر قرّاءٌ له فقط، فالربط منطقي تطبيقياً
+  (`APP_USERS.ACC_NO → CHART_ACC.ACC_NO`) لا قيد schema.
+- التعبئة يدوياً أو من شاشة إدارة المستخدمين (`UserAdminController` صار يقبل `acc_no`).
+
+**DML — بذر الكتالوج:** أُضيفت وحدة `my_statement` إلى `PermissionCatalog::MODULES` ثم أربعة
+INSERT في `ACCOUNTS.APP_PERMISSIONS` (IDs صريحة):
+```
+140  my_statement.*          IS_CORE=0   (wildcard)
+141  my_statement.view       IS_CORE=1   (core)
+142  my_statement.financial  IS_CORE=0   (extra)
+143  my_statement.work       IS_CORE=0   (extra)
+```
+- **تزامن الـ sequence:** `SEQ_APP_PERMISSIONS.LAST_NUMBER` كان متأخراً (102) عن
+  `MAX(PERMISSION_ID)` (139)، فقورنت الأربعة IDs يدوياً 140–143، ثم دُفع الـ sequence فوق 143
+  بتقنية increment‑ثم‑decrement لتجنّب تصادم التوليد اللاحق.
+- `NAME_AR` بترميز CP1256 (نفس نمط `WE8MSWIN1252` المتّبع في كل البذر).
+- **لا `INSERT` في `APP_USERS_PERMISSIONS`** — المنح قرار المستخدم عبر شاشة الصلاحيات.
+
+**تحقق (SELECT، حيّ):** `COUNT(*) FROM APP_PERMISSIONS` = **138** (134 + 4)؛ الأكواد الأربعة
+موجودة بـ `IS_ACTIVE=1`؛ عمود `ACC_NO` في `APP_USERS` بـ `DATA_TYPE=NUMBER`, `NULLABLE=Y`.
+
+**قرارات منطقية مقرونة بالقاعدة:** نقطة `/my-statement/work` لا تملك عمود «نوع» — بل تكتشف
+خياط/قصاص بعدّ `TAILOR_FROM_CALC.TAILOR_ACC` مقابل `CUTTER_FROM_CALC.CUTTER_ACC` على `ACC_NO`
+للمستخدم؛ والخياط ذو أولوية إن وُجد في كليهما. المخطّط لم يتغيّر لذلك في هذين الجدولين.
+
+---
+
+## 2026-10-24 — حقل «الحساب المالي» ACC_NO في واجهة المستخدم (Claude)
+
+**لا تغيير مخطّطي.** عمود `ACCOUNTS.APP_USERS.ACC_NO` (`NUMBER`, nullable) يبقى كما أُنشئ في مهمة
+الكشوفات الشخصية — لا `ALTER` ولا foreign key (علاقة منطقية فقط نحو `CHART_ACC.ACC_NO`).
+
+**الفرق الدلالي بين العمودين (موثَّق لتجنّب الخلط مستقبلاً):**
+- `CASH_ACC_NO` = حساب الصندوق/النقد الافتراضي للمستخدم (حقل existed في الواجهة قبل هذه المهمة).
+- `ACC_NO` = الحساب المالي في شجرة الحسابات (`CHART_ACC`) الذي تُحلّ منه الكشوفات الشخصية؛ أصبح
+  الآن ظاهراً في واجهة إنشاء/تعديل المستخدم عبر منتقي الحسابات المالي.
+
+**ما تغيّر هو طبقة القراءة في `UserAdminController` فقط** (لا القاعدة): `LIST_SQL` و`findUser`
+و`shape()` باتت تُرجع `acc_no` ليُعبَّأ النموذج عند التعديل. **النموذج:** Claude · **الزمن:** 2026-10-24.

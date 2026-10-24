@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (132 كوداً في 23 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (134 كوداً في 23 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -66,6 +66,9 @@ class Perm {
   static const String cuttersToggle = 'cutters.toggle';
   static const String cuttersStatementFinancial = 'cutters.statement_financial';
   static const String cuttersStatementWork = 'cutters.statement_work';
+  // تقرير عمل مجموعة القصاصين صلاحية مستقلة: رؤية أرشيف الكل لا تعني رؤية سجل فرد.
+  // Group work report is its own grant: seeing the pooled archive is not seeing one worker.
+  static const String cuttersGroupWorkReport = 'cutters.group_work_report';
 
   // ── الخياطين / tailors ───────────────────────────────────
   static const String tailorsWildcard = 'tailors.*';
@@ -76,6 +79,7 @@ class Perm {
   static const String tailorsToggle = 'tailors.toggle';
   static const String tailorsStatementFinancial = 'tailors.statement_financial';
   static const String tailorsStatementWork = 'tailors.statement_work';
+  static const String tailorsGroupWorkReport = 'tailors.group_work_report';
 
   // ── الحسابات / accounts ──────────────────────────────────
   static const String accountsWildcard = 'accounts.*';
@@ -194,6 +198,14 @@ class Perm {
   static const String jobsDelete = 'jobs.delete';
   static const String jobsToggle = 'jobs.toggle';
 
+  // ── الكشوفات الشخصية / my_statement ─────────────────────
+  /// كشف مالي وكشف عمل خاصان بالموظف الحالي — لا يتطلبان اختيار حساب
+  /// Personal statements scoped to the logged-in employee — no account picker needed.
+  static const String myStatementWildcard = 'my_statement.*';
+  static const String myStatementView = 'my_statement.view';
+  static const String myStatementFinancial = 'my_statement.financial';
+  static const String myStatementWork = 'my_statement.work';
+
   // ── النظام / system ──────────────────────────────────────
   /// منح شامل: من يملك `system.*` يملك كل شيء (نفس قاعدة `PermissionResolver::can`)
   /// The all-encompassing grant: `system.*` covers every code (same rule as the server resolver).
@@ -244,6 +256,7 @@ const List<String> allPermissionCodes = [
   Perm.cuttersToggle,
   Perm.cuttersStatementFinancial,
   Perm.cuttersStatementWork,
+  Perm.cuttersGroupWorkReport,
   Perm.tailorsWildcard,
   Perm.tailorsView,
   Perm.tailorsCreate,
@@ -252,6 +265,7 @@ const List<String> allPermissionCodes = [
   Perm.tailorsToggle,
   Perm.tailorsStatementFinancial,
   Perm.tailorsStatementWork,
+  Perm.tailorsGroupWorkReport,
   Perm.accountsWildcard,
   Perm.accountsView,
   Perm.accountsCreate,
@@ -334,6 +348,10 @@ const List<String> allPermissionCodes = [
   Perm.jobsUpdate,
   Perm.jobsDelete,
   Perm.jobsToggle,
+  Perm.myStatementWildcard,
+  Perm.myStatementView,
+  Perm.myStatementFinancial,
+  Perm.myStatementWork,
   Perm.systemWildcard,
 ];
 
@@ -362,6 +380,7 @@ const List<String> permModuleOrder = [
   'sms',
   'whatsapp',
   'jobs',
+  'my_statement',
   'system',
 ];
 
@@ -390,6 +409,7 @@ const Map<String, String> permModuleLabels = {
   'sms': 'خدمة الرسائل النصية',
   'whatsapp': 'خدمة رسائل واتساب',
   'jobs': 'إدارة المهام الزمنية',
+  'my_statement': 'الكشوفات الشخصية',
   'system': 'النظام',
 };
 
@@ -408,6 +428,7 @@ const Map<String, String> permActionLabels = {
   'statement_group': 'كشف مجموعة حسابات',
   'statement_detail': 'كشف تحليلي مفصل',
   'statement_work': 'كشف عمل',
+  'group_work_report': 'تقرير عمل مجموعة',
   'toggle': 'تفعيل/تعطيل',
   'deliver': 'تسليم',
   'edit_limit': 'تعديل السقف',
@@ -423,6 +444,8 @@ const Map<String, String> permActionLabels = {
   'settings_manage': 'إدارة إعدادات الخدمات',
   'subscriptions_manage': 'إدارة الاشتراكات',
   'reveal_credentials': 'إظهار بيانات الدخول',
+  'financial': 'كشف مالي شخصي',
+  'work': 'كشف عمل شخصي',
 };
 
 /// اسم القسم المستخرج من الكود (`customers.view` ⇒ `customers`)

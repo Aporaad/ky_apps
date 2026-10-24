@@ -32,7 +32,16 @@ class AppUserModel {
 
   final int? branchNo;
   final String? note;
+
+  /// الحساب النقدي/الصندوق الافتراضي للمستخدم — عمود `CASH_ACC_NO` الإرثي، مستقل تماماً
+  /// عن الحساب المالي أدناه.
+  /// The user's default treasury/cash account (`CASH_ACC_NO`), entirely separate from the
+  /// financial ledger account below.
   final int? cashAccNo;
+
+  /// الحساب المالي للمستخدم في شجرة الحسابات — عمود `ACC_NO`، تُقرأ منه كشوفه الشخصية.
+  /// The user's ledger account in the chart of accounts (`ACC_NO`), resolved by personal statements.
+  final int? accNo;
   final bool allowBankAcc;
   final bool biometricEnabled;
   final String? deviceName;
@@ -64,6 +73,7 @@ class AppUserModel {
     this.branchNo,
     this.note,
     this.cashAccNo,
+    this.accNo,
     this.allowBankAcc = false,
     this.biometricEnabled = false,
     this.deviceName,
@@ -128,6 +138,9 @@ class AppUserModel {
       cashAccNo: JsonValues.asIntOrNull(
         json['cash_acc_no'] ?? json['CASH_ACC_NO'],
       ),
+      // الحساب المالي (ACC_NO) — منفصل عن الصندوق، ويُقرأ بحالتَي المفتاح كالعادة
+      // The financial/ledger account (ACC_NO) — distinct from the treasury, dual-case read.
+      accNo: JsonValues.asIntOrNull(json['acc_no'] ?? json['ACC_NO']),
       allowBankAcc: JsonValues.asFlag(
         json['allow_bank_acc'] ?? json['ALLOW_BANK_ACC'],
       ),
@@ -172,6 +185,7 @@ class AppUserModel {
     'branch_no': branchNo,
     'note': note,
     'cash_acc_no': cashAccNo,
+    'acc_no': accNo,
     'allow_bank_acc': allowBankAcc ? 1 : 0,
     'biometric_enabled': biometricEnabled ? 1 : 0,
     'device_name': deviceName,
@@ -192,6 +206,7 @@ class AppUserModel {
     int? branchNo,
     String? note,
     int? cashAccNo,
+    int? accNo,
     bool? allowBankAcc,
     bool? biometricEnabled,
     String? deviceName,
@@ -216,6 +231,7 @@ class AppUserModel {
       branchNo: branchNo ?? this.branchNo,
       note: note ?? this.note,
       cashAccNo: cashAccNo ?? this.cashAccNo,
+      accNo: accNo ?? this.accNo,
       allowBankAcc: allowBankAcc ?? this.allowBankAcc,
       biometricEnabled: biometricEnabled ?? this.biometricEnabled,
       deviceName: deviceName ?? this.deviceName,

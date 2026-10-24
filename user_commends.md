@@ -1393,3 +1393,351 @@ Manifest الرئيسي، ثم بناء `--split-per-abi` + universal والتح
 
 **النتيجة:** ملف وثائقي جديد فقط؛ لا بناء ولا تعديل كود. صُححت ثلاث كلمات صينية تسللت
 للنص تلقائياً والتحقق أنها لم تعد موجودة. لم يُنفَّذ commit (لا طلب).
+
+
+## 2026-10-24 14:30 — «اكمل وقم برفع الترحيلات الى قاعده البيانات انت» — Qoder agent
+
+**نص الأمر كما ورد:** «اكمل وقم برفع الترحيلات الى قاعده البيانات انت»
+
+**السياق:** كان ضمن تنفيذ خطة `تطوير_وتوسيع_نظام_الصلاحيات_IBAC` — الخطة كانت
+تسلّم ملفات SQL دون تنفيذ؛ المستخدم أمر بتنفيذها مباشرة.
+
+**ما نُفِّذ:**
+1. **توسيع `PermissionCatalog.php`** إلى 132 كوداً (استبدال 4 أكواد كشف عامة
+   بـ 9 دقيقة) — تمّ في الجولة السابقة.
+2. **البذر:** شُغِّل `php artisan tinker database/oracle/02_ibac_seed.php` —
+   `inserted=9 updated=123 total=136` (الأربعة العامة لم تزل موجودة بعد).
+3. **جرد منح العامة:** `SELECT COUNT(*) FROM APP_USERS_PERMISSIONS WHERE
+   PERMISSION_ID IN (33,40,47,54)` → `0` (لا مستخدم يملك أي كود عام، فلا حاجة
+   لترحيل منح إلى الدقيقة).
+4. **التنظيف الدفاعي:** `DELETE FROM APP_USERS_PERMISSIONS WHERE PERMISSION_ID
+   IN (…العامة الأربعة…)` — صفر صفوف.
+5. **حذف الأكواد العامة من الكتالوج:** `DELETE FROM APP_PERMISSIONS WHERE
+   PERMISSION_CODE IN ('accounts.statement','employees.statement',
+   'cutters.statement','tailors.statement')` — 4 صفوف.
+6. **التحققات (نجحت كلها):**
+   - `COUNT(*) = 132` ✓ (مطابق لـ `PermissionCatalog::count()`).
+   - العامة المتبقية `= 0` ✓؛ الدقيقة الموجودة `= 9` ✓.
+   - منح يتيمة `= 0` ✓؛ `IS_ACTIVE=1` `= 132` ✓.
+   - `ASCIISTR(NAME_AR)` للتسعة الجديدة (`ID` 129..137) أظهرت بايتات CP1256
+     (`\00DF\00D4\00DD` = «كشف») — العربية سليمة ومتسقة مع الكتابة عبر
+     `ArabicEncoding::toOracleSearchChars()`.
+
+**أمان وتنفيذ:** كل أمر نفَّذته عبر `oracledb` MCP؛ لا تسريب أسرار في السجل؛ لم
+يُنفَّذ DDL — فقط DML على `APP_PERMISSIONS`/`APP_USERS_PERMISSIONS`. سكربتات
+`06_ibac_statement_split.sql` و`07_ibac_statement_split_verify.sql` تبقى مُسلَّمة
+كمرجع (لأنها تغطي حالة وجود منح عامة؛ لم تظهر هنا).
+
+**النتيجة:** قاعدة البيانات الآن مطابقة تماماً لكتالوج الصلاحيات الجديد؛ لم
+يُنفَّذ commit.
+
+
+## 2026-10-24 18:45 — «باقي هناك عده اخطاء: اولاً كشف عمل مجموعه يجب اعطائه صلاحيه منفصله؛ ثانياً اعطيت صلاحيه كشف حساب مالي وحدها وعندما فتحت كشف حساب مالي ظهرت الحسابات واخترت حساب ولكن ظهر خطاء ولم يعرض الكشف (403 cutters.statement و 403 accounts.statement)» — Qoder agent
+
+**نص الأمر كما ورد:** «باقي هناك عده اخطاء اولاً كشف عمل مجموعه يجب اعطائه صلاحيه
+منفصله ثانياً اعطيت صلاحيه كشف حساب مالي وحدها وعندما فتحت كشف حساب مالي ظهرت
+الحسابات واخترت حساب ولكن ظهر خطاء ولم يعرض الكشف» + سجل Dio كامل يُظهر
+`{"permission":["cutters.statement"]}` و`{"permission":["accounts.statement"]}`.
+
+**التشخيص:**
+1. **صلاحية مجموعة العمل:** كانت الخطة الأصلية تُبقي «كشف عمل مجموعة» على نفس
+   كود `cutters/tailors.statement_work` الفردي. المستخدم يريد كوداً مستقلاً
+   فعلياً — قرار سليم: رؤية أرشيف كل القصاصين ليست رؤية سجل قصاص واحد.
+2. **403 على كشوف الحسابات:** الأخطاء تُظهر **الأكواد القديمة العامة** (`accounts.statement`
+   و`cutters.statement`) التي لم تعد موجودة في الكتالوج أصلاً (حُذفت في الترحيل
+   الصباحي). السبب: عملية `php artisan serve` الحيّة شغّالة من قبل تحديث `routes/api.php`
+   ولم تُعِد تحميل الملف؛ المسارات الجديدة (`statement_financial`) في الكود لكن
+   الذاكرة تحمل القديم. الحل: `php artisan route:clear` + إعادة تشغيل `serve`.
+
+**ما نُفِّذ:**
+- `PermissionCatalog.php`: أضاف `'group_work_report' => 'تقرير عمل مجموعة القصاصين'`
+  لـ cutters، و`'تقرير عمل مجموعة الخياطين'` لـ tailors؛ `humanize()` يعرف الفعل؛
+  عدد الكتالوج 132 → **134**.
+- `routes/api.php`: `/workers/{cutters|tailors}/group-work-report` حارسه الآن
+  `<w>.group_work_report` (كان `<w>.statement_work`).
+- `IbacCoreTest.php`: 132 → 134.
+- `BusinessRoutesSealedTest.php`: المساران يتوقعان الأكواد الجديدة.
+- `02_ibac_seed.php`: شُغِّل — `inserted=2 updated=132 total=134`؛ IDs 138/139
+  نشطتان في `ACCOUNTS.APP_PERMISSIONS`.
+- `permission_codes.dart`: تعليق الكتالوج 134؛ `cuttersGroupWorkReport` و
+  `tailorsGroupWorkReport`؛ مداخلهما في `allPermissionCodes` بنفس الترتيب؛
+  `'group_work_report': 'تقرير عمل مجموعة'` في `permActionLabels`.
+- `workers_dashboard_screen.dart`: بطاقة «كشف عمل مجموعة» مشروطة بـ
+  `canAny([cuttersGroupWorkReport, tailorsGroupWorkReport])`.
+- `home_shortcut_catalog.dart`: اختصار `workers.group_work` بالأكواد الجديدة.
+- Pint نظيف؛ `IbacCoreTest + BusinessRoutesSealedTest + PermissionSyncTest` =
+  33 test / 189 assertion ناجحة؛ `flutter analyze lib` = 0 مشاكل؛
+  `flutter test test/ibac_test.dart` = 20/20.
+
+**ما على المستخدم:** إعادة تشغيل `php artisan serve` حتى تُحمَّل أذرع `routes/api.php`
+الجديدة في الذاكرة؛ بعدها `/api/accounts/chart/{no}/statement` و`/api/workers/*/group-work-report`
+ترد بأكوادها الدقيقة.
+
+**النتيجة:** قاعدة البيانات والكتالوج والواجهة والمسارات كلها متسقة على **134**؛ لا commit.
+
+
+## 2026-10-24 05:20 — «اريد ان تقوم بانشاء خطه لتطوير قسم الشجره المحاسببيه واصلاح مشاكلها…» ثم «Implement the plan as specified… Do NOT edit the plan file itself» — Qoder Agent
+
+**نص الأمر كما ورد (الأصل بالعربية، حرفياً كما أُرسل):**
+
+> اريد ان تقوم بانشاء خطه لتطوير قسم الشجره المحاسببيه واصلاح مشاكلها وتحسين
+> تصميم وتنسيق طريقه عرض الحسابات واضافه خيارات الطباعه والتصدير pdf/ecxl …
+> لايتم عرض الاقسام والحسابات كامله … وتجميع ارصده الابناء … زر ايقونه كشف
+> صغير بجانب الحسابات … تطوير نموذج اضافه حساب وتوسيع الحقول والخيارات واضافه
+> خيار انشاء حساب فرعي ومجموعه حسابات … ويمكنك الوصول لقاعده البيانات باستخدام
+> موصل `oracledb mcp`
+
+**ونص أمر التنفيذ (الإنجليزية، كما أُعيد في كل جلسة متابعة):**
+
+> Implement the plan as specified, it is attached for your reference.
+> Do NOT edit the plan file itself.
+
+**القرارات الأربعة التي طلبتُها وحسمها المستخدم (عبر أسئلة الاختيار):**
+1. **تصدير Excel حقيقي** `.xlsx` (لا CSV مُموَّه) — مسموح بإضافة حزمة جديدة.
+2. **تحميل كسول مستوى-بمستوى** بدل حمولة 21 ألف عقدة دفعة واحدة.
+3. حسابات العملاء ببادئة **`123` تستثنى من العرض فقط** (يظهر منها
+   `عملاء الكبودي للخياطة = 12310000`) لكنها **تبقى داخل التجميع**.
+4. الأرصدة المجمّعة تُحسب من **`ACCOUNTS.ENTRY_SUB`** (الحركات) لا من أعمدة
+   `BALANCE` المخزّنة — لأن الأخيرة ميتة (كل `ACC_SUB.BALANCE = 0`).
+
+**ما نُفِّذ:** مراحل الخطة الثماني كاملة (0 التبعيات، 1 واجهات الشجرة
+`tree`/`tree/children`/`search` + `balanceMap`، 2 إصلاح `TRUNC/10000`
+وترقيم الإنشاء ونقاط الهيكل، 3 النماذج والمستودع والمزود، 4 إعادة بناء الشاشة،
+5 الطباعة وPDF وXLSX، 6 نماذج الإنشاء والتعديل، 7 الاختبارات والبوابات، 8
+التوثيق). التفاصيل المسطّرة لكل ملف في `devloping_history.md` و`DBdevloping_history.md`
+بالتاريخ نفسه؛ لم يُعدَّل ملف الخطة نفسه كما أُمر.
+
+**أخطاء حقيقية كشفها طريق التنفيذ (وليست من الخطة):**
+1. **اختبار الشجرة يفشل بـ `StateError: Bad state: No element`:** السطر الهيكلي
+   يحمل `onTap` + `onDoubleTap` معاً، وفلاتر تؤجّل النقرة الواحدة بنافذة
+   النقر المزدوج (300ms)، فـ `pumpAndSettle()` وحدها ترجع قبل تنفيذ الكشف.
+   الحل في الاختبار: انتظار 400ms ثم تسوية — وهو ما ينتظره المستخدم فعلياً.
+2. **عطل موجود مسبقاً في `account_group_statement_screen.dart`:**
+   `_maybeApplyDefaults` كان يقرأ `list[1]` بينما التعليق يقول «الأول»، فينهار
+   بـ `RangeError` متى كان الحساب الفرعي واحداً (حالة طبيعية هنا). أُصلح إلى
+   `list.first` في موضعين.
+3. **اختبار قديم `test/api_config_test.dart`:** يتوقع مضيف `192.168.0.11` من
+   مُدخل `192.168.0.9`؛ `normalizeUrl` لا يعيد كتابة المضيف إطلاقاً — توقع
+   بائت من commit سابق، صُوِّب مع تعليق ثنائي اللغة.
+4. **`flutter analyze` (6 مشاكل):** 3 من عملي (استيرادا `dart:async` زائدان
+   ودالة `leaf()` غير مستخدمة) و3 موجودة مسبقاً (`ignore ignore` في
+   `analysis_options.yaml`، متغير `label` مهجور في `biometric_login_button.dart`،
+   دالة محلية باسم `_pump` في اختبار العمال) — سُدّت الست.
+5. **الفحص الحيّ على Oracle:** حذف رمز الاختبار بـ `where('name', …)` أطلق
+   `ORA-00932` لأن `PERSONAL_ACCESS_TOKENS.NAME` من نوع CLOB — قرئ بـ
+   `DBMS_LOB.SUBSTR` وحُذف بالمعرّف.
+
+**البوابات بأرقامها النهائية (كلها خضراء):**
+- `flutter analyze` → **No issues found!**
+- `flutter test` → **259 passed / 5 skipped** (منها 32 اختباراً جديداً للشجرة:
+  12 نموذج + 12 مزود + 8 شاشة، واختبارات كشف/تصدير الميزان المحدَّثة).
+- `vendor/bin/pest` → **142 passed / 2 skipped / 1073 assertions**
+  (تشمل `tests/Feature/AccountTreeLazyTest.php` الجديد).
+- `vendor/bin/pint --dirty --format agent` → **passed**.
+- فحص حيّ عبر `php artisan serve`: `/accounts/tree` returns 200 بـ
+  `total_nodes=134` وتجميع غير صفري، ترقيم أبناء بمجموعتين متنافيتين،
+  `/accounts/search`، `/accounts/next-number?level=chart&acc_part=110 → 11010002`،
+  و`401` بلا رمز.
+
+**git:** لم أنفّذ أي commit (لا طلب). شجرة `kyApp_API` كان المستخدم قد أرسلها
+بنفسه في `5945166 «اصلاح الصلاحيات وتطوير شجره الحسابات»`؛ الباقي في العمل
+الحالي غير مُسلَّم. لم تُلمَس الخطة.
+
+**النتيجة:** الشجرة المحاسبية تُعرض كاملة مرتّبة بتحميل كسول وأرصدة مجمّعة من
+الحركات، مع كشف/تفاصيل/طباعة/تصدير PDF+XLSX ونماذج إنشاء وتعديل موسّعة؛ وكل
+بوابة اختبار خضراء؛ لا DDL ولا commit.
+
+## 2026-10-24 09:24 → 09:51 — ثلاث مشكلات في عرض/طباعة/عملة الشجرة + فتح/إغلاق الفروع — Qoder Agent
+
+**نص الأمر الأول كما ورد (حرفياً، بعلامات ترقيم المستخدم):**
+
+> اولا حجم وتنسيق العرض غير مظبوط وخاصه الابناء والحسابات الفرعيه والتي تحتها
+> لاتظهر تفاصيلها واسمها يطهر مقصوص والمفروض ان يتم تنسيق الحجم والعرض لتظهر كافه
+> تفاصيل الحساب بسطر واحد — وايضا يتم توسيع خيارت الكثافه والحجم واضافه احجام
+> اصغر وخيارات اكثر — ثانيا الطباعه والتصدير يقوم بطباعه او تصدير الحسابات
+> الرئيسيه فقط ولايقوم بطباعه وتصدير بقيه الحسابات والمفروض ان يتم تصدير وطباعه
+> كل الحسابات او يتم تخيير المستخدم بالمستويات التي يريد طباعتها وتصديرها —
+> ثالثا حقل العمله في نموذج انشاء حساب يجب ان يتم اظهار قائمه العملات المتاحه
+> ويتم الاختيار منها
+
+**نص الأمر الثاني (توسيع النطاق):**
+
+> اكمل الاصلاح — وايضا لاتنسى اضافه امكانيه فتح/اغلاق ظهور الحسابات الفرعيه
+
+**ثم أوامر المتابعة:** «اكمل» (مرتان — الأخيرة منهية الجولة عند 09:51).
+
+**المنفِّذ:** Qoder Agent (وكيل Qoder). **زمن المهمة:** 09:24 → 09:51، 2026-10-24 (+03:00).
+
+**القراءة الصحيحة للمشكلة الثالثة (وهي التي حدّدت الحل):** الطباعة والتصدير كانا
+يقرآن `_visibleRows()` من حالة الشاشة، والشاشة كسولة — فأي طباعة بعد فتح الأقسام
+تنشر الأقسام وحدها. الإصلاح ليس فلترة أفضل للصفوف، بل **تحويل التصدير إلى طلب من
+الخادم**: أضيفت `GET /accounts/export-tree` (خلف `permission:accounts.export,accounts.print`)
+تُسطّح المستويات الخمسة المختارة في SQL، و`TreeExportMenu` صار يفتح نافذة نطاق ثم
+يجلب منها، وحُذف معامل `rows:` نهائياً حتى لا يعود هذا النمط ممكناً.
+
+**حقل العملة:** كان `TextFormField` برقم خام. صار منسدلة من `GET /accounts/currencies`
+(خلف صلاحيات **الحسابات** لا `currencies.view`، و إلا استُخدم نموذج الإنشاء بقائمة
+فارغة من قبل موظف حسابات لا يملك دليل العملات). يظهر لـ `main|sub` فقط — لأن
+`CHART_ACC` لا يملك عمود عملة أصلاً (ثمانية أعمدة) و`ACC_SUB_GROUP` لا يقبله في
+الإنشاء، فظهاره لهما كان يلتقط قيمة تُرمى بصمت.
+
+**فتح/إغلاق ظهور الحسابات الفرعية (المطلوب الجديد):** ثلاث طبقات — مبدّل في الـ
+AppBar (`فتح/إغلاق ظهور الحسابات الفرعية` ← `expandToLevel(3)` / `expandToLevel(-1)`)،
+مقبض لكل سطر هيكلي، ومفتاح «ظهور الحسابات الفرعية» داخل خيارات العرض.
+
+**ملاحظة مستلمة من المستخدم ونُفِّذت كما هي:** رُفض التعديل المقترح على
+`lib/features/auth/presentation/widgets/biometric_login_button.dart`؛ لم يُعَد
+تطبيقه في هذه الجولة ولا يُطبَّق لاحقاً دون طلب صريح.
+
+**البوابات عند الإغلاق (09:51):** `flutter analyze` = **No issues found!** ·
+`flutter test` = **285 passed / 5 skipped** (كانت 259؛ الجديد 26 اختباراً في
+`test/features/accounts/account_tree_export_test.dart` (21) و
+`test/features/accounts/account_currency_field_test.dart` (5)) ·
+`php artisan test --filter=AccountTreeExport` = **8 passed / 10,835 assertion** ·
+الحزمة كاملة = **150 passed / 2 skipped / 11,908 assertion** · `pint --dirty` = passed.
+
+**حُفِظت التفاصيل التقنية في:** `todo.md` و`devloping_history.md` و
+`DBdevloping_history.md` و`db_commends.md` بنفس التاريخ. **لا commit** (لا طلب).
+
+---
+
+## 2026-10-24 14:10 → 14:44 — ثلاث مشكلات من الاختبار الحيّ: انهيار 52px، غياب حقل العملة، و404 التصدير — Qoder Agent
+
+**المنفِّذ:** Qoder Agent (وكيل Qoder). **زمن المهمة:** 14:10 → 14:44، 2026-10-24 (+03:00) — أول
+تعديل فعلي على الملفات 14:14 وآخره 14:28، ثم البوابات حتى 14:44.
+
+### نصّ الأمر كما ورد (حرفياً)
+
+> هناك مشكله عند النقر على زر الفتح والاغلاق ويظهر خطا Another exception was thrown: Invalid
+> argument: 52
+>
+> ثانيا اين خقل اختيار العمله في نموذج انشاء حساب لايوجد
+>
+> ثالثا هناك مشكله عند الطباعه او تصدير الشجر ويظهر خطا
+> *** Request ***
+> uri: http://192.168.0.9:8000/api/accounts/export-tree?levels=account%2Cmain%2Csub%2Cgroup%2Cchart&include_customers=0&hide_zero=0
+> method: GET … DioException [bad response] … status code of 404 …
+> {"message":"The route api/accounts/export-tree could not be found.",
+>  "exception":"Symfony\\Component\\HttpKernel\\Exception\\NotFoundHttpException",
+>  "file":"C:\\kyApp_API\\vendor\\laravel\\framework\\src\\Illuminate\\Routing\\AbstractRouteCollection.php","line":44, …}
+
+### ما شُخِّص وما فُعِل
+
+1. **`Invalid argument: 52`:** جذر حقيقي في الكود — `_statusRow` بـ
+   `(_comfortableHeight - 8).clamp(metrics.height, _comfortableHeight)` تنقلب إلى `clamp(52, 46)`
+   على الكثافة «الواسعة»، و`num.clamp` يرمي `ArgumentError` حين الحدّ الأدنى > الأعلى. أُثبت
+   بالتشغيل على VM، وأُصلح بشرط `max`، وأُضيف اختبار انحدار (3 أنواع صفوف حالة × 5 كثافات).
+2. **حقل العملة غائب:** كان مشروطاً بـ `main|sub` والنموذج يفتح على `chart` افتراضياً. أُصلح بأن
+   يصبح سطر العملة دائماً ظاهراً: منتقي حيث يخزّن الجدول `CUR_NO`، وحقل **للقراءة فقط** يعرض
+   العملة الموروثة من `ACC_SUB` الأعلى حيث لا يُخزَّن (`CHART_ACC`/`ACC_SUB_GROUP` بلا عمود عملة).
+3. **404 التصدير/الطباعة:** لا خلل في الكود. الخادم الحيّ على `192.168.0.9` نسخة أقدم من الـ API
+   (مساراتها `C:\kyApp_API`) لا تعرف `accounts/export-tree` ولا `accounts/currencies`؛ هذه الآلة
+   `192.168.0.11` و`C:\kyApp_API` غير موجودة عليها، و`route:list` محلياً يُظهر المسارين، ولا ملف
+   مسارات مُخزَّن في `bootstrap/cache`، وخادم فحص محلي أرجع **401** (لا 404) مع `Accept: JSON`.
+   أُضيفت رسالة 404 عربية صريحة في `tree_export_menu.dart` تدلّ على النشر، وبقي قرار النشر/تغيير
+   Base URL بيد المستخدم.
+4. **ملاحظة فنية عن الفحص:** 500 الذي ظهر أول فحص كان أثراً لأداة الفحص نفسها — `Accept: text/html`
+   دفع Sanctum لإعادة التوجيه إلى مسار `login` غير معرَّف (`Route [login] not defined`)؛ مع
+   `Accept: application/json` يرجع 401 كما يجب، وتطبيقات Dio ترسل JSON دائماً.
+
+### لم يُعدَّل (تعمُّداً)
+
+`lib/features/accounts/presentation/widgets/account_statement_report_footer.dart` — تعديل جارٍ من
+المستخدم نفسه (git `M`، 14:20:23) عطّل كتلة التواقيع/التوقيت، وهو مصدر التحذيرين الوحيدين في
+`flutter analyze` والفشل الوحيد في `flutter test` (اختبار يبحث عن `توقيع المدير`). سُئِل المستخدم:
+إعادة التفعيل أم حذف الكود الميت وضبط الاختبار؟
+
+**البوابات:** `flutter analyze` = تحذيران (Both in the user's footer file) · `flutter test` =
+**286 passed / 5 skipped / 1 failed** (the one failure is the same user edit) · الملفان المستهدفان
+= 28 passed · لا تغيير PHP (فلا Pest/Pint) · لا SQL · لا DDL · لا commit.
+
+**حُفِظت التفاصيل التقنية في:** `todo.md` و`devloping_history.md` و`db_commends.md` و
+`DBdevloping_history.md` بنفس التاريخ.
+
+---
+
+## [2026-10-24 15:20] أمر جولة الإصلاح 3 — المنفِّذ: Qoder Agent
+
+**نصّ الأمر كما ورد:** «ياحيوان اين خقل اختيار العمله في نموذج انشاء حساب لااريد ان يكون موروث
+من الحساب الاب اريد اظهار حقل العمله يتم اختيار عمله لكل حساب بشكل مستقل»
+
+**توضيحان لاحقان ردًّا على سؤال التخزين (AskUserQuestion):**
+- «لا لاتضيف اي جدول او اي حقل الذي يحدد عمله الحساب هي الخانه الرابعه من رقم الحساب»
+- «إلزامي دائماً»
+
+**الزمن:** 2026-10-24 (حوالي 15:20) · **النموذج المنفِّذ:** Qoder Agent.
+
+**خلاصة التنفيذ:** حقل عملة مستقلّ إلزامي لكل حساب مالي في نموذج الإنشاء (منتقي حقيقي من دليل
+CURRENCY، لا وراثة ولا رقم خام)؛ العملة تُخزَّن كـ**الخانة الرابعة من رقم الحساب** بلا أي عمود أو
+جدول (احتراماً للنهي عن DDL)؛ معاينة الرقم تُعاد حُسبانها عند تغيّر العملة؛ شاشة العرض تُشتقّ
+`cur_no` من الرقم في كل قراءات الشجرة؛ وشاشة التعديل تعرض العملة للقراءة فقط (تغييرها = إعادة
+ترقيم غير آمنة). البوابات: analyze تحذيران (ملف المستخدم) · dart currency test = 7 passed · Pest =
+26 passed · pint = passed · قراءة فقط بلا DDL/DML · لا commit.
+
+---
+
+## 2026-10-25 — «خطة شاملة وتنفيذها: كشفان شخصيان (مالي + عمل) للموظف الحالي بصلاحيتين مستقلتين واختصارين في الرئيسية» — Qoder Agent
+
+**نص الأمر (بالعربية — المتطلب كما طُلب):** طلب المستخدم خطة شاملة مفصّلة ثم تنفيذها لإضافة
+كشفين شخصيين:
+1. **كشف حسابي المالي** — يفتح مباشرة كشف الموظف الحالي دون إظهار قائمة اختيار الحساب (يُخفى
+   المنتقي فلا يستطيع رؤية كشف موظف آخر).
+2. **كشف عملي** — يفتح كشف عمل الموظف الحالي (خياط أو قصاص) مباشرة بلا اختيار عامل.
+
+مع: عمود `ACC_NO` جديد في `APP_USERS` يربط المستخدم بحسابه المالي (`CHART_ACC`)، وصلاحيتا IBAC
+مستقلتان لكل كشف، واختصاران في الشاشة الرئيسية فقط دون ربطهما بقسم في الدرج. ويُحدَّد نوع العمل
+عبر `TAILOR_ACC` في `TAILOR_FROM_CALC` و`CUTTER_ACC` في `CUTTER_FROM_CALC`، مع إتاحة الوصول
+لقاعدة البيانات عبر موصل `oracledb mcp`.
+
+**ثم أمر التنفيذ (الإنجليزية):**
+
+> Implement the plan as specified, it is attached for your reference.
+> Do NOT edit the plan file itself.
+
+**ما نُفِّذ (الخطة كاملة بمراحلها):**
+- **DDL/DML عبر oracledb MCP:** `ALTER TABLE ACCOUNTS.APP_USERS ADD ACC_NO NUMBER` (nullable، بلا FK)؛
+  بذر أربعة أكواد `my_statement.*|.view|.financial|.work` (IDs صريحة 140–143) في `APP_PERMISSIONS`
+  ← الإجمالي 138؛ ومزامنة `SEQ_APP_PERMISSIONS` فوق 143.
+- **الخادم (`kyApp_API`):** `PermissionCatalog.php` (وحدة `my_statement` + توسيع `humanize`)؛
+  `MyStatementController.php` (المالي يقرأ `ACC_NO` من الجلسة حصراً، والعمل يكتشف خياط/قصاص بعدّ
+  جداول CALC)؛ مساران خلف `permission:my_statement.financial` / `my_statement.work`؛ `User.php`
+  (إضافة `ACC_NO` لـ fillable)، `AuthController::userPayload` (`acc_no`)، `UserAdminController`
+  (قبول `acc_no` في store/update).
+- **Flutter:** `permission_codes.dart` (مرآة: 4 ثوابت + القوائم)؛ `UserModel.accNo`؛ نقطتا
+  `/my-statement/financial` و`/my-statement/work`؛ ميزة `my_statement/` كاملة (repository يعيد
+  `AccountStatementData`/`WorkerWorkReport`، provider بنمط Notifier يفحص `accNo == null`، وشاشتان
+  مبسّطتان بلا منتقي)؛ `WorkerWorkReport.typeLabel`؛ بطاقتا `my_statement.financial` و
+  `my_statement.work` في `home_shortcut_catalog.dart` (`sectionId: 'home'`, `defaultOn: false`).
+
+**البوابات والتحقق:** `flutter analyze` على الميزة + الكتالوج + النموذج = **No issues found!** ·
+`flutter test test/home_catalog_test.dart` = **15 passed** · فحص Oracle حيّ: `COUNT(*)` = 138،
+الأكواد 140–143 نشطة، `APP_USERS.ACC_NO` = `NUMBER/Y` · **لا commit** (لا طلب) · لم يُعدَّل ملف
+الخطة نفسه كما أُمِر.
+
+**حُفِظت التفاصيل التقنية في:** `todo.md` و`devloping_history.md` و`DBdevloping_history.md`
+و`db_commends.md` بنفس التاريخ.
+
+---
+
+## 2026-10-24 — أمر مهمّة حقل «الحساب المالي» (Claude)
+
+**نصّ الأمر كما ورد:** «اكمل» (متابعة) ثم: «قم بتطوير واجهه انشاء او تعديل مستخدم واضف حقل
+"الحساب المالي" عند النقر عليه يتم عرض قائمه الحسابات الماليه ويتم اختيار حساب وربطه بالمستخدم
+تلقائيا ويجب التركيز على التفريق بين حقل رقم الحساب النقدي CASH_ACC_NO الموجود سابقا وحقل رقم
+الحساب المالي الخاص بالمستخدم ACC_NO الجديد حيث ان CASH_ACC_NO يمثل حساب الصندوق الافتراضي
+بالمستخدم».
+
+**النموذج المنفّذ:** Claude. **النطاق:** واجهة الإدارة (إنشاء/تعديل مستخدم) + `UserAdminController`.
+**الزمن:** 2026-10-24. **الحالة:** منفّذة ومختبَرة؛ لا commit (لم يُطلب).
+
+---
+
+## 2026-10-25 — أمر إصلاح تعذّر البناء (Claude)
+
+**نصّ الأمر كما ورد:** «ياحيوان ماذا عملت لماذا لايستطيع التطبيق البناء» (مع مرفق `pasted-text.txt`
+يحتوي سجل فشل `flutter run` عند `:share_plus:compileDebugKotlin`).
+
+**النموذج المنفّذ:** Claude. **التشخيص:** تعارض إصدار Kotlin — `share_plus 12.0.2` يحتاج Kotlin 2.2.0
+بينما الإعداد يثبّت 1.9.24 (ليس سببه مهمة الحقل المالي؛ سببه إضافة PDF/مشاركة من عمل متزامن).
+**الإصلاح:** ترقية `org.jetbrains.kotlin.android` إلى `2.2.0` في `android/settings.gradle.kts`.
+**التحقق:** `flutter build apk --debug` = **✓ Built app-debug.apk**. **الزمن:** 2026-10-25 · لا commit.

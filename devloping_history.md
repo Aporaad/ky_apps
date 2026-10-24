@@ -1,4 +1,4 @@
-﻿# سجل تطوير المشروع (Development History)
+# سجل تطوير المشروع (Development History)
 
 ## [2026-09-08 03:50:01] - إضافة إمكانية إعداد والتحكم برابط Laravel API من واجهة التطبيق
 - **الهدف:** تمكين المستخدم ومسؤول النظام من إعداد وضبط رابط خادم Laravel API من داخل واجهة التطبيق وحفظه في التخزين الآمن بدلاً من القيمة الثابتة، مع فحص الاتصال وتأكيد التغيير.
@@ -2058,8 +2058,509 @@ sdkVersion 23 / targetSdk 35 / label الكبودي`. (versionCode=2001 هو ا�
   ظهور القسم نفسه — متسق مع «يتطلب .view».
 - الترحيل يمنح حامل الكود العام كل الأكواد الدقيقة المكافئة (لا إنقاص)، تاركاً
   التضييق اليدوي اللاحق عبر شاشة المنح.
-- سكربت Oracle لا يُنفَّذ من طرف الذكاء — لا Oracle MCP متاح؛ التسليم ملف SQL
-  يُراجَع ويُشغَّل يدوياً بعد backup (جدول BAK_06 مُقترح في رأس الملف).
 
-**الأثر:** لا commit (لا طلب)؛ لا تنفيذ SQL؛ قاعدة البيانات لم تُمسّ. كل التعديل
-في العملtree المحلي: 5 ملفات الخادم، 2 ملفات Oracle جديدة، 10 ملفات Flutter.
+**التنفيذ الفعلي على Oracle (نداء مباشر بعد أمر المستخدم):**
+- توفّر `oracledb` MCP — الخطة كانت تفترض غيابه. بعد طلب «ارفع الترحيلات إلى
+  قاعدة البيانات» شُغِّل `02_ibac_seed.php` (نتج 9 inserts + 123 updates؛
+  total=136) ثم جُردت منح العامة (`0`) فحُذفت الأكواد الأربعة العامة.
+- التحققات النهائية (عبر MCP): `COUNT(*)=132`، العامة=0، الدقيقة=9، منح يتيمة=0،
+  `IS_ACTIVE=1`=132؛ و`ASCIISTR(NAME_AR)` للتسعة الجديدة أظهرت بايتات CP1256
+  سليمة (`\00DF\00D4\00DD` = «كشف»).
+- بعد الترحيل ظهرت إخفاقات في `PermissionSyncTest` لأن assertions قديمة كانت
+  تتوقع 97 كوداً / 18 وحدة — استُبدلت بمرجع ديناميكي
+  `PermissionCatalog::count()` و`count(PermissionCatalog::grouped())` حتى لا
+  تتقادم مع كل توسيع قادم. Pint نظيف. `IbacCoreTest + BusinessRoutesSealedTest
+  + PermissionSyncTest` = 33 test / 189 assertion نجحت كلها مقابل Oracle حيّ.
+- `ExampleTest` يفشل بـ `204 !== 200` على `/` — متوقع: قاعدة صريحة للمشروع
+  «API-only root»؛ لا علاقة لها بتوسيع IBAC.
+
+**الأثر:** قاعدة البيانات مطابقة للكتالوج الجديد (132)؛ لا commit (لا طلب)؛ 6
+ملفات الخادم معدّلة + 2 SQL مسلَّمة (غير منفَّذة لأنها مكررة للفعل اليدوي الآمن)
++ 10 ملفات Flutter.
+
+
+## [2026-10-24 18:45] IBAC تكملة: صلاحيات تقرير عمل المجموعة + تفسير 403 · Qoder Agent
+
+**الدافع:** بعد إغلاق التوسيع الأول، أبلغ المستخدم بثلاث مشكلات: (1) «كشف عمل
+مجموعة» يجب أن تكون له صلاحية منفصلة لا نفس `statement_work` الفردي؛ (2) من يملك
+`statement_financial` وحده يفتح المنتقي ويختار حساباً لكنه يصطدم بـ 403 على
+`/api/accounts/chart/{accNo}/statement`؛ (3) نفس 403 على
+`/api/workers/cutters/group-work-report`. الأخطاء الثلاثة تحمل نصاً عربياً
+وكوداً لاتينياً: `errors.permission = ["cutters.statement"]` و`["accounts.statement"]`.
+
+**التشخيص:**
+- **الـ 403 ليست من الأكواد الجديدة** — بل من عملية `php artisan serve` التي
+  لا تزال في الذاكرة من ما قبل حفظ `routes/api.php`. الأكواد العامة الأربعة
+  (IDs 33/40/47/54) حُذفت من `APP_PERMISSIONS` في الترحيل الصباحي، لكن الـ serve
+  الحيّ يعرف فقط المسار القديم بحارسه القديم، فيُنتج رسالة 403 تحمل الكود المحذوف.
+  المسار في الكود سليم؛ يجب `route:clear` + إعادة تشغيل `serve`.
+- **صلاحية مجموعة العمل:** الخطة الأصلية §3 قرّرت «كشف عمل مجموعة» يُقضى بـ
+  `cutters.statement_work` **أو** `tailors.statement_work`. طلبُ المستخدم
+  يستبدل ذلك بصلاحية مستقلة عن كشف الفرد، وهو أدقّ مع نموذج IBAC: القدرة على
+  تصفّح أرشيف الكل ≠ القدرة على فتح سجل فرد واحد.
+
+**ما نُفِّذ:**
+1. **الخادم:** `PermissionCatalog.php` أضاف `'group_work_report'` إلى `extra`
+   كلٍّ من `cutters` و`tailors`؛ `humanize()` يعرفه بالإنجليزية (`'Group work
+   report'`). عدد الكتالوج 132 → **134**. صافي الحركة: −4 عام + 9 دقيق + 2
+   مجموعة = **+7** من 127.
+2. **`routes/api.php`:** `/workers/cutters/group-work-report` و`/workers/tailors/
+   group-work-report` حارسهما الآن `<w>.group_work_report` (كان `<w>.statement_work`).
+   مسارات `/workers/{id}/work-report` الفردية بقيت على `<w>.statement_work`.
+3. **Oracle:** شُغِّل `02_ibac_seed.php` مرة ثانية؛ `inserted=2 updated=132
+   total=134`. IDs 138 (`cutters.group_work_report`) و139 (`tailors.group_work_report`)
+   نشطتان في `APP_PERMISSIONS`، و`NAME_AR` مكتوبة بنفس نمط CP1256 السابق.
+   **لا تعديل على `APP_USERS_PERMISSIONS`** — كتالوج فقط؛ من يملكها يُمنح من الشاشة.
+4. **Flutter:** `permission_codes.dart` أضاف `cuttersGroupWorkReport` و
+   `tailorsGroupWorkReport`، وحدّث العدد في التعليق المرجعي، وأدرج الكودين في
+   `allPermissionCodes` بنفس ترتيب الخادم، و`permActionLabels['group_work_report']
+   = 'تقرير عمل مجموعة'`. `workers_dashboard_screen.dart`: بطاقة «كشف عمل مجموعة»
+   مشروطة بـ `canAny([cuttersGroupWorkReport, tailorsGroupWorkReport])` (كان
+   `[cuttersStatementWork, tailorsStatementWork]`). `home_shortcut_catalog.dart`:
+   اختصار `workers.group_work` بالأكواد الجديدة. `worker_action_icons.dart` لم
+   يُمسّ: أيقونات كشف الفرد ما زالت على `<apiPath>.statement_work`.
+5. **الاختبارات:** `IbacCoreTest` العدد 132 → 134. `BusinessRoutesSealedTest`:
+   `['get', '/api/workers/cutters/group-work-report', 'cutters.group_work_report']`
+   و`['get', '/api/workers/tailors/group-work-report', 'tailors.group_work_report']`.
+   Pint نظيف؛ `php artisan test --filter="IbacCoreTest|BusinessRoutesSealedTest|PermissionSyncTest"`
+   = **33 test / 189 assertion نجحت** مقابل Oracle حيّ.
+6. **Flutter gates:** `flutter analyze lib` = 0 مشاكل؛ `flutter test test/ibac_test.dart`
+   = 20/20 ناجح.
+
+**ما على المستخدم (لمنفّذ locally):**
+- إيقاف `php artisan serve` وإعادة تشغيله على `192.168.0.9:8000`.
+- بعد إعادة التشغيل، `route:list` يُظهر `EnsurePermission:accounts.statement_financial`
+  و`EnsurePermission:cutters.group_work_report`؛ الطلبتان السابقتان تنجحان إن كان
+  للمستخدم الكود المناسب، أو 403 برسالته الصحيحة إن لم يكن.
+
+**الأثر:** قاعدة البيانات + كتالوج الخادم + مساراته + أكواد العميل كلها متسقة
+على **134** صلاحية في 23 قسماً. لا commit (لا طلب).
+
+
+## [2026-10-24 05:20] الشجرة المحاسبية: تحميل كسول، أسطر مسطّحة، تجميع من ENTRY_SUB، تصدير XLSX · Qoder Agent
+
+**الدافع (مشاكل مُشخَّصة بالدليل):** `AccountController::getAccountTree` كان يُسقط أي أب
+بلا أبناء، و20,671 حساباً من 20,954 فيها `GROUP_ID = NULL` كانت تُفلتر بـ
+`TRUNC(ACC_NO/10000) = ACC_PART` (قسمة رقم ثمانية على 10000 تعطي بادئة رباعية لا تطابق
+`ACC_PART` الثلاثي) فلا يكاد يظهر شيء؛ العميل يبني `Column` متداخلاً لكل عقدة مع بطاقة
+مستقلة لكل سطر؛ `/accounts/tree` يعيد خمسة حقول فقط؛ أعمدة `BALANCE` كلها أصفار؛
+~140 استعلاماً تعشيشياً مقابل مهلة استقبال 15 ث.
+
+**ما نُفِّذ في Flutter (بالمسارات):**
+
+1. **النماذج** — `lib/features/accounts/data/models/account_model.dart`:
+   - `AccountTreeNode` صار يحمل `parentPath`, `codePath`, `childrenCount`, `hasChildren`,
+     `debit`, `credit`, `movements`, `storedBalance`, `currency`, `stopping`,
+     `limitedBalance`, `accDate`, `seq`, `accountCount`, `directCount`, `hiddenAccounts`
+     مع `fromJson` يقبل المفتاح صغيراً وكبيراً (`acc_no`/`ACC_NO`) و`ArabicEncodingUtils.fix`
+     للنص العربي ومُساعدي `_parseInt/_parseDouble` (Oracle يُرجع الأرقام نصاً).
+   - نموذج جديد `AccountLeafModel` للحساب المالي داخل الشجرة (مدين/دائن/صافي/عدد حركات/
+     رصيد مخزّن/سقف/موقوف/تاريخ/`seq`/مسار الأب). `net` و`movements` لهما سلاسل احتياط
+     (`net → NET → balance → BALANCE` و`movements → MOV_COUNT → mov_count → CNT`) لأن
+     غلاف `/accounts/tree/children` يسمّي الصافي `balance` وعدد الحركات `movements`.
+2. **المستودع** — `lib/features/accounts/data/repositories/account_repository.dart`:
+   `fetchAccountTree({fromDate,toDate})` (بدل `fetchTreeSkeleton` باسمه في الخطة، لإبقاء
+   التوافق مع الشاشات الأخرى)، `fetchTreeChildren({level,groupId,accPart,search,sort,dir,
+   page,limit,...})` يعيد `TreeChildrenResult` بـ meta الترقيم، `searchAccounts(q)`،
+   `fetchChartAccountDetail(accNo)`، `fetchNextNumber(...)`، و`createAccMain/createAccSub/
+   createSubGroup/createChartAccount/updateAccount/updateAccMain/updateAccSub/updateSubGroup`.
+   نمط `CancelToken.isCancel` والإرجاع الفارغ محفوظ؛ مهلة استقبال 30 ث تُمرَّر كـ
+   `Options` محلي لقراءة الهيكل فقط، بلا تغيير `ApiConstants` العام.
+3. **الحالة** — `lib/features/accounts/presentation/providers/accounts_provider.dart`:
+   `AccountTreeNotifier` + `AccountTreeState` بنفس اسم المزود `accountTreeProvider` (لتبقى
+   بقية الشاشات عاملة): `expanded`، `childrenCache`، `childPages/childTotal/childHasMore`،
+   `loadingChildren/childErrors`، `toggleExpand` (يجلب الصفحة الأولى للمضيف المالي فقط)،
+   `loadMore/reloadNode/expandToLevel/collapse`، `runSearch` بحارس `_searchVersion` يرفض
+   النتيجة الأقدم، و`dispose` يلغي رمز الشجرة والبحث معاً.
+4. **التسطيح** — `lib/features/accounts/presentation/utils/account_tree_flatten.dart`:
+   `AccountTreeRow` (structural/leaf/loading/loadMore/rowError) + `flattenAccountTree` +
+   `AccountTreeFilters` + `levelBadgeLabel/levelBadgeColor` + `formatTreeAmount` (بلا intl).
+5. **الشاشة** — `lib/features/accounts/presentation/screens/account_tree_screen.dart` (أُعيد
+   بناؤها): `ListView.builder` وحيد فوق الصفوف المسطّحة بـ `cacheExtent`؛ سطر مضغوط/مريح؛
+   ترويسة أعمدة على العريض؛ شريط فلاتر ورقائق؛ كشف المسار تلقائياً من نتيجة البحث
+   (`revealPath`)؛ زر كشف (عين) داخل `PermissionGate` يفتح `AccountStatementScreen` للفردي
+   و`AccountGroupStatementScreen` للهيكلي؛ نقر طويل/زر `i` → `account_details_sheet.dart`؛
+   الحالات الأربع مع `_TreeSkeletonList` بدل مؤشر التحميل المفرد و`RefreshIndicator`؛
+   FAB بقائمة `AccountCreateKind` الأربعة؛ قائمة تصدير في الـ AppBar خلف `accounts.export`.
+6. **التصدير** — ملفات جديدة:
+   - `presentation/utils/account_tree_pdf_builder.dart` — A4 RTL بأعمدة الرقم|الاسم|المستوى|
+     مدين|دائن|الرصيد عبر `ReportLetterheadInfo.fromConfig` + `report_a4_sheet` +
+     `report_signature_footer` ووصفة `pdfArabic` للتشكيل.
+   - `presentation/utils/account_tree_xlsx_builder.dart` — `.xlsx` بورقتين («الشجرة» بكل
+     الأعمدة + مسار الأب + عدد الحركات، و«ملخص» بالعدّادات والمجاميع) بألوان `AppColors`.
+   - `presentation/utils/group_statement_xlsx_builder.dart` — ميزان المجموعة بورقتين
+     («الميزان» و«ملخص») مع صف المجاميع المنسّق.
+   - `presentation/widgets/tree_export_menu.dart` — `TreeExportMenu` و
+     `GroupStatementExportMenu` يشتركان `_ReportExportActions` (حارس `_busy` للنقر
+     المزدوج، طباعة عبر `Printing.layoutPdf`، PDF عبر `sharePdf`، Excel بكتابة الملف في
+     `path_provider` ثم `SharePlus.instance.share`)؛ اسم الملف مؤرَّخ.
+   - `presentation/screens/account_group_statement_screen.dart`: حُذفت `_printReport`
+     و`_exportPdf` و`_letterheadInfo` المكرّرة، واستُبدلت زرّا الطباعة/PDF بـ
+     `GroupStatementExportMenu(report: () => _report)` — الطباعة والتصدير صارا منفذين مرة واحدة.
+7. **النماذج Input** — `presentation/screens/create_account_screen.dart` (أُعيد بناؤها):
+   منتقي أنواع بأربع بطاقات، سلسلة أبوية `ACCOUNT → ACC_MAIN → ACC_SUB → ACC_SUB_GROUP`
+   تعيد ضبط النسل عند تغيير الأب، شريط مسار، معاينة الرقم المتوقع من `/accounts/next-number`
+   بنفس قاعدة الخادم، حقول حسب النوع (اسم، عملة، رصيد افتتاحي، سقف، تاريخ، `SEQ`، موقوف)،
+   شبكة ثنائية على العريض، وتحقق فوري + `_isSubmitting`.
+   `presentation/screens/edit_account_screen.dart`: يحمّل القيم الحالية من
+   `GET /accounts/chart/{accNo}` بدل حقول فارغة، ويعرض الرصيد المحسوب للقراءة فقط مع
+   الرصيد المخزّن للمقارنة، ويتيح تغيير المجموعة/الموقوفة/السقف/التاريخ.
+8. **الصلاحيات والاختصارات** — `lib/core/constants/permission_codes.dart`: أكواد
+   `accounts.statement_group` و`accounts.statement_detail` و`accounts.structure_manage`
+   و`accounts.print` و`accounts.export` مطابقة للكتالوج؛ `home_shortcut_catalog.dart`
+   و`workers_dashboard_screen.dart` أُصلح ارتطام اختصارات/بطاقات بالأكواد الجديدة.
+
+**الاختبارات (Flutter):** `test/features/accounts/account_tree_model_test.dart` (12)،
+`account_tree_notifier_test.dart` (12: تحميل/إعادة، خطأ، كاش أبناء، loadMore، reloadNode،
+مستوى sub، سباق البحث بطيئ-سريع، إلغاء الرموز عند clearSearch/dispose، findById،
+expandToLevel)، `account_tree_screen_test.dart` (8: قائمة مسطّحة واحدة، توسيع كسول، زر
+الكشف للفردي مقابل المجموعة، قائمة التصدير حسب الصلاحية، الإدارة، الفراغ/الخطأ، البحث
+الخادمي)، وتحديث `account_group_statement_screen_test.dart` للقائمة المشتركة مع اختبار
+عنصر «تصدير Excel». **نتيجة البوابات:** `flutter analyze` = No issues found!،
+`flutter test` = 259 passed / 5 skipped.
+
+**ملاحظة سلوكية للواجهة:** الأسطر القابلة للكشف تحمل `onDoubleTap`، لذا يؤجّل Flutter
+النقرة المفردة ~300ms؛ الاختبارات تنتظر 400ms بعد النقر ثم `pumpAndSettle` لتجاوز
+النافذة — وهو ما يجب تكراره في أي اختبار مستقبلي ينقر على أسطر الشجرة.
+
+**إصلاحات جانبية (خارج الشجرة، ظهرت أثناء البوابات):** شاشة ميزان المجموعة كانت تختار
+`list[1]` بدل `list.first` في `_maybeApplyDefaults` (RangeError عند عنصر واحد)؛
+`test/api_config_test.dart` توقّع مضيفاً لا علاقة له بالمُدخل؛ `analysis_options.yaml`
+كان `unnecessary_brace_in_string_interps: ignore ignore`؛ زر البصمة كان فيه `label`
+معطّلاً غير مستعمل فصار `tooltip`؛ المُعامل `_pump` في اختبار تقرير عمل المجموعة أُعيدت تسميته
+إلى `pumpApp` (مع إزالة BOM أضافته أداة الاستبدال).
+
+**Git:** لا commit من الوكيل. الأكواد الخادميّة للشجرة محفوظة بيد المستخدم في `kyApp_API`
+`5945166`؛ التغييرات هنا عاملة في شجرة العمل فقط.
+
+---
+
+## [2026-10-24 09:24] إصلاح ثلاث مشكلات في الشجرة + فتح/إغلاق الفروع · Qoder Agent
+
+**الطلب:** «أولاً حجم وتنسيق العرض غير مظبوط… واسمها يظهر مقصوص… وتوسيع خيارات الكثافة والحجم»
+و«ثانياً الطباعه والتصدير يقوم بطباعه الحسابات الرئيسيه فقط… والمفروض تخيير المستخدم بالمستويات»
+و«ثالثاً حقل العمله… يجب ان يتم اظهار قائمه العملات المتاحه» ثم «اكمل الاصلاح وايضا لاتنسى اضافه
+امكانيه فتح/اغلاق ظهور الحسابات الفرعيه».
+
+### الخادم (`kyApp_API`) — لم يُلمَس أي هيكل جدولي
+1. **`AccountController::exportTree`** (`GET /api/accounts/export-tree`، `permission:accounts.export,accounts.print`)
+   — إخراج **مسطّح** بطبقات `DEPTH/LEVEL/CODE/NAME/PARENT_PATH/CODE_PATH/DEBIT/CREDIT/BALANCE/MOVEMENTS/CUR_NO/ROOT_ACC_NO`.
+   السبب الجذري للعطل: الشاشة تُحمَّل كسولاً مستوى-بمستوى، فالتصدير من حالة الشاشة كان يرى
+   الأقسام المفتوحة فقط. الآن الخادم يجيب عن كل المستويات المختارة:
+   - `levels` أبيض-list من `{account,main,sub,group,chart}`، والفارغ = كل المستويات (لا مطبوعة صامتة).
+   - `section` يضيّق الأجزاء عبر `sectionOfPart()`، و`include_customers`/`hide_zero` و`from_date/to_date`.
+   - فلترة `CHART_ACC` داخل SQL: `SUBSTR(TO_CHAR(ACC_NO),1,3) IN (:part_0,…)` + حارس
+     `CUSTOMERS_ACC_PART`/`KOBOUDI_CUSTOMER_ACC_NO` — لا 20 ألف صف إلى PHP.
+   - الأرصدة من نفس `movementBalancesByChart()` + `rollUpBalances()` المستخدمة في `/accounts/tree`،
+     فلا تتباعد المطبوعة عن الشاشة (يثبته اختبار التكافؤ).
+   - `CHART_ACC` بلا عمود عملة (ثمانية أعمدة فقط): العملة تُورَّث عن الحساب الجزئي.
+2. **`AccountController::getCurrencyOptions`** (`GET /api/accounts/currencies`) —
+   `SELECT CUR_NO, CUR_NAME FROM CURRENCY ORDER BY CUR_NO` + `array_change_key_case` +
+   `ArabicEncoding::fixMojibake`. صلاحياته هي صلاحيات **الحسابات**
+   (`accounts.view,create,update,structure_manage`) لا `currencies.view`: مستخدمُ إنشاءٍ بلا
+   دليل عملات كان يرى قائمة فارغة في حقل يطلب منه الاختيار.
+3. **`tests/Feature/AccountTreeExportTest.php`** — 8 اختبارات / **10,835 assertion** مقابل Oracle حيّ
+   (الختم بالصلاحية، كل المستويات افتراضاً، الاحترام الاختياري، تكافؤ الأرصدة، العملاء،
+   تضييق القسم/PDF… إلخ). `pint --dirty` = passed، و`BusinessRoutesSealedTest` = 6 passed.
+
+### العميل (Flutter)
+4. **نموذج الصفوف** — `lib/features/accounts/data/models/tree_export_row_model.dart`:
+   `TreeExportLevel` (أكواد الخادم نفسها + `labelAr`/`hintAr` + `parseCodes`/`codesOf`)،
+   `TreeExportScope` (`.all`، `containsCustomers` الذي يشترط مستوى الأوراق، `describe()`،
+   `toQuery()`)، `TreeExportRow` بقراءة مزدوجة المفاتيح ومحوّلات `_parseInt/_parseDouble`
+   و`ArabicEncodingUtils.fix` لكل نص عربي، و`CurrencyOptionModel{curNo,curName,display}`.
+   `presentation/utils/tree_export_adapter.dart` يحوّل صفوف الخادم إلى أسطر العرض المستخدمة
+   في PDF/XLSX، ويبني التذييل من عدّادات المستويات التي رجعت من الخادم فعلاً.
+5. **قائمة التصدير** — `presentation/widgets/tree_export_menu.dart` أُعيدت: حُذف معامل `rows:`
+   (كان يقرأ `_visibleRows()` من حالة التمرير) وحلّ محله `defaultSectionAccNo` +
+   `_prepareScope()` (نافذة النطاق ← `fetchTreeExport` ← تحويل ← وصف)، `_token` يُلغى في
+   `dispose()`، `_busy` يغطّي الجلب، والإلغاء = لا طلب. `_ReportExportActions` صار يقبل
+   `onPrepare`/`emptyMessage` فتُشارك الحراسة نفسها مع ميزان المجموعة دون تغيير سلوكه.
+6. **نافذة النطاق** — `presentation/widgets/tree_export_scope_sheet.dart`: خانات المستويات
+   الخمسة، القسم (ممهّد من الشاشة)، حسابات العملاء، إخفاء الأرصدة الصفرية، والفترة.
+7. **قياسات السطر** — `presentation/utils/tree_row_layout.dart`: `TreeDensity` بخمس كثافات
+   (`ultra 22 / compact 28 / standard 34 / comfortable 42 / relaxed 52`) و`TreeRowMetrics.resolve`
+   الذي يشتق العرض النسبي من المتاح مع أرضية 96px للاسم، ثم يُطفئ بالترتيب: الأعمدة → الشارة →
+   الأزرار → تضييق الرصيد فالرقم. `badgeW=52` و`actionsW` و`handleW=26` فتحات ثابتة يتقاسمها
+   السطر ورأس الأعمدة، فعمود الرصيد لا ينزلق بين سطر ذي زرّين وسطر ذي ثلاثة.
+8. **سطر الشجرة** — `presentation/widgets/account_tree_row_tile.dart`: الاسم في `Expanded` +
+   `FittedBox(fit: BoxFit.scaleDown)` بحجم خط `metrics.nameFontSize` (يتقادم مع الكثافة بدل 24 ثابتة)
+   فلا يُقصّ أبداً؛ `onLongPress: onDetails` لأن الأزرار تُطفأ تحت 500px؛ `_ExpandHandle`
+   بمقبض فتح/إغلاق لكل عقدة (`Tooltip`: إظهار/إخفاء الحسابات الفرعية)؛ و`AccountTreeColumnsHeader`
+   يقرأ نفس الـ metrics.
+9. **فتح/إغلاق الفروع** — `presentation/screens/account_tree_screen.dart`: زرّ الـ AppBar
+   `فتح ظهور الحسابات الفرعية`/`إغلاق ظهور الحسابات الفرعية` ← `expandToLevel(3)` /
+   `expandToLevel(-1)` (سقف `_autoLoadCap = 30` طلباً)، دورة كثافة بخمس حالات
+   (`Icons.format_line_spacing_rounded`)، وخيارات عرض فيها مفتاح «ظهور الحسابات الفرعية»
+   و«توسيع حتى مستوى». `responsive.dart` حُذف من الاستيرادات لأن القياسات صارت من `LayoutBuilder`.
+10. **حقل العملة** — `presentation/screens/create_account_screen.dart`: `_currencyController`
+    صار `int? _currencyNo`، والحقل النصي صار `_currencyField()` (قائمة منسدلة عبر `_dropdown<int?>`
+    مع «بدون عملة» وحارس `known` يمنع assert القائمة المنسدلة، وحقل «قيد التحميل» أثناء الجلب، وزر إعادة محاولة
+    عند الفشل لأن الحقل اختياري)، ويُعرض **فقط** لـ `main|sub` — وهما الجدولان اللذان يخزّنان
+    `CUR_NO`. `accounts_provider.dart` أضاف `accountCurrencyOptionsProvider`.
+
+### الاختبارات والبوابات
+11. `test/features/accounts/account_tree_export_test.dart` (نماذج/تخطيط + نافذة النطاق على
+    الشاشة: لا طلب قبل التأكيد، كل المستويات عند التأكيد، توريث القسم المحدَّد على الشاشة، إزالة مستوى
+    من الطلب، الإلغاء لا يطلب، رفض الخادم يعرض رسالته العربية، فتح/إغلاق الكل، مقبض السطر،
+    خمس كثافات بحجمها) و`test/features/accounts/account_currency_field_test.dart` (قائمة لا رقم،
+    القيمة المختارة هي المرسلة، الفشل غير مانع، إعادة المحاولة تجلب ثانية، ولا حقل لجدولٍ لا يخزّنه).
+12. **نتائج البوابات:** `flutter analyze` = **No issues found!** · `flutter test` =
+    **285 passed / 5 skipped** · Pest `AccountTreeExport` = 8 passed · Pest
+    `BusinessRoutesSealed` = 6 passed · `pint --dirty` = passed.
+13. **ما تعلّمته الاختبارات (وليس أخطاء إنتاجية):** Riverpod 3 يعيد تلقائياً محاولة
+    `FutureProvider` الفاشل عشر مرات بتراجع متصاعد (`ProviderContainer.defaultRetry`)، لذا
+    تُوقَف في `ProviderScope(retry: …)` داخل الاختبار؛ `DropdownButton` يعرض العنصر ذا القيمة
+    `null` بدل `hint`؛ `DropdownButtonFormField` لا يكشف `items/value` كحقول عامة فتُقرأ
+    `FormFieldState`؛ `initialValue:` غير موجود قبل Flutter 3.32 (المشروع على 3.29.3/Dart 3.7.2)؛
+    `AppColors.textPrimary` قيمةٌ ديناميكية (getter) فلا تصلح داخل `const`.
+14. **إصلاح ذاتي أثناء الجلسة:** إعادة كتابة ملف Dart عبر أنبوب نص في PowerShell 5.1 أضاف
+    BOM ثم أكل حرف `i` من أول `import` — أُصلح بإعادة كتابة البايتات بترميز `UTF8Encoding($false)`؛
+    القاعدة: ملفات Dart تُعدّل بأدوات الملفات لا بأنبوب الطرفية.
+
+**Git:** لا commit من الوكيل؛ لا DDL؛ لم يُعدَّل ملف الخطة.
+
+---
+
+## [2026-10-24 14:44] جولة إصلاح ثانية بعد الاختبار الحيّ — شجرة الحسابات (Qoder Agent)
+
+ثلاث مشكلات بلّغ عنها المستخدم بعد التجربة الحيّة (متصفّح ويب/Chrome حسب `dio_web_adapter` في
+التتبّع). التشخيص بالجذر قبل أي تعديل، والدليل مُوثَّق أسفل كل بند.
+
+### 1) انهيار `Another exception was thrown: Invalid argument: 52` عند النقر على فتح/إغلاق الفروع
+
+- **الملف:** `lib/features/accounts/presentation/widgets/account_tree_row_tile.dart` — دالة
+  `_statusRow`.
+- **الجذر:** `height: (_comfortableHeight - 8).clamp(metrics.height, _comfortableHeight)` مع
+  `static const double _comfortableHeight = 46;`. على الكثافة «الواسعة» (`TreeDensity.relaxed` =
+  52px) تصبح `clamp(52, 46)` — أي حدٌّ أدنى أكبر من الأعلى — و`num.clamp` يرمي `ArgumentError`
+  بدل أن يقيّد القيمة. في الـ VM النص `Invalid argument(s): 52.0` من
+  `dart:core-patch/double.dart`، وفي dart2js (الويب) يظهر مختصراً إلى `Invalid argument: 52`
+  تماماً كما بلّغ المستخدم. لا موقع في إطار Flutter يرمي نص «Invalid argument»، فالدليل قاطع.
+- **الإثبات:** ملف فحص مؤقت `clamp_probe.dart` مشغّل على VM →
+  `Unhandled exception: Invalid argument(s): 52.0  #0 double.clamp`.
+- **لماذا لحظة التوسيع بالذات:** صفوف الحالة `loading` / `loadMore` / `rowError` هي الوحيدة التي
+  تمرّ عبر `_statusRow`، وهي ما يُنتجه النقر على فتح الفرع (جلب الأبناء). لم تظهر على الكثافة
+  الافتراضية (`compact` = 28) لأن `clamp(38…)` كانت سليمة.
+- **الإصلاح:** استبدال الـ clamp بشرط `max` صريح مع تعليق ثنائي اللغة يشرح سبب منع الـ clamp
+  مستقبلاً:
+  ```dart
+  height: metrics.height > _comfortableHeight - 8 ? metrics.height : _comfortableHeight - 8,
+  ```
+- **اختبار الانحدار (كان ناقصاً):** `test/features/accounts/account_tree_export_test.dart`
+  → «status rows survive every density — the 52px clamp crash»: أنواع صفوف الحالة الثلاثة ×
+  الكثافات الخمسة، يتأكد `tester.takeException() == null` وأن ارتفاع السطر ≥ ارتفاع الكثافة.
+  الاختبار السابق كان يقيس صفوف **البيانات** فقط — لذلك فات الانهيار.
+
+### 2) حقل اختيار العملة «غير موجود» في نموذج إنشاء حساب
+
+- **الملف:** `lib/features/accounts/presentation/screens/create_account_screen.dart`.
+- **الجذر:** في الجولة السابقة ضُمِّن حقل العملة داخل صفّ الرصيد وجُعِل ظهوره مشروطاً بـ
+  `_kind == main || _kind == sub` فقط. لكن نوع النموذج الافتراضي هو `chart` (الأكثر استخداماً)،
+  فسطر العملة كله كان يختفي عند فتح الشاشة — لا أن المستخدم أخطأ البحث عنه.
+- **الحقيقة المرجعية:** `CUR_NO` موجود في `ACC_MAIN` و`ACC_SUB` فقط؛ لا عمود عملة في `CHART_ACC`
+  (8 أعمدة) ولا في `ACC_SUB_GROUP`. لذلك لا يمكن «إظهار قائمة العملات» لمستوى لا يخزّنها.
+- **الإصلاح (سطر العملة يُعرض دائماً، ولا يختفي أبداً):**
+  - `_currencyRow()` يفصل العملة في سطر مستقل خارج صفّ الرصيد، ويقرّر:
+    منتقي حقيقي `_currencyField()` للمستويات التي تخزّن العملة، و`_inheritedCurrencyField()`
+    للقراءة فقط لغيرها.
+  - `_inheritedCurNo` يقرأ العملة الموروثة من `ACC_SUB` الأعلى عبر
+    `ref.watch(parentAccSubProvider(_selectedAccSub)).value` (الـ `.value` لا `when()` لأن
+    الحقل وصفي ولا يجوز أن يحجب النموذج أو يجمّده).
+  - `_inheritedCurrencyField()` يعرض `InputDecorator` بعنوان «العملة (موروثة عن الحساب الجزئي)»
+    وأيقونة قفل، بثلاث حالات نصية: «تظهر بعد اختيار الحساب الجزئي» / «بدون عملة على الحساب
+    الجزئي» / «`2 — دولار`».
+  - `_currencyFieldRetry(Object? error)` تميّز 404 عند فشل `/accounts/currencies` فتقول
+    «الخادم لا يعرف /accounts/currencies (404)» بدل «انقر للمحاولة ثانية» وحدها
+    (إضافة `import 'package:dio/dio.dart';`).
+- **اختبارات:** `test/features/accounts/account_currency_field_test.dart` استُبدل اختبار
+  «يظهر فقط للجداول التي تخزّن CUR_NO» باثنين: (أ) سطر العملة لا يغيب أبداً لعرضِ
+  `chart|group` مع ظهور الحقل للقراءة فقط واختفاء المنتقي؛ (ب) حساب `chart` يعرض عملة الحساب
+  الجزئي الأعلى فعلاً (`2 — دولار`) بعد بذور `accNo/accSub/accPart` تمرَّر إلى الشاشة.
+
+### 3) `404` عند الطباعة/التصدير — تشخيص: ليس خللاً في الكود، بل خادم قديم على جهاز آخر
+
+- **الأدلة الميدانية:**
+  - `Get-NetIPAddress` على هذه الآلة = **192.168.0.11**؛ والتتبّع الحيّ يستدعي
+    **192.168.0.9**.
+  - `Test-Path C:\kyApp_API` على هذه الآلة = **False**، بينما كل إطارات تتبّع استجابة المستخدم
+    تحت `C:\kyApp_API\vendor\…` → الخادم الذي يجيب على 192.168.0.9 نسخة checkout أخرى **أقدم**.
+  - `php artisan route:list --path=accounts` محلياً يُظهر `api/accounts/export-tree` و
+    `api/accounts/currencies`.
+  - `bootstrap/cache` يحتوي `.gitignore` و`packages.php` و`services.php` فقط — لا `routes-v7.php`
+    مُخزَّناً، فمسح الخزّان ليس الحلّ هنا.
+  - خادم فحص مؤقت (`php artisan serve --host 127.0.0.1 --port 8099`) أرجع للمسارين **401**
+    مع `Accept: application/json` (وليس 404) → المساران مسجَّلان ويعملان؛ و500 الذي ظهر أول مرة
+    كان أثراً للفحص نفسه: `Accept: text/html` جعل Sanctum يحاول إعادة التوجيه إلى اسم مسار
+    `login` غير معرَّف (`Route [login] not defined` في `storage/logs/laravel.log`)، وهو سلوك
+    معزول عن طلبات التطبيق التي ترسل JSON دائماً.
+- **ما عُدّل في الواجهة:** `lib/features/accounts/presentation/widgets/tree_export_menu.dart` —
+  `_describeFailure` تخصّص 404 برسالة عربية تدلّ على النشر مباشرة: «الخادم الحالي لا يعرف نقطة
+  التصدير (404) — حدِّث الـ API من المستودع وأعد تشغيل php artisan serve ثم امسح خزّان المسارات
+  (route:clear)»، بدل رسالة الشبكة العمومية التي أخفت السبب الحقيقي.
+- **الإجراء المطلوب من المستخدم (خارج شجرة الكود):** نشر `routes/api.php` +
+  `app/Http/Controllers/AccountController.php` على جهاز 192.168.0.9 (أو commit+push للـ submodule
+  ثم pull هناك + `php artisan route:clear`)، أو تشغيل الـ API من هذا الفرع وتغيير Base URL من
+  إعدادات شاشة الدخول إلى `192.168.0.11:8000`.
+
+### ما لم يُمَسّ (عمل المستخدم الجاري)
+
+`lib/features/accounts/presentation/widgets/account_statement_report_footer.dart` معدَّل من
+المستخدم (git `M`، آخر كتابة 2026-10-24 14:20:23، آخر commit `0787cd6`) مع تعطيل أسطر كتلة
+التواقيع والتوضيح وتوقيت الإصدار. نتج عنه تحذيران في `flutter analyze`
+(`unused_local_variable 'timestamp'` سطر 24، `unused_element '_SignatureSlot'` سطر 155) وفشل
+اختبار `account_statement_report_widgets_test.dart:109` الذي يبحث عن `توقيع المدير`. لم أعدّله
+ولا أحذف الكود نيابة عن المستخدم؛ القرار له: إعادة تفعيل الكتلة أو حذفها وضبط الاختبار.
+
+### البوابات
+
+`flutter analyze` = تحذيران فقط وكلاهما في الملف أعلاه · `flutter test` = **286 passed / 5 skipped
+/ 1 failed** والفشل الوحيد من نفس السبب · `flutter test test/features/accounts` للملفين المستهدفين
+= **28 passed** · لا تغيير PHP هذه الجولة (فلا Pest/Pint) · لا SQL · لا DDL · لا commit.
+
+---
+
+## [2026-10-24 15:20] جولة الإصلاح 3 — عملة كل حساب مالي تُختار مستقلّة (بلا وراثة)
+
+**السبب:** رفض المستخدم تصميم الجولة السابقة (حقل موروث للقراءة فقط) وأمر بإظهار حقل عملة
+قابل للاختيار لكل حساب مالي بشكل مستقل، وكشف أن العملة = **الخانة الرابعة من رقم الحساب**،
+مع «إلزامي دائماً» ومنع إضافة أي عمود أو جدول.
+
+**ما تمّ (Flutter):**
+- `create_account_screen.dart`: حقل العملة صار **منتقيًا حقيقيًا إلزاميًا** للحساب المالي
+  (`_currencyField` مع `mandatory` يحذف خيار «بدون عملة»)، وتسميته توضح «الخانة الرابعة من
+  رقم الحساب». أُلغي `_inheritedCurNo`/`_inheritedCurrencyField`. استُبدل بـ `_pickCurrency`
+  الذي يستدعي `_schedulePreview()` ف**تتبدّل المعاينة لحظيًا** مع العملة، وبوابة `_canPreview`
+  صارت تتطلب `_currencyNo != null`، وأضيف منع الإرسال بلا عملة في `_validateParent`. بقيت
+  المجموعة سطرًا وصفيًا (`_groupCurrencyNote`) لأنها الوحيدة بلا رقم وبلا عمود.
+- `account_repository.dart`: `fetchNextNumber` يستقبل `cur_no`، و`createChartAccount` صارت
+  `required int curNo` ترسل `cur_no`.
+- `account_model.dart`: `AccountLeafModel` أضاف `curNo` (يُقرأ من `cur_no` الخادم أو يُشتق
+  محليًا من الرقم عبر `_currencyFromNumber`). `tree_export_adapter.dart` يمرّر `curNo`.
+- `edit_account_screen.dart`: شريط **عملة للقراءة فقط** مشتقة من الرقم — تغييرها يعني إعادة
+  ترقيم حسابٍ مراجِعُه الحركات قائمة، وهو غير آمن.
+
+**ما تمّ (API — تذكير، التفصيل في DBdevloping_history):** نطاق ترقيم `(جزء, عملة)` بدل MAX
+على الجزء كاملًا، و`cur_no` إلزامي في الإنشاء والمعاينة، واشتقاق `cur_no` في كل قراءات الشجرة.
+
+**البوابات:** `flutter analyze` = **تحذيران فقط** وكلاهما في `account_statement_report_footer.dart`
+الذي عدّله المستخدم (بلا توقيع المدير) · `flutter test test/features/accounts/account_currency_field_test.dart`
+= **7 passed** · Pest المستهدف = **26 passed (11208 assertions)** · `pint --dirty` = **passed** ·
+الحزمة الكاملة = **286 passed / 5 skipped / 2 failed** (الفشلان: تعديل المستخدم للمطبوعة،
+وتذبذب خطوط العربية لاختبار «it is optional» يمرّ أخضر منفردًا) · **لا DDL ولا DML** · **لا commit**.
+
+---
+
+## [2026-10-25 10:00] الكشوفات الشخصية للموظف الحالي (مالي + عمل) · Qoder Agent
+
+**الطلب:** كشفان يفتحان مباشرة على بيانات الموظف الحالي بلا أي منتقي حساب/عامل: «كشف حسابي
+المالي» و«كشف عملي» (خياط/قصاص)، بصلاحيتين IBAC مستقلتين واختصارين في الشاشة الرئيسية فقط
+(لا قسم لهما في الدرج)، مع ربط المستخدم بحسابه المالي عبر عمود `ACC_NO` جديد في `APP_USERS`.
+
+**ما تمّ (الخادم `kyApp_API`):**
+- `MyStatementController.php` جديد: `financialStatement()` يقرأ `ACC_NO` من المستخدم المصادق
+  عليه حصراً (بلا بارامتر من العميل ← لا يمكن رؤية كشف موظف آخر)، ويعيد نفس غلاف
+  `/accounts/chart/{accNo}/statement` (`data.account/transactions/summary`)؛ بلا حساب مرتبط ← 422.
+  `workStatement()` يكتشف النوع بعدّ صفوف `TAILOR_FROM_CALC.TAILOR_ACC` مقابل
+  `CUTTER_FROM_CALC.CUTTER_ACC` (الخياط ذو أولوية)، ويستعلم جدول CALC المطابق ويعيد نفس غلاف
+  `/workers/{type}/{id}/work-report` (`worker/data/summary` + `worker.type_label`).
+- `routes/api.php`: مساران خلف `auth:sanctum` + `permission:my_statement.financial` و
+  `permission:my_statement.work`.
+- `PermissionCatalog.php`: وحدة `my_statement` («الكشوفات الشخصية»)، core `view` وextra
+  `financial`/`work`، وتوسيع `humanize()`. `User.php`: `ACC_NO` في `$fillable`.
+  `AuthController::userPayload`: إضافة `acc_no`. `UserAdminController`: قبول `acc_no` في
+  store/update (الـ INSERT + خريطة `$plainWrites`).
+
+**ما تمّ (قاعدة البيانات ← التفاصيل في DBdevloping_history):** `ALTER TABLE ACCOUNTS.APP_USERS
+ADD ACC_NO NUMBER` (nullable، بلا foreign key لأن CHART_ACC خارج السيطرة)؛ بذر 4 أكواد في
+`APP_PERMISSIONS` (IDs 140–143) ومزامنة `SEQ_APP_PERMISSIONS`.
+
+**ما تمّ (Flutter):** `permission_codes.dart` (مرآة: `myStatement{Wildcard,View,Financial,Work}`
+والقوائم)؛ `UserModel.accNo`؛ نقطتا `/my-statement/financial` و`/my-statement/work`؛ ميزة
+`my_statement/` كاملة: repository يعيد `AccountStatementData`/`WorkerWorkReport`، provider بنمط
+Notifier يفحص `accNo == null` برسالة واضحة؛ شاشتان مبسّطتان بلا منتقي —
+`my_financial_statement_screen.dart` (ترويسة ثابتة بدل `_AccountPickerBottomSheet`) و
+`my_work_statement_screen.dart` (نفس WorkerWorkReportScreen بلا workerId/workerType، يعرض نوع
+العمل من `worker.type_label`). `WorkerWorkReport` أضاف حقلاً اختيارياً `typeLabel`.
+`home_shortcut_catalog.dart`: بطاقتان `my_statement.financial` و`my_statement.work` بـ
+`sectionId: 'home'` و`defaultOn: false` وأكوادهما المستقلة.
+
+**البوابات:** `flutter analyze` على الميزة + الكتالوج + النموذج = **No issues found!** ·
+`flutter test test/home_catalog_test.dart` = **15 passed** · باقي `flutter analyze` = تحذيران
+قديمان فقط في `account_statement_report_footer.dart` (تعديل المستخدم السابق، خارج النطاق) ·
+**لا commit** · لم يُعدَّل ملف الخطة.
+
+---
+
+## 2026-10-24 — التحقق النهائي + تصحيح `defaultOn` (Claude)
+
+**التصحيح:** أثناء المراجعة الختامية تبيّن أن البطاقتين `my_statement.financial` و
+`my_statement.work` في `home_shortcut_catalog.dart` كانتا فعلياً بـ `defaultOn: true`، وهو ما
+يخالف بند التوافق في الخطة (سطر 368: الاختصارات الجديدة `defaultOn: false`). تمّ ضبطهما على
+`defaultOn: false`. بحسب `home_layout.dart:127` لا تدخل أي بطاقة مجموعة الظهور الافتراضي إلا إذا
+كانت `defaultOn || shown` — لذا بطاقتانا (مغلقة افتراضياً ومقيّدة بأكواد `my_statement.*`) لا
+تؤثران على أي عدّاد للبطاقات الافتراضية ولا تظهران إلا لمن مُنح الصلاحية.
+
+**التحقق النهائي (أدلة):**
+- Backend: `php artisan test` = **155 passed, 4 skipped** (التخطّيات لمسارات بيانات تنتظر ربط
+  `ACC_NO` يدوياً في Phase 0.2) · `vendor/bin/pint --dirty` = **passed**.
+- `MyStatementTest` 4 passed/2 skipped · `BusinessRoutesSealedTest` 6 passed · `IbacCoreTest` 16
+  passed (عدّاد الكتالوج = 138).
+- الأمان: `MyStatementController` يقرأ `$accNo` من `$request->user()` حصراً (سطر 38 و257)، وكل
+  ربط `:acc_no` منه؛ لا يقبل أي معرّف حساب من العميل (منع-افتراضي).
+- قاعدة بيانات التطبيق (127.0.0.1/orcl): عمود `ACC_NO` مُضاف + 4 أذونات `my_statement.*` مزروعة.
+- Flutter: `flutter test test/features/my_statement/` = **3 passed** (اختبارات الودجت: لا منتقي
+  حساب + رسالة "لا يوجد حساب مرتبط")؛ فحص ملفات الميزة = نظيف.
+- المتبقّي في `flutter test`: **284 passed, 5 skipped, 7 failed** — كلها نتيجة تعديلات متزامنة
+  غير محفوظة لوكلاء آخرين (إعادة هيكلة الكتالوج `customers.*`/`accounts.*` → false، وإعادة بناء
+  footer العملات)؛ لا فشل منها سببه ميزتنا (بطاقتانا `defaultOn: false` تساهمان بصفر).
+**لا commit** · لم يُعدَّل ملف الخطة.
+
+---
+
+## 2026-10-24 — حقل «الحساب المالي» (ACC_NO) في واجهة إنشاء/تعديل المستخدم (Claude)
+
+**المطلوب:** تطوير واجهة إنشاء/تعديل المستخدم بإضافة حقل «الحساب المالي» (`ACC_NO`) ينقر عليه
+المدير فتُعرض قائمة الحسابات المالية (شجرة الحسابات) فيختار حساباً يُربط بالمستخدم تلقائياً، مع
+التفريق الواضح عن حقل «رقم الحساب النقدي» الموجود سابقاً (`CASH_ACC_NO` = حساب الصندوق الافتراضي).
+
+**التحليل:** الخادم كان يكتب `acc_no` في store/update لكنه لا يُرجعه في أي مسار قراءة — فلا يُعبَّأ
+النموذج عند التعديل ولا يظهر في القائمة. أُصلحت القراءة فقط.
+
+**التغييرات:**
+- Backend `UserAdminController.php`: `LIST_SQL` += `u.ACC_NO`؛ `findUser` SELECT += `ACC_NO`؛
+  `shape()` += `'acc_no' => isset(...) ? (int) : null`. تعليق ثنائي اللغة يوضح الفرق بين العمودين.
+- Model `app_user_model.dart`: حقل `accNo` (منفصل عن `cashAccNo`) مع قراءة مزدوجة `acc_no ?? ACC_NO`.
+- Widget جديد `financial_account_picker.dart`: `FinancialAccountPickerSheet` + `showFinancialAccountPicker()`
+  فوق `chartAccountsProvider` (بحث debounced 300ms، أربع حالات عرض).
+- `user_form_widget.dart`: إعادة تسمية حقل الصندوق إلى «رقم الحساب النقدي (الصندوق)» + نصّ إرشادي،
+  وحقل `_buildFinancialAccountField(canPick)` — منتقي نقرائي عند الصلاحية، أو حقل رقمي يدوي خلافها
+  (تفادياً لـ403 لمحرّر يملك `users.update` فقط)؛ وربط `acc_no` في الـpayload بنفس دلالات null.
+- اختبارات: `UsersAdminTest` +2 عقد قراءة (**19 passed**، Pint نظيف)؛ widget test جديد
+  `user_form_financial_account_test.dart` (**3 passed**): منتقي المدير، حالة «مرتبط بالحساب 500» +
+  unlink، والمنفذ الرقمي بلا صلاحية شجرة.
+
+**قاعدة البيانات:** لا DDL/DML — عمود `APP_USERS.ACC_NO` موجود مسبقاً من مهمة الكشوفات الشخصية.
+**البوابات:** `flutter analyze lib/features/admin` = **No issues found!** (تحذيران سابقان خارج
+النطاق في `account_statement_report_footer.dart`) · **لا commit** (لا طلب) · لا ملف خطة لهذه المهمة.
+
+---
+
+## 2026-10-25 — إصلاح تعذّر بناء Android (تعارض إصدار Kotlin) (Claude)
+
+**العَرَض:** `flutter run`/`flutter build apk` يفشل في `:share_plus:compileDebugKotlin` بعشرات
+الأسطر `Class 'kotlin.Unit' was compiled with an incompatible version of Kotlin. The actual metadata
+version is 2.2.0, but the compiler version 1.9.x can read versions up to 2.0.0`.
+
+**السبب الجذري:** حزمة `share_plus 12.0.2` (أُضيفت مع ميزة تصدير/مشاركة PDF — ليست من مهمة الحقل
+المالي) تُصرَّف ضد Kotlin stdlib **2.2.0**، بينما المشروع يثبّت إضافة Kotlin Gradle على **1.9.24**
+في `android/settings.gradle.kts` — مترجم 1.9.x لا يقرأ بيانات وصفية (metadata) أعلى من 2.0.0.
+
+**الإصلاح (سطر واحد، إعداد بناء فقط):** ترقية `org.jetbrains.kotlin.android` من `1.9.24` إلى
+`2.2.0` في `android/settings.gradle.kts`. المتطلبات متوافقة: Gradle 8.10.2، AGP 8.7.0، JDK 21،
+jvmTarget 11. لا تغيير على الكود المصدري (Dart/PHP) ولا على القاعدة.
+
+**التحقق:** `flutter build apk --debug` = **✓ Built app-debug.apk** (نجح بعد أول تجميع كامل
+لـ Kotlin 2.2.0 استغرق ~20 دقيقة؛ التجميعات التالية أذكى/أسرع). التحذيرات المتبقية (`source/target
+value 8 is obsolete` من إحدى الحزم، و`x86 targets will be removed`) غير معطِّلة وخارج النطاق.
+**لا commit** (لم يُطلب).

@@ -52,6 +52,7 @@ class WorkerWorkReport {
   final int? workerId;
   final String workerName;
   final String accNo;
+  final String? typeLabel; // نوع العمل (خياط/القصاص) — يوفّره endpoint الكشوفات الشخصية فقط
   final String currency;
   final String fromDate;
   final String toDate;
@@ -63,6 +64,7 @@ class WorkerWorkReport {
     this.workerId,
     required this.workerName,
     required this.accNo,
+    this.typeLabel,
     required this.currency,
     required this.fromDate,
     required this.toDate,
@@ -82,6 +84,9 @@ class WorkerWorkReport {
       workerId: _parseInt(worker['id'] ?? worker['ID']),
       workerName: ArabicEncodingUtils.fix(worker['name'] ?? ''),
       accNo: (worker['acc_no'] ?? worker['ACC_NO'] ?? '').toString(),
+      typeLabel: worker['type_label'] != null
+          ? ArabicEncodingUtils.fix(worker['type_label'])
+          : null,
       currency: ArabicEncodingUtils.fix(
         summary['currency'] ?? 'يمني YR',
       ),

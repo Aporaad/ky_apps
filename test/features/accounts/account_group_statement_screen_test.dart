@@ -9,6 +9,7 @@ import 'package:ky_apps/features/accounts/data/models/account_model.dart';
 import 'package:ky_apps/features/accounts/data/repositories/account_repository.dart';
 import 'package:ky_apps/features/accounts/presentation/providers/accounts_provider.dart';
 import 'package:ky_apps/features/accounts/presentation/screens/account_group_statement_screen.dart';
+import 'package:ky_apps/features/accounts/presentation/widgets/tree_export_menu.dart';
 import 'package:ky_apps/features/auth/data/models/permission_snapshot_model.dart';
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
 
@@ -137,9 +138,9 @@ void main() {
       // placeholder.
       expect(find.text('لم يُختر نطاق بعد'), findsNothing);
       expect(find.text('موظف تجريبي'), findsOneWidget);
-      // With data on screen, print/export buttons appear.
-      expect(find.byIcon(Icons.print_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
+      // With data on screen, the shared print/PDF/Excel menu appears.
+      expect(find.byType(GroupStatementExportMenu), findsOneWidget);
+      expect(find.byIcon(Icons.ios_share_rounded), findsOneWidget);
     });
 
     testWidgets('collapsible filter bar toggles via the appbar icon',
@@ -176,10 +177,21 @@ void main() {
       await tester.pumpAndSettle();
 
       // The stub returns a fixed TrialBalanceReport — its row label should now
-      // appear inside the trial-balance table, and print/export buttons show.
+      // appear inside the trial-balance table, and the export menu shows.
       expect(find.text('موظف تجريبي'), findsOneWidget);
-      expect(find.byIcon(Icons.print_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.picture_as_pdf_outlined), findsOneWidget);
+      expect(find.byType(GroupStatementExportMenu), findsOneWidget);
+    });
+
+    testWidgets('the shared menu offers print, PDF and Excel', (tester) async {
+      await _pumpScreen(tester, repo: _FakeRepo());
+
+      await tester.tap(find.byIcon(Icons.ios_share_rounded));
+      await tester.pumpAndSettle();
+
+      // الطباعة من صلاحية الطباعة، وPDF/Excel من صلاحية التصدير — والإدارة تملكهما
+      expect(find.text('طباعة الميزان'), findsOneWidget);
+      expect(find.text('تصدير PDF'), findsOneWidget);
+      expect(find.text('تصدير Excel'), findsOneWidget);
     });
   });
 }

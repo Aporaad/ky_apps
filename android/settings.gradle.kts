@@ -21,7 +21,9 @@ pluginManagement {
 plugins {
     id("dev.flutter.flutter-plugin-loader") version "1.0.0"
     id("com.android.application") version "8.7.0" apply false
-    id("org.jetbrains.kotlin.android") version "1.9.24" apply false
+    // share_plus 12.0.2 يُصرَّف ضد Kotlin 2.2.0 — يجب أن تكون إضافة Kotlin >= 2.2.0
+    // share_plus 12.0.2 is compiled against Kotlin 2.2.0 stdlib; the plugin must read that metadata.
+    id("org.jetbrains.kotlin.android") version "2.2.0" apply false
 }
 
 include(":app")

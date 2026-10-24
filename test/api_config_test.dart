@@ -5,9 +5,13 @@ import 'package:ky_apps/features/settings/data/repositories/api_config_repositor
 void main() {
   group('ApiConfigRepository Tests', () {
     test('normalizeUrl removes trailing slashes and trims', () {
+      // التوقع كان يشير لمضيف مختلف عن المُدخل: normalizeUrl تُنظّف الشرطات فقط
+      // ولا تُبدّل المضيف — نفس قيمة `ApiConstants.defaultBaseUrl` الحالية.
+      // The expectation named a different host than the input: normalizeUrl trims
+      // and strips trailing slashes, it never rewrites the host.
       expect(
         ApiConfigRepository.normalizeUrl('  http://192.168.0.9:8000/api/  '),
-        'http://192.168.0.11:8000/api',
+        'http://192.168.0.9:8000/api',
       );
       expect(
         ApiConfigRepository.normalizeUrl('http://localhost:8000///'),

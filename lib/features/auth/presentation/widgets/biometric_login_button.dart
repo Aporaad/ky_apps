@@ -21,9 +21,9 @@ class BiometricLoginButton extends StatelessWidget {
         ? Icons.face_rounded
         : Icons.fingerprint_rounded;
 
-    final String label = capability == BiometricCapability.faceId
-        ? 'تسجيل الدخول بـ Face ID'
-        : 'تسجيل الدخول بالبصمة';
+    // final String label = capability == BiometricCapability.faceId
+    //     ? 'تسجيل الدخول بـ Face ID'
+    //     : 'تسجيل الدخول بالبصمة';
 
     return IconButton(
       style: OutlinedButton.styleFrom(

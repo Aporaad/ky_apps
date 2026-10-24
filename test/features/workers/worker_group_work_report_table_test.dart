@@ -10,7 +10,7 @@ import 'package:ky_apps/features/workers/presentation/widgets/worker_group_work_
 // ================================================================
 
 void main() {
-  Future<void> _pump(WidgetTester tester, List<WorkerGroupWorkRow> rows) async {
+  Future<void> pumpApp(WidgetTester tester, List<WorkerGroupWorkRow> rows) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -32,7 +32,7 @@ void main() {
   }
 
   testWidgets('renders merged table without layout exceptions', (tester) async {
-    await _pump(tester, const [
+    await pumpApp(tester, const [
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'قطري', count: 10, unitPrice: 400, total: 4000),
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'حجازي', count: 5, unitPrice: 700, total: 3500),
       WorkerGroupWorkRow(workerName: 'خالد', styleName: 'قطري', count: 3, unitPrice: 400, total: 1200),
@@ -46,7 +46,7 @@ void main() {
   });
 
   testWidgets('worker name appears once even with multiple styles', (tester) async {
-    await _pump(tester, const [
+    await pumpApp(tester, const [
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'قطري', count: 10, unitPrice: 400, total: 4000),
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'حجازي', count: 5, unitPrice: 700, total: 3500),
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'قطري جاهز', count: 2, unitPrice: 250, total: 500),
@@ -63,7 +63,7 @@ void main() {
 
   testWidgets('shows the two totals rows', (tester) async {
     // ثلاثة أسطر لعاملين: العدد الكلي 18، والمبلغ الكلي 8,700 (لا يظهران إلا في سطري الإجمالي)
-    await _pump(tester, const [
+    await pumpApp(tester, const [
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'قطري', count: 10, unitPrice: 400, total: 4000),
       WorkerGroupWorkRow(workerName: 'علي', styleName: 'حجازي', count: 5, unitPrice: 700, total: 3500),
       WorkerGroupWorkRow(workerName: 'خالد', styleName: 'قطري', count: 3, unitPrice: 400, total: 1200),

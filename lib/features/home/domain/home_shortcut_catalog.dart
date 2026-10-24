@@ -26,6 +26,8 @@ import '../../services/presentation/screens/jobs/jobs_list_screen.dart';
 import '../../services/presentation/screens/messaging/sms_log_screen.dart';
 import '../../services/presentation/screens/messaging/whatsapp_log_screen.dart';
 import '../../services/presentation/screens/providers/providers_list_screen.dart';
+import '../../my_statement/presentation/screens/my_financial_statement_screen.dart';
+import '../../my_statement/presentation/screens/my_work_statement_screen.dart';
 import '../presentation/screens/home_customize_screen.dart';
 import 'home_shortcut.dart';
 import 'home_shortcut_flows.dart';
@@ -46,6 +48,45 @@ import 'home_shortcut_flows.dart';
 /// الثابت `const` لأن كل الأهداف مراجع بنّاءات ودوال عليا (لا كلاشرات).
 /// The list is `const` because every target is a constructor or top-level function reference.
 const List<HomeShortcut> homeShortcutCatalog = [
+    // ── الكشوفات الشخصية / my_statement ──────────────────────
+  // بطاقتان تفتحان شاشة مباشرة بصلاحيات مستقلة، بلا قسم خاص بهما في الدرج.
+  // Two cards opening screens directly with independent permissions, no dedicated drawer section.
+  HomeShortcut(
+    id: 'my_statement.financial',
+    title: 'كشف حسابي المالي',
+    icon: Icons.person_outline_rounded,
+    sectionId: 'home',
+    target: ScreenTarget(MyFinancialStatementScreen.new),
+    codes: [Perm.myStatementFinancial],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'my_statement.work',
+    title: 'كشف عملي',
+    icon: Icons.work_outline_rounded,
+    sectionId: 'home',
+    target: ScreenTarget(MyWorkStatementScreen.new),
+    codes: [Perm.myStatementWork],
+    defaultOn: true,
+  ),
+    HomeShortcut(
+    id: 'accounts.statement',
+    title: 'كشف حساب مالي',
+    icon: Icons.request_quote_rounded,
+    sectionId: 'accounts',
+    target: ScreenTarget(AccountStatementScreen.new),
+    codes: [Perm.accountsStatementFinancial],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'accounts.group',
+    title: 'كشف مجموعة حسابات جزئية',
+    icon: Icons.balance_rounded,
+    sectionId: 'accounts',
+    target: ScreenTarget(AccountGroupStatementScreen.new),
+    codes: [Perm.accountsStatementGroup],
+    defaultOn: true,
+  ),
   // ── المبيعات / sales ─────────────────────────────────────
   HomeShortcut(
     id: 'sales.section',
@@ -76,7 +117,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'customers',
     target: SectionTarget('customers'),
     codes: [Perm.customersView],
-    defaultOn: true,
+    defaultOn: false,
   ),
   HomeShortcut(
     id: 'customers.list',
@@ -85,7 +126,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'customers',
     target: ScreenTarget(AllCustomersScreen.new),
     codes: [Perm.customersView],
-    defaultOn: true,
+    defaultOn: false,
   ),
   HomeShortcut(
     id: 'customers.add',
@@ -94,7 +135,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'customers',
     target: ScreenTarget(AddCustomerScreen.new),
     codes: [Perm.customersCreate],
-    defaultOn: true,
+    defaultOn: false,
   ),
   HomeShortcut(
     id: 'customers.statement',
@@ -124,6 +165,15 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'workers',
     target: SectionTarget('workers'),
     codes: [Perm.employeesView, Perm.cuttersView, Perm.tailorsView],
+    defaultOn: false,
+  ),
+    HomeShortcut(
+    id: 'workers.group_work',
+    title: 'كشف عمل مجموعة',
+    icon: Icons.summarize_rounded,
+    sectionId: 'workers',
+    target: ScreenTarget(WorkerGroupWorkReportScreen.new),
+    codes: [Perm.cuttersGroupWorkReport, Perm.tailorsGroupWorkReport],
     defaultOn: true,
   ),
   HomeShortcut(
@@ -142,6 +192,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'workers',
     target: ScreenTarget(CuttersListScreen.new),
     codes: [Perm.cuttersView],
+    defaultOn: true,
   ),
   HomeShortcut(
     id: 'workers.tailors',
@@ -150,15 +201,9 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'workers',
     target: ScreenTarget(TailorsListScreen.new),
     codes: [Perm.tailorsView],
+    defaultOn: true,
   ),
-  HomeShortcut(
-    id: 'workers.group_work',
-    title: 'كشف عمل مجموعة',
-    icon: Icons.summarize_rounded,
-    sectionId: 'workers',
-    target: ScreenTarget(WorkerGroupWorkReportScreen.new),
-    codes: [Perm.cuttersStatementWork, Perm.tailorsStatementWork],
-  ),
+
 
   HomeShortcut(
     id: 'workers.add_employee',
@@ -193,7 +238,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'accounts',
     target: SectionTarget('accounts'),
     codes: [Perm.accountsView],
-    defaultOn: true,
+    defaultOn: false,
   ),
   HomeShortcut(
     id: 'accounts.tree',
@@ -202,24 +247,6 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'accounts',
     target: ScreenTarget(AccountTreeScreen.new),
     codes: [Perm.accountsView],
-    defaultOn: true,
-  ),
-  HomeShortcut(
-    id: 'accounts.statement',
-    title: 'كشف حساب مالي',
-    icon: Icons.request_quote_rounded,
-    sectionId: 'accounts',
-    target: ScreenTarget(AccountStatementScreen.new),
-    codes: [Perm.accountsStatementFinancial],
-    defaultOn: true,
-  ),
-  HomeShortcut(
-    id: 'accounts.group',
-    title: 'كشف مجموعة حسابات جزئية',
-    icon: Icons.balance_rounded,
-    sectionId: 'accounts',
-    target: ScreenTarget(AccountGroupStatementScreen.new),
-    codes: [Perm.accountsStatementGroup],
     defaultOn: true,
   ),
   HomeShortcut(
@@ -253,6 +280,7 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'accounts',
     target: ScreenTarget(CurrencyScreen.new),
     codes: [Perm.currenciesView],
+     defaultOn: true,
   ),
 
   // ── المخازن / stores ─────────────────────────────────────

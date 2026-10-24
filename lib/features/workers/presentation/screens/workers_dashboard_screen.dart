@@ -58,8 +58,8 @@ class WorkersDashboardScreen extends ConsumerWidget {
               ),
         ),
       if (auth.canAny([
-        Perm.cuttersStatementWork,
-        Perm.tailorsStatementWork,
+        Perm.cuttersGroupWorkReport,
+        Perm.tailorsGroupWorkReport,
       ]))
         _WorkerCategoryCard(
           icon: Icons.summarize_rounded,

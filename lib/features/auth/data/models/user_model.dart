@@ -18,6 +18,9 @@ class UserModel {
   final int? branchNo;
   final bool isAdmin;
   final List<String> permissions;
+  // الحساب المالي المرتبط بالمستخدم — للكشوفات الشخصية (مالي/عمل)
+  // Financial account linked to the user — for personal statements.
+  final int? accNo;
 
   const UserModel({
     required this.id,
@@ -29,6 +32,7 @@ class UserModel {
     this.branchNo,
     this.isAdmin = false,
     this.permissions = const [],
+    this.accNo,
   });
 
   /// الاسم المعروض للمستخدم
@@ -81,6 +85,13 @@ class UserModel {
       // الأكواد لاتينية بلا عربية: لا تمرّ بـ fix() ولا تحتاج ذلك
       // Codes are ASCII: they neither need nor survive the Arabic repair pass.
       permissions: _parseStringList(json['permissions']),
+      // الحساب المالي المرتبط — nullable (بعض المستخدمين بلا حساب)
+      accNo:
+          json['acc_no'] != null
+              ? (json['acc_no'] is int
+                  ? json['acc_no'] as int
+                  : int.tryParse(json['acc_no'].toString()))
+              : null,
     );
   }
 
@@ -95,6 +106,7 @@ class UserModel {
       'branch_no': branchNo,
       'is_admin': isAdmin,
       'permissions': permissions,
+      'acc_no': accNo,
     };
   }
 

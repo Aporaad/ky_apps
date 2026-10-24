@@ -1,11 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:printing/printing.dart';
-import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
-import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
@@ -13,10 +10,10 @@ import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/account_group_statement_model.dart';
 import '../../data/models/account_model.dart';
 import '../providers/accounts_provider.dart';
-import '../utils/account_group_statement_pdf_builder.dart';
 import '../utils/group_statement_scope.dart';
 import '../utils/statement_date_parser.dart';
 import '../widgets/account_group_statement_report_table.dart';
+import '../widgets/tree_export_menu.dart';
 
 String _formatDateDash(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -27,7 +24,23 @@ String _formatDateSlash(DateTime d) =>
 /// أربع قوائم منسدلة متسلسلة + نطاق تواريخ اختياري (بلا افتراضي تلقائي، خلافًا
 /// للتقرير الأول) يعرض كل الحركات عند تركه فارغًا، مطابق لـ TRIAL_BALANCE_REPORT.pdf.
 class AccountGroupStatementScreen extends ConsumerStatefulWidget {
-  const AccountGroupStatementScreen({super.key});
+  /// التهيئة من الشجرة المحاسبية: العقدة تمرّر سلسلتها الكاملة (أعمق مستوى يفوز)
+  /// فيُفتح الكشف عليها مباشرة بدل بدء التصفّح من أول حساب في الشجرة.
+  /// Seeded from the tree: the tapped node passes its whole chain — the deepest
+  /// level wins — so the trial balance opens on it instead of defaulting to the
+  /// first section.
+  final int? initialAccNo;
+  final int? initialAccSub;
+  final int? initialAccPart;
+  final int? initialGroupId;
+
+  const AccountGroupStatementScreen({
+    this.initialAccNo,
+    this.initialAccSub,
+    this.initialAccPart,
+    this.initialGroupId,
+    super.key,
+  });
 
   @override
   ConsumerState<AccountGroupStatementScreen> createState() =>
@@ -56,6 +69,30 @@ class _AccountGroupStatementScreenState
   bool _autoSelectedAccNo = false;
   bool _autoSelectedAccSub = false;
   bool _autoSelectedAccPart = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // مجلوبة من عقدة في الشجرة → النطاق معلوم مسبقاً، فتُعطَّل التلقائية الثلاث
+    // وإلا استبدل التصفّح التلقائي اختيار المستخدم فور أول بناء.
+    final seeded = widget.initialGroupId != null ||
+        widget.initialAccPart != null ||
+        widget.initialAccSub != null ||
+        widget.initialAccNo != null;
+    if (!seeded) return;
+
+    _accNo = widget.initialAccNo;
+    _accSub = widget.initialAccSub;
+    _accPart = widget.initialAccPart;
+    _groupId = widget.initialGroupId;
+    _autoSelectedAccNo = true;
+    _autoSelectedAccSub = true;
+    _autoSelectedAccPart = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadReport();
+    });
+  }
 
   Future<void> _loadReport() async {
     final scope = resolveStatementScope(
@@ -174,7 +211,11 @@ class _AccountGroupStatementScreenState
       final list = accMainAsync.asData?.value;
       if (list == null) return; // ما يزال يُحمَّل / still loading
       _autoSelectedAccSub = true;
-      final firstSub = list.isNotEmpty ? list[1].accSub : null;
+      // الأول حرفياً: `[1]` كان يقفز فوق أول عنصر وينهار RangeError عندما يكون
+      // الحساب الفرعي الوحيد — قائمة من عنصر واحد حالة طبيعية في قاعدة البيانات.
+      // Take the first entry literally: `[1]` skipped it and threw a RangeError
+      // whenever there was only one sub account, which is common.
+      final firstSub = list.isNotEmpty ? list.first.accSub : null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() => _accSub = firstSub);
@@ -191,7 +232,7 @@ class _AccountGroupStatementScreenState
       final list = accSubAsync.asData?.value;
       if (list == null) return; // ما يزال يُحمَّل / still loading
       _autoSelectedAccPart = true;
-      final firstPart = list.isNotEmpty ? list[1].accPart : null;
+      final firstPart = list.isNotEmpty ? list.first.accPart : null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         setState(() => _accPart = firstPart);
@@ -231,28 +272,10 @@ class _AccountGroupStatementScreenState
     }
   }
 
-  /// هوية ترويسة التقرير من إعدادات التطبيق — تُقرأ عند الطباعة/التصدير،
-  /// بينما تراقبها الشاشة في `build`.
-  /// Report letterhead identity from app config, read imperatively for print/export.
-  ReportLetterheadInfo _letterheadInfo() => ReportLetterheadInfo.fromConfig(
-        ref.read(appConfigNotifierProvider).config,
-      );
-
-  Future<void> _printReport() async {
-    final bytes = await buildAccountGroupStatementPdf(
-      letterhead: _letterheadInfo(),
-      report: _report,
-    );
-    await Printing.layoutPdf(onLayout: (_) async => bytes);
-  }
-
-  Future<void> _exportPdf() async {
-    final bytes = await buildAccountGroupStatementPdf(
-      letterhead: _letterheadInfo(),
-      report: _report,
-    );
-    await Printing.sharePdf(bytes: bytes, filename: 'group-statement.pdf');
-  }
+  /// الطباعة والتصدير في قائمة واحدة مشتركة مع الشجرة (`GroupStatementExportMenu`)؛
+  /// ترويسة التقرير وقراءة البايْتات تُداران داخل القائمة نفسها لحظة الضغط.
+  /// Print/PDF/Excel live in the menu shared with the tree, which reads `_report`
+  /// at tap time — no duplicated byte-generation code here.
 
   @override
   Widget build(BuildContext context) {
@@ -282,22 +305,7 @@ class _AccountGroupStatementScreenState
             onPressed: () => setState(() => _filtersVisible = !_filtersVisible),
           ),
           if (hasData) ...[
-            PermissionGate(
-              code: Perm.accountsPrint,
-              child: IconButton(
-                icon: const Icon(Icons.print_outlined, size: 20),
-                tooltip: 'طباعة',
-                onPressed: _printReport,
-              ),
-            ),
-            PermissionGate(
-              code: Perm.accountsExport,
-              child: IconButton(
-                icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
-                tooltip: 'تصدير PDF',
-                onPressed: _exportPdf,
-              ),
-            ),
+            GroupStatementExportMenu(report: () => _report),
           ],
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
