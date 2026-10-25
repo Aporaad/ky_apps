@@ -82,7 +82,7 @@ void main() {
       expect(state.loading, isFalse);
       expect(state.layout.userId, 7);
       expect(state.layout.hidden, isEmpty);
-      expect(notifier.activeShortcuts, hasLength(14));
+      expect(notifier.activeShortcuts, hasLength(15));
     });
 
     test('hiding and restoring a default card leaves no residue', () async {
@@ -92,21 +92,22 @@ void main() {
       );
       await notifier.load();
 
-      await notifier.toggle('customers.section');
+      // بطاقة ما تزال defaultOn: customers.section أضحَت opt-in بعد توسيع الكتالوج
+      await notifier.toggle('management.users');
       var state = harness.container.read(homeLayoutNotifierProvider);
-      expect(state.layout.hidden, contains('customers.section'));
+      expect(state.layout.hidden, contains('management.users'));
       expect(state.layout.shown, isEmpty);
       expect(
         notifier.activeShortcuts.map((shortcut) => shortcut.id),
-        isNot(contains('customers.section')),
+        isNot(contains('management.users')),
       );
 
       // البلوب المكتوب فعلًا يحتوي الإخفاء — لا الحالة في الذاكرة وحدها
       // The blob actually written holds the hiding — not just the in-memory state.
       final saved = jsonDecode(harness.storage.blob!) as Map<String, dynamic>;
-      expect(saved['hidden'], contains('customers.section'));
+      expect(saved['hidden'], contains('management.users'));
 
-      await notifier.toggle('customers.section');
+      await notifier.toggle('management.users');
       state = harness.container.read(homeLayoutNotifierProvider);
       expect(state.layout.hidden, isEmpty);
       expect(state.layout.shown, isEmpty);

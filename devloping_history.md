@@ -2564,3 +2564,96 @@ jvmTarget 11. لا تغيير على الكود المصدري (Dart/PHP) ولا
 لـ Kotlin 2.2.0 استغرق ~20 دقيقة؛ التجميعات التالية أذكى/أسرع). التحذيرات المتبقية (`source/target
 value 8 is obsolete` من إحدى الحزم، و`x86 targets will be removed`) غير معطِّلة وخارج النطاق.
 **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-25 (02:45) — الإصدار الثاني v1.1.0+2: إصلاحات ثم بناء موقّع (Qoder Agent)
+
+**السياق:** بعد بناء v1.0.0 (commit 33f8752) أُضيفت ميزات كبيرة (توسيع الصلاحيات f670271، شجرة
+الحسابات والكشوفات ec37748)، فقرّرنا ترقية **minor** إلى `1.1.0+2`. عند التشغيل الأول لـ `flutter test`
+ظهرت 7 إخفاقات؛ قرار المستخدم: «إصلاح الاختبارات ثم البناء».
+
+**الإصلاحات:**
+1. **علة إنتاج حقيقية — زر الحفظ:** في `lib/features/accounts/presentation/screens/create_account_screen.dart`
+   كان الحارس `if (repeatable)` داخل `_stickyActions()` يغلّف زر «حفظ» الرئيسي بالخطأ (أصله كان لزر
+   ثانوي معطّل بالتعليق)، فاختفى الحفظ عن أنواع main/sub/part. أصبح الزر يُرسم لكل الأنواع، وحُذف
+   المتغير الميت `repeatable`. اكتُشف بتشخيص مؤقت (dump لشجرة الودجت) ثم حُذف ملف التشخيص.
+2. **تنظيف تذييل الكشف:** `account_statement_report_footer.dart` كان يحمل كتلًا معلّقة بالتعليقات منذ
+   إزالة التواقيع في ec37748 — حُذفت الشيفرة الميتة (`_SignatureSlot`، متغير `timestamp` غير المستخدم)
+   بما يرفع تحذيرَي `flutter analyze`، وحُدّث اختبار الفيض في
+   `account_statement_report_widgets_test.dart` ليطالب بصندوق الإجماليات لا بخانة «توقيع المدير».
+3. **تحديث 5 توقعات قديمة:** `home_catalog_test.dart` (13→14 افتراضية)، `home_notifier_test.dart`
+   (14→15 عند أول تشغيل، واختبار الإخفاء استبدل `customers.section` الذي أضحى opt-in بـ
+   `management.users`)، `responsive_layout_test.dart` (منح `customers.view` وحدها تعطي بطاقتين لا أربع،
+   والأولى صارت «الإعدادات» لا «العملاء»).
+
+**البوابات:** `flutter analyze` = **No issues found!** · `flutter test` = **294 All tests passed**.
+
+**البناء والتوقيع:** `flutter build apk --release --split-per-abi` → armeabi-v7a (30.9MB)، arm64-v8a
+(32.8MB)، x86_64 (34.6MB)؛ و`flutter build apk --release` → universal (90.2MB). كل منها موقّع بـ
+`android/ky_release.jks` (نفس شهادة v1 — SHA-256 ‏811E477C851ABA177B6504F0A57BDAC005E6400012A9BE476C5778D6DADA5D0F،
+‏CN=Al-Kaboodi Tailoring) فترقية مستخدمي v1 تعمل دون إلغاء التثبيت. تحقّق aapt2:
+`com.alkaboudy.app` · versionName ‏1.1.0 · versionCode ‏2 (universal) و1002/2002/4002 (مضاعف ABI لكل معمارية).
+
+**الأرشفة:** النسخ الأربع في `release_artifacts/v1.1.0+2/` (مسار مستثنى في `.gitignore`) — تُرفع للمتجر
+يدويًا. **لا commit** للتغييرات الوظيفية (لم يُطلب).
+
+---
+
+## 2026-10-25 (18:03) — إصلاح كشف حساب العميل: البيان + الرصيد + تنسيق الأعمدة والتكبير (Qoder)
+
+**المشكلة كما وردت:** (1) عمود «البيان» يجب أن يُقرأ من `ENTRY_SUB.SUB_DETAILS` وإن كان فارغاً من
+`ENTRY_MAIN.DETAILS`؛ (2) عمود «الرصيد» يُحسب خطأً فيعرض رصيد **كل** العملاء، و`balance_s` يجب ألّا
+يُعتمد إطلاقاً بل يُحسب من رقم الحساب المالي **مع** رقم العميل، والرصيد النهائي كذلك خطأ؛ (3) أحجام
+الأعمدة ومساحاتها وترتيبها وتنسيقها تحتاج إصلاحاً وتصغير نص البيانات مع إمكانية تكبير/تصغير.
+
+### الواجهة الخلفية — `kyApp_API/app/Http/Controllers/CustomerController.php`
+1. **الاستعلام (`statement()`):** أُعيدت كتابته بجوينات ANSI على
+   `ACCOUNTS.CUST c JOIN ACCOUNTS.ENTRY_SUB es ON es.ACC_NO = c.ACC_NO AND es.GIVING = c.CUST_NO
+   JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO JOIN ACCOUNTS.ENTRY_TYPE et …`
+   مع `WHERE c.CUST_NO = :custNo`. **جذر العلة:** الجوينة السابقة كانت على `ACC_NO` وحده، وحساب
+   مراقبة واحد (مثل `12310000`) يشترك فيه آلاف العملاء، فكان الكشف يجلب حركاتهم كلها.
+2. **البيان:** `NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS` — الفرعي أولاً ثم الرئيسي عند الفراغ.
+3. **الرصيد:** حُذف `es.BALANCE_S` من الاستعلام نهائياً (كان لقطة على مستوى الحساب لا العميل،
+   ولا تتبع الترتيب الزمني). صار الرصيد يُحسب تراكمياً من `ENTRY_MNT`:
+   `$openingBalance` (ما قبل بداية الفترة) و`$periodMovement`، والسطر = `$openingBalance + $periodMovement`.
+4. **الرصيد النهائي:** `$finalBalance = $openingBalance + $periodMovement` بدل أي قيمة من القاعدة.
+5. **دالة مساعدة جديدة:** `normalizeStatementText()` توحّد الترميز (`ArabicEncoding::fixMojibake`)
+   وتطوي المسافات (`preg_replace('/\s+/u', ' ', …)`) لأن أعمدة `VARCHAR2(250)` تأتي مبطّنة بمسافات.
+6. **عقد الاستجابة:** مفتاح السطر أصبح `balance` بدل `balance_s`؛ و`summary.from_date`/`to_date`
+   تُنسّقان دائماً `d/m/Y` عبر Carbon؛ و`account_title` أصبح `"{ACC_NO} - {CUST_NAME}"`.
+
+### عميل Flutter
+- `lib/features/customers/data/models/customer_statement_model.dart`: `balanceS` → **`balance`**،
+  يقرأ `json['BALANCE'] ?? json['balance']` عبر `_parseDouble`.
+- `lib/features/customers/presentation/screens/customer_statement_screen.dart`:
+  - **تكبير/تصغير:** `TransformationController` + `InteractiveViewer` (0.5×–2.5×، خطوة 0.15) مع شريط
+    عائم أسفل يسار يعرض النسبة الحيّة وأزرار (‎−‎، ‎%‎، ‎+‎، إعادة الضبط) ودعم القرص/الإصبعين.
+  - **الأعمدة:** أوزان `0.85 / 1.15 / 1.0 / 3.3 / 1.2 / 1.2 / 1.45` لـ
+    (السند · النوع · تأريخه · البيان · مدين · دائن · الرصيد) — البيان أخذ أوسع حصة.
+  - **الخطوط:** ترويسة `9.5/10.5/11.5` وبيانات `8.5/9.5/10.5` حسب المقاس، وحشو رأسي `3.0–4.5`
+    وأفقي `1.5–4.0`، وسماكة حدود `0.8`.
+  - **صفّ الافتتاحي:** يُفرز بين المدين/الدائن بحسب إشارته مع إظهار الرصيد في عموده.
+  - **الإجمالي:** الدائن يُطبع موجباً (حُذفت الإشارة السالبة) والأرصدة السالبة تُلوّن بالأخضر
+    `0xFF15803D`.
+  - **تصحيح جانبي:** تواريخ «هذا الشهر/هذه السنة» كانت مثبّتة على `DateTime(2026, 9, 8)` و
+    `DateTime(2026, 1, 1)` فأصبحت `DateTime.now()`.
+- `lib/features/customers/presentation/utils/customer_statement_pdf_builder.dart`: أوزان الأعمدة
+  `1.5 / 1.25 / 1.25 / 3.4 / 1.05 / 1.2 / 0.95`، واستخدام `row.balance`، وشرط الافتتاحي `> 0`.
+
+### التحقق
+- **العميل 6694:** 3834 سطراً — افتتاحي 0 · مدين 76,414,928 · دائن 66,037,928 · نهائي 10,377,000 (متوازن).
+- **العميل 21026 (على حساب المراقبة 12310000):** 19 سطراً فقط من حركاته هو — إثبات إغلاق تسريب
+  «رصيد كل العملاء».
+- **فترة 2024-05-01 إلى 2024-05-31 للعميل 6694:** افتتاحي 247,000 · مدين 12,591,725 · نهائي 12,838,725
+  ورصيد أول سطر 259,000 — كلها مطابقة للحساب المستقل.
+- **البوابات:** `flutter analyze` = **No issues found!** · `flutter test` = **294 ناجحاً (5 متجاوزة)** ·
+  `vendor/bin/pint --dirty` = **passed** · `vendor/bin/pest` = **157 ناجحاً / 4 متجاوزة**.
+
+**قيد بيئي مهم:** خادم MCP لأوراكل يشير إلى `192.168.0.9:1521/orcl` بينما `.env` للـ API يشير إلى
+`127.0.0.1:1521/orcl`، ومجموعتا البيانات مختلفتان (443,959 مقابل 422,408 سطراً في `ENTRY_SUB`) — لذلك
+كل التحقق الرقمي أُجري عبر اتصال Laravel نفسه لا عبر MCP.
+
+**ملاحظة نطاق (لم تُعدّل):** `AccountController::getAccountStatement` و`MyStatementController`
+و`WorkerController::statementEmployee/Cutter/Tailor` لا تزال تقرأ `es.BALANCE_S` بالنمط القديم —
+مرشّحة لمهمة لاحقة إن طلب المستخدم.

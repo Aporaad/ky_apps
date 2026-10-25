@@ -1065,3 +1065,57 @@ INSERT في `ACCOUNTS.APP_PERMISSIONS` (IDs صريحة):
 
 **ما تغيّر هو طبقة القراءة في `UserAdminController` فقط** (لا القاعدة): `LIST_SQL` و`findUser`
 و`shape()` باتت تُرجع `acc_no` ليُعبَّأ النموذج عند التعديل. **النموذج:** Claude · **الزمن:** 2026-10-24.
+
+---
+
+## 2026-10-25 — كشف حساب العميل: إلغاء `ENTRY_SUB.BALANCE_S` والاعتماد على `ACC_NO + GIVING` (Qoder)
+
+**لا تغيير مخطّطي إطلاقاً** — لا `ALTER` ولا `CREATE` ولا `DROP` ولا DML. الجداول المستخدمة
+(`CUST`, `ENTRY_SUB`, `ENTRY_MAIN`, `ENTRY_TYPE`) قائمة من نظام ERP القديم، والتعديل كله في **طبقة
+القراءة وحساب الرصيد** داخل `CustomerController::statement()`.
+
+### الفهم الجديد للعلاقة بين الحركة والعميل (الأهم)
+- `ENTRY_SUB` يربط الحركة بالعميل عبر **عمودين معاً**: `ACC_NO` (الحساب المالي) و`GIVING`
+  (رقم العميل). الاعتماد على `ACC_NO` وحده **خطأ بنيوي** لأن حسابات المراقبة مشتركة بين آلاف العملاء:
+  `12310000` (حساب مراقبة العملاء) يشترك فيه **~4,470 إلى 5,593** عميلاً، وكذلك `41210001` (المبيعات)
+  و`12110005` (الصندوق). لذلك أي قراءة على مستوى الحساب تُرجع حركات الجميع.
+- `ENTRY_SUB.BALANCE_S` عمود **لقطة (snapshot) على مستوى الحساب لا العميل**: قيمته مشتركة بين كل
+  عملاء الحساب، ولا تتبع الترتيب الزمني للسندات. تحقّق: للعميل 6694 **2,169 سطراً من أصل 4,340** كان
+  `BALANCE_S` فيها مخالفاً لمجموع `ENTRY_MNT` التراكمي. ⇒ **قرار: لا يُقرأ هذا العمود في كشف حساب
+  العميل مطلقاً**، والرصيد يُشتق رياضياً من `ENTRY_MNT`.
+- `ENTRY_SUB.SUB_DETAILS` هو المصدر الأول للبيان، و`ENTRY_MAIN.DETAILS` بديل عند فراغه
+  (**53,802 سطراً** في القاعدة لها `SUB_DETAILS` فارغ). العمودان `VARCHAR2(250)` فيأتيان مبطّنين
+  بمسافات، فلا بد من `TRIM` قبل الحكم على الفراغ.
+- الرصيد النهائي = الرصيد الافتتاحي + مجموع حركة الفترة، ولا يُقرأ من أي عمود مخزَّن.
+
+### الاستعلام المعتمد (طبقة التطبيق، لا أمر يدوي)
+```sql
+SELECT es.ENTRY_NO,
+       SUBSTR(TO_CHAR(es.ENTRY_NO), 1, 1) || SUBSTR(TO_CHAR(es.ENTRY_NO), 7, 4) AS SUB_ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'DD/MM/YYYY') AS ENTRY_DATE,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE,
+       et.ENTRY_TYPE_NAME,
+       NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS,   -- البيان: الفرعي ثم الرئيسي
+       es.ENTRY_MNT, c.CUST_NAME, c.CUST_NO, c.ACC_NO,
+       es.ACC_NO AS ENTRY_SUB_ACC_NO
+  FROM ACCOUNTS.CUST c
+  JOIN ACCOUNTS.ENTRY_SUB  es ON es.ACC_NO  = c.ACC_NO
+                             AND es.GIVING  = c.CUST_NO   -- القيد المزدوج: الحساب + العميل
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ETRY_TYPE_NO = em.ENTRY_TYPE_NO
+ WHERE c.CUST_NO = :custNo
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+-- ملاحظة: اسم عمود النوع في ENTRY_TYPE هو ETRY_TYPE_NO (بلا N) كما في المخطّط الفعلي.
+```
+
+### التحقق الرقمي (عبر اتصال Laravel لا عبر MCP)
+- **6694:** 3,834 سطراً · افتتاحي 0 · مدين 76,414,928 · دائن 66,037,928 · نهائي 10,377,000 ⇒ متوازن.
+- **21026 (على حساب المراقبة 12310000):** 19 سطراً فقط = حركاته هو ⇒ تسريب «رصيد كل العملاء» مغلق.
+- **6694 لفترة 2024-05-01..2024-05-31:** افتتاحي 247,000 · مدين 12,591,725 · نهائي 12,838,725 ·
+  رصيد أول سطر 259,000 — مطابقة للحساب المستقل.
+- **قيد بيئي:** MCP أوراكل ⇒ `192.168.0.9:1521/orcl` أما `.env` ⇒ `127.0.0.1:1521/orcl`، والفرق
+  443,959 مقابل 422,408 سطراً في `ENTRY_SUB`، فكل الأرقام أعلاه من قاعدة التطبيق.
+
+**المتبقي بنفس النمط القديم (خارج النطاق):** `AccountController::getAccountStatement`,
+`MyStatementController`, و`WorkerController::statementEmployee/Cutter/Tailor` تقرأ `BALANCE_S` بعد.
+**النموذج:** Qoder · **الزمن:** 2026-10-25 18:03 · لا DDL/DML ولا commit.

@@ -102,11 +102,13 @@ void main() {
       await _pumpAt(tester, const Size(360, 800));
 
       expect(tester.takeException(), isNull,
-          reason: 'letterhead/footer Rows must flex instead of overflowing');
-      // 'من تاريخ:' الخاصة بالترويسة وحدها — تنويه التذييل يقول 'من تاريخ إصداره'
-      // Match the letterhead's own label: the footer disclaimer also says 'من تاريخ'.
+          reason: 'letterhead Rows must flex instead of overflowing');
+      // 'من تاريخ:' الخاصة بالترويسة وحدها — التذييل صار صندوق إجماليات فقط
+      // The footer is now a totals box only (signatures removed by design in ec37748):
+      // assert it renders, and that no signature slot is drawn anymore.
       expect(find.textContaining('من تاريخ:'), findsOneWidget);
-      expect(find.textContaining('توقيع المدير'), findsOneWidget);
+      expect(find.text('الرصيد النهائي'), findsOneWidget);
+      expect(find.textContaining('توقيع'), findsNothing);
     });
 
     testWidgets('the letterhead carries the configured company identity',

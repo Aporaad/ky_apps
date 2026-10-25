@@ -807,11 +807,11 @@ void main() {
       expect(find.byType(HomeShortcutCard), findsAtLeastNWidgets(12));
     });
 
-    testWidgets('a read-only user gets five cards, not thirty', (tester) async {
-      // سطح مرتفع عمدًا: الشبكة كسولة داخل `SingleChildScrollView`، فالبطاقة الخامسة تحت
+    testWidgets('a read-only user gets the ungated cards, not thirty', (tester) async {
+      // سطح مرتفع عمدًا: الشبكة كسولة داخل `SingleChildScrollView`، فالبطاقة تحت
       // الطيّة لا تُبنى — والعدّ على سطح قصير كان سيقيس التمرير لا الصلاحيات.
-      // A tall surface on purpose: the grid is lazy inside the scroll view, so the fifth card
-      // below the fold is never built — counting on a short surface would measure scrolling.
+      // A tall surface on purpose: the grid is lazy inside the scroll view, so cards
+      // below the fold are never built — counting on a short surface would measure scrolling.
       await _pumpHome(
         tester,
         size: const Size(360, 1200),
@@ -819,10 +819,12 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
-      // أربع لا خمس: «الأمان والبصمة» مسموحة لكنها ليست في التشكيلة الأولى، فهي في «المتاحة»
-      // Four, not five: «الأمان والبصمة» is allowed but not a first-run card, so it waits in
-      // the "available" tab until the user adds it.
-      expect(find.byType(HomeShortcutCard), findsNWidgets(4));
+      // بطاقتان لا أكثر: أضحى «العملاء» و«العملات» opt-in بعد توسيع الكتالوج، فلم يبقَ
+      // لمنح customers.view وحدها إلا بطاقة الإعدادات (بلا شرط) والبطاقة المثبّتة.
+      // Two cards only: after the catalog reshuffle the customers/accounts cards are
+      // opt-in, so a customers.view-only grant keeps just the ungated settings card
+      // plus the pinned customize card.
+      expect(find.byType(HomeShortcutCard), findsNWidgets(2));
       expect(find.text('إضافة عميل'), findsNothing);
       expect(find.text('كشف حساب عميل'), findsNothing);
     });
@@ -1034,9 +1036,11 @@ void main() {
       await tester.tap(find.byType(HomeShortcutCard).first);
       await tester.pumpAndSettle();
 
-      // البطاقة الأولى في هذه المنح هي «العملاء» — هدفها قسم لا شاشة
-      // The first card under these grants is «العملاء» — a section target, not a screen.
-      expect(opened, 'customers');
+      // البطاقة الأولى في هذه المنح هي «الإعدادات» — «العملاء» أضحى opt-in فلا يُحصى
+      // ضمن التشكيلة الأولى، وهدف الإعدادات قسمٌ لا شاشة.
+      // The first card under these grants is «الإعدادات»: customers went opt-in,
+      // and the settings card targets a section, not a screen.
+      expect(opened, 'settings');
     });
   });
 }

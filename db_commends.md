@@ -1589,6 +1589,43 @@ SELECT LOG_DATE, RUN_DURATION, SUCCEEDED, STATUS, "ERROR#", ADDITIONAL_INFO
 -- وليس من هذه الآلة (192.168.0.11) — لا علاقة لـ Oracle به.
 -- لم يُنفَّذ commit (لا طلب). لا DDL ولا DML.
 
+-- ============================================================
+-- [2026-10-24 15:20] جولة 3 — تحقّق قراءة فقط لقاعدة «العملة = الخانة الرابعة من الرقم»
+-- المنفِّذ: Qoder Agent · عبر oracledb MCP · كل ما يلي SELECT للتحقق، لا كتابة ولا DDL.
+-- ============================================================
+
+-- 1) أعمدة المستويات الخمسة + ENTRY_SUB: أين يوجد CUR_NO فعلاً؟
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, NULLABLE
+FROM ALL_TAB_COLUMNS
+WHERE OWNER = 'ACCOUNTS'
+  AND TABLE_NAME IN ('ACCOUNT','ACC_MAIN','ACC_SUB','ACC_SUB_GROUP','CHART_ACC','ENTRY_SUB')
+ORDER BY TABLE_NAME, COLUMN_ID;
+-- النتيجة: CUR_NO في ACCOUNT/ACC_MAIN/ACC_SUB فقط؛ CHART_ACC ثمانية أعمدة بلا CUR_NO؛
+--          ACC_SUB_GROUP ثلاثة أعمدة؛ ENTRY_SUB تسعة أعمدة (SEQ_PRICE للحركة لا للحساب).
+
+-- 2) توزيع الخانة الرابعة عبر CHART_ACC — هل هي رقم عملة دائماً؟
+SELECT LENGTH(TO_CHAR(ACC_NO)) AS LEN, SUBSTR(TO_CHAR(ACC_NO), 4, 1) AS CUR_DIGIT, COUNT(*) AS C
+FROM ACCOUNTS.CHART_ACC
+GROUP BY LENGTH(TO_CHAR(ACC_NO)), SUBSTR(TO_CHAR(ACC_NO), 4, 1)
+ORDER BY LEN, CUR_DIGIT;
+-- النتيجة: ثمانية الأرقام 1×10425 / 2×41 / 3×22؛ وتسعة الأرقام (العملاء) كلها خانة رابعة = 1.
+
+-- 3) دليل العملات للتأكد من مطابقة الخانة الرابعة لـ CUR_NO.
+SELECT CUR_NO, ASCIISTR(CUR_NAME) AS NAME_ENC FROM ACCOUNTS.CURRENCY ORDER BY CUR_NO;
+-- النتيجة: 1 ريال، 2 دولار، 3 سعودي، 4 يورو (غير مستخدم في الخانة الرابعة).
+
+-- 4) دليل النطاق: نفس الجزء يعطي نطاقات عشرية منفصلة لكل عملة (Oracle 11g بلا FETCH FIRST).
+SELECT ACC_NO FROM (
+  SELECT ACC_NO, ROWNUM rnum FROM (
+    SELECT ACC_NO FROM ACCOUNTS.CHART_ACC
+    WHERE SUBSTR(TO_CHAR(ACC_NO),1,3) = '251' ORDER BY ACC_NO
+  ) WHERE ROWNUM <= 40
+) WHERE ACC_NO IN (25110017, 25120016, 25130011);
+-- النتيجة حيّة: 25110017(عملة1) / 25120016(عملة2) / 25130011(عملة3) — ثلاث نطاقات متمايزة.
+
+-- لا DDL ولا DML: لم يُنشأ عمود ولا جدول ولا جُدّلت أي صفّ. القراءة وحدها أثبَتَت القاعدة،
+-- فالمنطق التطبيقي (AccountController) صار يشتقّ cur_no من الرقم ويتحقّق منه بدل أن يفتَرِضه.
+
 -- =====================================================================================
 -- [2026-10-25 10:00] الكشوفات الشخصية: DDL على APP_USERS + بذر أكواد my_statement — Qoder Agent
 -- هذه الجولة فيها كتابة فعلية (DDL + DML): ربط الموظف بحسابه المالي يحتاج عموداً جديداً في
@@ -1641,3 +1678,87 @@ SELECT ... u.CASH_ACC_NO, u.ACC_NO, ... FROM ACCOUNTS.APP_USERS u ...
 SELECT USER_ID, ..., CASH_ACC_NO, ACC_NO, ... FROM ACCOUNTS.APP_USERS WHERE USER_ID = :id
 ```
 **النموذج:** Claude · **الزمن:** 2026-10-24 · لا DDL/DML ولا commit.
+
+---
+
+## 2026-10-25 — تشخيص كشف حساب العميل: `SUB_DETAILS` / `BALANCE_S` / `GIVING` (Qoder)
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 18:03 · **كل ما يلي `SELECT` للقراءة فقط — لا DDL/DML ولا commit.**
+
+### (1) فحص مخطّط الجداول المعنية
+```sql
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'ENTRY_SUB'
+ ORDER BY COLUMN_ID;
+-- النتيجة: SEQ, ENTRY_NO, ACC_NO, ENTRY_MNT, BALANCE_S, SEQ_PRICE, SUB_DETAILS, INVOICE_NO, GIVING
+-- SUB_DETAILS و DETAILS من نوع VARCHAR2(250) ⇒ تبطين بمسافات، يلزم TRIM قبل الحكم على الفراغ.
+
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME IN ('ENTRY_MAIN','ENTRY_TYPE','CUST')
+ ORDER BY TABLE_NAME, COLUMN_ID;
+-- ENTRY_TYPE يحمل العمود ETRY_TYPE_NO (بلا N) وليس ENTRY_TYPE_NO.
+```
+
+### (2) إثبات أن حساب المراقبة مشترك بين آلاف العملاء (جذر علة «رصيد كل العملاء»)
+```sql
+SELECT es.ACC_NO, COUNT(DISTINCT es.GIVING) AS CUST_CNT
+  FROM ACCOUNTS.ENTRY_SUB es
+ GROUP BY es.ACC_NO
+ ORDER BY CUST_CNT DESC
+ FETCH FIRST 10 ROWS ONLY;
+-- 12310000 (مراقبة العملاء) ≈ 4,470–5,593 عميلاً · 41210001 (المبيعات) · 12110005 (الصندوق)
+-- ⇒ أي قراءة على ACC_NO وحده تُرجع حركات كل هؤلاء العملاء.
+```
+
+### (3) إثبات أن `BALANCE_S` لقطة على مستوى الحساب ولا تتبع الترتيب الزمني
+```sql
+SELECT COUNT(*) AS TOTAL_ROWS,
+       SUM(CASE WHEN es.BALANCE_S <> SUM(es.ENTRY_MNT) OVER (
+                    PARTITION BY es.ACC_NO, es.GIVING
+                    ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ
+                    ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
+                THEN 1 ELSE 0 END) AS MISMATCH_ROWS
+  FROM ACCOUNTS.ENTRY_SUB es
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+ WHERE es.GIVING = 6694;
+-- النتيجة: 4,340 سطراً، منها 2,169 سطراً مخالفاً للتراكم الزمني ⇒ العمود غير صالح للكشف.
+```
+
+### (4) قياس فراغ `SUB_DETAILS` (سبب الحاجة إلى البديل `ENTRY_MAIN.DETAILS`)
+```sql
+SELECT COUNT(*) AS TOTAL,
+       SUM(CASE WHEN es.SUB_DETAILS IS NULL OR TRIM(es.SUB_DETAILS) IS NULL THEN 1 ELSE 0 END) AS BLANK_SUB_DETAILS
+  FROM ACCOUNTS.ENTRY_SUB es;
+-- 53,802 سطراً بلا بيان فرعي ⇒ NVL(TRIM(SUB_DETAILS), ENTRY_MAIN.DETAILS).
+```
+
+### (5) حجم البيانات وحدود البيئة
+```sql
+SELECT COUNT(*) FROM ACCOUNTS.ENTRY_SUB;
+-- عبر MCP ‏(192.168.0.9:1521/orcl) = 443,959 · عبر ‏.env للتطبيق (127.0.0.1:1521/orcl) = 422,408
+-- ⇒ قاعدتان مختلفتان؛ لذلك أُعيد كل التحقق الرقمي عبر اتصال Laravel نفسه.
+```
+
+### (6) الاستعلام المعتمد بعد الإصلاح (طبقة التطبيق — `CustomerController::statement()`)
+```sql
+SELECT es.ENTRY_NO,
+       SUBSTR(TO_CHAR(es.ENTRY_NO), 1, 1) || SUBSTR(TO_CHAR(es.ENTRY_NO), 7, 4) AS SUB_ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE, 'DD/MM/YYYY') AS ENTRY_DATE,
+       TO_CHAR(em.ENTRY_DATE, 'YYYY-MM-DD') AS RAW_DATE,
+       et.ENTRY_TYPE_NAME,
+       NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS,
+       es.ENTRY_MNT, c.CUST_NAME, c.CUST_NO, c.ACC_NO,
+       es.ACC_NO AS ENTRY_SUB_ACC_NO
+  FROM ACCOUNTS.CUST c
+  JOIN ACCOUNTS.ENTRY_SUB  es ON es.ACC_NO = c.ACC_NO AND es.GIVING = c.CUST_NO
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ETRY_TYPE_NO = em.ENTRY_TYPE_NO
+ WHERE c.CUST_NO = :custNo
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+-- الرصيد والرصيد النهائي يُحسبان في PHP من ENTRY_MNT: الافتتاحي + حركة الفترة.
+```
+
+**ملفّات تحقق مؤقتة** (`.tmp_statement_check.php`, `.tmp_count_check.php`, `.tmp_verify.php`, `.tmp_v2.php`
+وغيرها) أُنشئت ونُفِّذت ثم **حُذفت جميعًا** بعد التأكد من الأرقام.

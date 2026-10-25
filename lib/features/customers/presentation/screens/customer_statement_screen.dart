@@ -193,13 +193,52 @@ class _CustomerStatementScreenState
   DateTime? _toDate;
   bool _showFilterPanel = true;
 
+  // ── التكبير والتصغير ────────────────────────────────────────────────
+  // Zoom state: pinch works out of the box, the buttons below drive the very
+  // same matrix so the report is readable on phones and on wide desktops.
+  static const double _minZoom = 0.5;
+  static const double _maxZoom = 2.5;
+  static const double _zoomStep = 0.15;
+
+  final TransformationController _zoomController = TransformationController();
+  double _zoomScale = 1.0;
+
   @override
   void initState() {
     super.initState();
+    _zoomController.addListener(_syncZoomScale);
     Future.microtask(() {
       _loadData();
     });
   }
+
+  @override
+  void dispose() {
+    _zoomController.removeListener(_syncZoomScale);
+    _zoomController.dispose();
+    super.dispose();
+  }
+
+  /// مزامنة نسبة التكبير مع أي تكبير بالإصبع (Pinch)
+  /// Keep the percentage label in step with pinch gestures.
+  void _syncZoomScale() {
+    if (!mounted) return;
+    final scale = _zoomController.value.getMaxScaleOnAxis();
+    if ((scale - _zoomScale).abs() < 0.01) return;
+    setState(() => _zoomScale = scale.clamp(_minZoom, _maxZoom));
+  }
+
+  /// تطبيق نسبة تكبير محددة
+  /// Apply a specific zoom factor.
+  void _applyZoom(double scale) {
+    final clamped = scale.clamp(_minZoom, _maxZoom);
+    _zoomController.value = Matrix4.identity()..scale(clamped);
+    setState(() => _zoomScale = clamped);
+  }
+
+  /// إعادة العرض إلى 100%
+  /// Back to 100%.
+  void _resetZoom() => _applyZoom(1.0);
 
   void _loadData() {
     final fromStr =
@@ -217,10 +256,11 @@ class _CustomerStatementScreenState
   }
 
   Future<void> _selectDate(bool isFrom) async {
+    final now = DateTime.now();
     final initial =
         isFrom
-            ? (_fromDate ?? DateTime(2026, 1, 1))
-            : (_toDate ?? DateTime(2026, 12, 31));
+            ? (_fromDate ?? DateTime(now.year, 1, 1))
+            : (_toDate ?? DateTime(now.year, 12, 31));
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -243,7 +283,9 @@ class _CustomerStatementScreenState
   }
 
   void _setQuickRange(String type) {
-    final now = DateTime(2026, 9, 8);
+    // التاريخ الحقيقي لا تاريخ مثبت — وإلا صار "الشهر الحالي" شهراً قديماً.
+    // Real clock, not a frozen literal, so "current month" means this month.
+    final now = DateTime.now();
     setState(() {
       if (type == 'all') {
         _fromDate = null;
@@ -690,55 +732,150 @@ class _CustomerStatementScreenState
     final openingBalance = (summary['opening_balance'] ?? 0.0) as num;
     final finalBalance = (summary['final_balance'] ?? 0.0) as num;
 
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 3,
-      // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
-      // Natural full-page scroll — footer at content end, no on-screen A4.
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: ReportA4Sheet(
-          orientation: ReportSheetOrientation.portrait,
-          maxPageWidth: 980,
-          // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
-          header: _buildOfficialHeader(),
-          // 2. شريط بيانات العميل والحساب والتواريخ
-          meta: _buildCustomerMetaBar(
-            customerName: displayName,
-            customerCode: displayCode,
-            currency: currency,
-            accountTitle: accountTitle,
-            fromDate: fromDate,
-            toDate: toDate,
-          ),
-          // 3. المتن — الجدول وملخص الأرصدة (قابل للتمرير)
-          body: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // جدول كشف الحساب
-                _buildStatementTableLayout(
-                  rows: state.rows,
-                  totalDebit: totalDebit.toDouble(),
-                  totalCredit: totalCredit.toDouble(),
-                  openingBalance: openingBalance.toDouble(),
-                  finalBalance: finalBalance.toDouble(),
-                ),
+    return Stack(
+      children: [
+        InteractiveViewer(
+          transformationController: _zoomController,
+          minScale: _minZoom,
+          maxScale: _maxZoom,
+          // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
+          // Natural full-page scroll — footer at content end, no on-screen A4.
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: ReportA4Sheet(
+              orientation: ReportSheetOrientation.portrait,
+              maxPageWidth: 980,
+              // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
+              header: _buildOfficialHeader(),
+              // 2. شريط بيانات العميل والحساب والتواريخ
+              meta: _buildCustomerMetaBar(
+                customerName: displayName,
+                customerCode: displayCode,
+                currency: currency,
+                accountTitle: accountTitle,
+                fromDate: fromDate,
+                toDate: toDate,
+              ),
+              // 3. المتن — الجدول وملخص الأرصدة (قابل للتمرير)
+              body: SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // جدول كشف الحساب
+                    _buildStatementTableLayout(
+                      rows: state.rows,
+                      totalDebit: totalDebit.toDouble(),
+                      totalCredit: totalCredit.toDouble(),
+                      openingBalance: openingBalance.toDouble(),
+                      finalBalance: finalBalance.toDouble(),
+                    ),
 
-                const SizedBox(height: 16),
+                    const SizedBox(height: 14),
 
-                // ملخص الأرصدة أسفل الجدول
-                _buildBottomBalanceSummary(
-                  openingBalance: openingBalance.toDouble(),
-                  finalBalance: finalBalance.toDouble(),
+                    // ملخص الأرصدة أسفل الجدول
+                    _buildBottomBalanceSummary(
+                      openingBalance: openingBalance.toDouble(),
+                      finalBalance: finalBalance.toDouble(),
+                    ),
+                  ],
                 ),
-              ],
+              ),
+              // 4. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
+              footer: const ReportSignatureFooter(),
             ),
           ),
-          // 4. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
-          footer: const ReportSignatureFooter(),
         ),
+        // أدوات التكبير/التصغير — تعمل باللمس (Pinch) وبالأزرار على الحاسب
+        // Zoom toolbar — pinch on touch devices, explicit buttons on desktop.
+        Positioned(
+          left: 12,
+          bottom: 12,
+          child: _buildZoomControls(),
+        ),
+      ],
+    );
+  }
+
+  // -------------------------------------------------------------
+  // شريط أدوات التكبير والتصغير
+  // Zoom in / out / reset toolbar with the live percentage
+  // -------------------------------------------------------------
+  Widget _buildZoomControls() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.96),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: AppColors.border),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.12),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _zoomButton(
+            icon: Icons.remove_rounded,
+            tooltip: 'تصغير',
+            onTap:
+                _zoomScale <= _minZoom + 0.001
+                    ? null
+                    : () => _applyZoom(_zoomScale - _zoomStep),
+          ),
+          Container(
+            width: 46,
+            alignment: Alignment.center,
+            child: Text(
+              '${(_zoomScale * 100).round()}%',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          _zoomButton(
+            icon: Icons.add_rounded,
+            tooltip: 'تكبير',
+            onTap:
+                _zoomScale >= _maxZoom - 0.001
+                    ? null
+                    : () => _applyZoom(_zoomScale + _zoomStep),
+          ),
+          Container(
+            width: 1,
+            height: 18,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            color: AppColors.border,
+          ),
+          _zoomButton(
+            icon: Icons.fit_screen_rounded,
+            tooltip: 'الحجم الطبيعي',
+            onTap: (_zoomScale - 1.0).abs() < 0.001 ? null : _resetZoom,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _zoomButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback? onTap,
+  }) {
+    return IconButton(
+      icon: Icon(icon, size: 18),
+      tooltip: tooltip,
+      onPressed: onTap,
+      visualDensity: VisualDensity.compact,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+      color: const Color(0xFF6B2D1B),
+      disabledColor: AppColors.textMuted.withValues(alpha: 0.45),
     );
   }
 
@@ -858,10 +995,10 @@ class _CustomerStatementScreenState
   }
 
   // -------------------------------------------------------------
-  // جدول كشف الحساب
-  // -------------------------------------------------------------
-  // -------------------------------------------------------------
   // جدول كشف الحساب المتجاوب بالكامل مع أبعاد الشاشة
+  // Responsive statement table — widths follow the real content of each field:
+  // the description is by far the widest column, numbers stay compact, and the
+  // data text is deliberately small so a full ledger fits on screen.
   // -------------------------------------------------------------
   Widget _buildStatementTableLayout({
     required List<CustomerStatementModel> rows,
@@ -872,6 +1009,7 @@ class _CustomerStatementScreenState
   }) {
     const borderColor = Color(0xFF4B5563);
     const headerBgColor = Color(0xFFD4A853);
+    const creditColor = Color(0xFF15803D);
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -879,25 +1017,32 @@ class _CustomerStatementScreenState
         final isCompact = screenWidth < 650;
         final isVeryCompact = screenWidth < 450;
 
-        final headerFontSize = isVeryCompact ? 10.0 : (isCompact ? 11.5 : 13.0);
-        final dataFontSize = isVeryCompact ? 9.5 : (isCompact ? 11.0 : 12.0);
-        final cellVPad = isVeryCompact ? 4.0 : (isCompact ? 5.0 : 6.5);
-        final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 3.0 : 5.0);
+        final headerFontSize = isVeryCompact ? 9.5 : (isCompact ? 10.5 : 11.5);
+        final dataFontSize = isVeryCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
+        final cellVPad = isVeryCompact ? 3.0 : (isCompact ? 3.5 : 4.5);
+        final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 2.5 : 4.0);
+
+        // إشارة الرصيد الافتتاحي تحدد عموده: موجب = مدين، سالب = دائن
+        // The opening balance sits in its natural column by sign.
+        final openingDebit = openingBalance > 0 ? openingBalance : 0.0;
+        final openingCredit = openingBalance < 0 ? openingBalance.abs() : 0.0;
 
         return Table(
           border: TableBorder.all(
             color: borderColor,
-            width: 1,
+            width: 0.8,
             style: BorderStyle.solid,
           ),
+          // أوزان الأعمدة على أساس أطول محتوى متوقع لكل حقل
+          // Column weights follow the longest expected content per field.
           columnWidths: const {
-            0: FlexColumnWidth(0.9),  // السند
-            1: FlexColumnWidth(1.1),  // النوع
-            2: FlexColumnWidth(1.2),  // تأريخه
-            3: FlexColumnWidth(2.8),  // البيان
-            4: FlexColumnWidth(1.35), // مدين
-            5: FlexColumnWidth(1.35), // دائن
-            6: FlexColumnWidth(1.4),  // الرصيد
+            0: FlexColumnWidth(0.85), // السند — 5 أرقام
+            1: FlexColumnWidth(1.15), // النوع — نص عربي قصير
+            2: FlexColumnWidth(1.0), // تأريخه — DD/MM/YYYY
+            3: FlexColumnWidth(3.3), // البيان — أطول نص
+            4: FlexColumnWidth(1.2), // مدين — مبلغ
+            5: FlexColumnWidth(1.2), // دائن — مبلغ
+            6: FlexColumnWidth(1.45), // الرصيد — مبلغ تراكمي
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -932,7 +1077,7 @@ class _CustomerStatementScreenState
                   hPad: cellHPad,
                 ),
                 _tableDataCell(
-                  _formatAmount(openingBalance),
+                  _formatAmount(openingDebit),
                   isCenter: true,
                   textColor: const Color(0xFFDC2626),
                   isBold: true,
@@ -942,15 +1087,24 @@ class _CustomerStatementScreenState
                   fitBox: true,
                 ),
                 _tableDataCell(
-                  '0',
+                  _formatAmount(openingCredit),
                   isCenter: true,
-                  textColor: const Color(0xFFDC2626),
+                  textColor: creditColor,
                   isBold: true,
                   fontSize: dataFontSize,
                   vPad: cellVPad,
                   hPad: cellHPad,
+                  fitBox: true,
                 ),
-                _tableDataCell('', isCenter: true, fontSize: dataFontSize, vPad: cellVPad, hPad: cellHPad),
+                _tableDataCell(
+                  _formatAmount(openingBalance),
+                  isCenter: true,
+                  isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
               ],
             ),
 
@@ -961,7 +1115,9 @@ class _CustomerStatementScreenState
               final creditVal =
                   row.credit ??
                   ((row.entryMnt ?? 0) < 0 ? (row.entryMnt!).abs() : 0.0);
-              final balVal = row.balanceS ?? 0.0;
+              // الرصيد التراكمي المحسوب على الخادم للعميل وحده
+              // Server-computed cumulative balance for this customer only.
+              final balVal = row.balance ?? 0.0;
 
               return TableRow(
                 decoration: const BoxDecoration(color: Colors.white),
@@ -1007,6 +1163,7 @@ class _CustomerStatementScreenState
                   _tableDataCell(
                     _formatAmount(creditVal),
                     isCenter: true,
+                    textColor: creditVal > 0 ? creditColor : null,
                     fontSize: dataFontSize,
                     vPad: cellVPad,
                     hPad: cellHPad,
@@ -1016,6 +1173,7 @@ class _CustomerStatementScreenState
                     _formatAmount(balVal),
                     isCenter: true,
                     isBold: true,
+                    textColor: balVal < 0 ? creditColor : null,
                     fontSize: dataFontSize,
                     vPad: cellVPad,
                     hPad: cellHPad,
@@ -1043,9 +1201,12 @@ class _CustomerStatementScreenState
                   fitBox: true,
                 ),
                 _tableDataCell(
-                  totalCredit > 0 ? '${_formatAmount(totalCredit)}-' : '0',
+                  // عمود الدائن وصفٌ بذاته — يُعرض المبلغ موجباً بلا إشارة سالبة
+                  // The credit column is self-describing: the amount stays positive.
+                  _formatAmount(totalCredit),
                   isCenter: true,
                   isBold: true,
+                  textColor: creditColor,
                   fontSize: dataFontSize,
                   vPad: cellVPad,
                   hPad: cellHPad,
@@ -1055,6 +1216,7 @@ class _CustomerStatementScreenState
                   _formatAmount(finalBalance),
                   isCenter: true,
                   isBold: true,
+                  textColor: finalBalance < 0 ? creditColor : null,
                   fontSize: dataFontSize,
                   vPad: cellVPad,
                   hPad: cellHPad,

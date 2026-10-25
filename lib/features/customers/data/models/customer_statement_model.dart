@@ -8,7 +8,12 @@ class CustomerStatementModel {
   final String? entryDate;
   final String? entryTypeName;
   final String? details;
-  final double? balanceS;
+
+  /// رصيد السطر التراكمي كما يحسبه الخادم من مبالغ الحركات (ENTRY_MNT)
+  /// للعميل وحده — لا يُؤخذ من العمود المخزَّن ENTRY_SUB.BALANCE_S إطلاقاً.
+  /// Cumulative line balance computed server-side from ENTRY_MNT for this
+  /// customer only — never taken from the stored BALANCE_S column.
+  final double? balance;
   final double? entryMnt;
   final double? debit;
   final double? credit;
@@ -23,7 +28,7 @@ class CustomerStatementModel {
     this.entryDate,
     this.entryTypeName,
     this.details,
-    this.balanceS,
+    this.balance,
     this.entryMnt,
     this.debit,
     this.credit,
@@ -46,7 +51,7 @@ class CustomerStatementModel {
       entryDate: _parseString(json['ENTRY_DATE'] ?? json['entry_date'], isArabic: false),
       entryTypeName: _parseString(json['ENTRY_TYPE_NAME'] ?? json['entry_type_name']),
       details: _parseString(json['DETAILS'] ?? json['details']),
-      balanceS: _parseDouble(json['BALANCE_S'] ?? json['balance_s']),
+      balance: _parseDouble(json['BALANCE'] ?? json['balance']),
       entryMnt: entryMntVal,
       debit: debitVal,
       credit: creditVal,

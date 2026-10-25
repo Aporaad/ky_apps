@@ -105,14 +105,18 @@ pw.Widget _table(
 ) {
   return pw.Table(
     border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.5),
+    // ترتيب الأعمدة معكوس لأن الجدول يُرسم RTL (العمود 0 = أقصى اليمين).
+    // أعراض الأعمدة موزونة على طول محتواها الفعلي: البيان أوسعها، والأرقام أضيق.
+    // Columns are reversed because the table is laid out RTL (column 0 = far right).
+    // Widths follow the real content: the description is the widest, numbers narrow.
     columnWidths: const {
-      0: pw.FlexColumnWidth(1.4),  // الرصيد
-      1: pw.FlexColumnWidth(1.35), // دائن
-      2: pw.FlexColumnWidth(1.35), // مدين
-      3: pw.FlexColumnWidth(2.8),  // البيان
-      4: pw.FlexColumnWidth(1.2),  // تأريخه
-      5: pw.FlexColumnWidth(1.1),  // النوع
-      6: pw.FlexColumnWidth(0.9),  // السند
+      0: pw.FlexColumnWidth(1.5), // الرصيد
+      1: pw.FlexColumnWidth(1.25), // دائن
+      2: pw.FlexColumnWidth(1.25), // مدين
+      3: pw.FlexColumnWidth(3.4), // البيان
+      4: pw.FlexColumnWidth(1.05), // تأريخه
+      5: pw.FlexColumnWidth(1.2), // النوع
+      6: pw.FlexColumnWidth(0.95), // السند
     },
     defaultColumnWidth: const pw.FlexColumnWidth(1),
     children: [
@@ -136,8 +140,10 @@ pw.Widget _table(
           pdfTd(''),
           pdfTd(''),
           pdfTd('رصيد افتتاحي', bold: true, color: ReportPdfColors.accentBlue),
+          // الافتتاحي يظهر في عموده الطبيعي حسب إشارته، وفي عمود الرصيد أيضاً
+          // The opening balance lands in its natural column by sign, plus the balance column.
           pdfTd(
-            formatStatementAmount(openingBalance >= 0 ? openingBalance : 0),
+            formatStatementAmount(openingBalance > 0 ? openingBalance : 0),
             bold: true,
             color: ReportPdfColors.dangerRed,
           ),
@@ -155,7 +161,7 @@ pw.Widget _table(
             ((row.entryMnt ?? 0) > 0 ? row.entryMnt! : 0.0);
         final creditVal = row.credit ??
             ((row.entryMnt ?? 0) < 0 ? (row.entryMnt!).abs() : 0.0);
-        final balVal = row.balanceS ?? 0.0;
+        final balVal = row.balance ?? 0.0;
 
         return pw.TableRow(
           children: reversedCells([

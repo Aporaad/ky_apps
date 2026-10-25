@@ -1049,9 +1049,10 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
 
   // ─── شريط الإجراءات اللاصق ──────────────────────────────────────────────────
   Widget _stickyActions() {
-    final repeatable =
-        _kind == AccountCreateKind.chart || _kind == AccountCreateKind.group;
-
+    // زر «حفظ» يُرسم لكل أنواع الحسابات لا للمكرر منها فقط؛ كان الحارس
+    // `if (repeatable)` يغلّفه بالخطأ فيحرم main/sub/part من الحفظ.
+    // The Save button must render for EVERY kind, not only the repeatable ones:
+    // the `if (repeatable)` guard wrongly wrapped it, hiding it on main/sub/part.
     return Container(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       decoration: const BoxDecoration(
@@ -1067,15 +1068,6 @@ class _CreateAccountScreenState extends ConsumerState<CreateAccountScreen> {
             ),
           ),
           const SizedBox(width: 8),
-          if (repeatable)
-          //   Expanded(
-          //     child: OutlinedButton.icon(
-          //       onPressed: _isSubmitting ? null : () => _submit(keepOpen: true),
-          //       icon: const Icon(Icons.playlist_add_rounded, size: 12),
-          //       label: const Text('حفظ وعرض'),
-          //     ),
-          //   ),
-          // const SizedBox(width: 8),
           Expanded(
             flex: 2,
             child: FilledButton.icon(

@@ -57,12 +57,12 @@ void main() {
       );
     });
 
-    test('thirteen shortcuts are on by default, and exactly one is pinned', () {
+    test('fourteen shortcuts are on by default, and exactly one is pinned', () {
       final defaults = homeShortcutCatalog.where(
         (shortcut) => shortcut.defaultOn,
       );
 
-      expect(defaults, hasLength(13));
+      expect(defaults, hasLength(14));
       expect(homeShortcutCatalog.where((s) => s.pinned), hasLength(1));
       expect(
         homeShortcutCatalog.firstWhere((s) => s.pinned).id,

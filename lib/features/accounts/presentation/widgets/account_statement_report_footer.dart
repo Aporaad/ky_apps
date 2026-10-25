@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'account_statement_report_table.dart';
 
-/// تذييل كشف الحساب المالي — إجماليات + خانة التوقيعات + إخلاء المسؤولية
-/// + ترقيم الصفحة، مطابقة لتذييل acc_report.pdf. يُبنى كـ Widget مستقل ليُستخدم
-/// في الشاشة نفسها وفي مولّد الـ PDF بنفس التنسيق.
+/// تذييل كشف الحساب المالي — إجماليات فقط، مطابقة لتذييل acc_report.pdf.
+/// يُبنى كـ Widget مستقل ليُستخدم في الشاشة نفسها وفي مولّد الـ PDF بنفس التنسيق.
+/// Statement footer — totals box only. Signature slots and the disclaimer band
+/// were removed by design (decision recorded in commit ec37748); restore them
+/// from git history if the printed format demands it again.
 class AccountStatementReportFooter extends StatelessWidget {
   final double openingBalance;
   final double totalDebit;
@@ -20,19 +22,14 @@ class AccountStatementReportFooter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
-        final timestamp =
-        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
-        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
-
     return Padding(
       padding: const EdgeInsets.fromLTRB(7, 5, 8, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── صناديق الإجماليات ──
-          // صندوق مرن بعرض 200–260: لا يفيض على الشاشات الضيقة عند تكبير الخط.
-          // Flexible 200–260px totals box — never overflows on narrow screens.
+          // صندوق مرن بعرض 100–160: لا يفيض على الشاشات الضيقة عند تكبير الخط.
+          // Flexible 100–160px totals box — never overflows on narrow screens.
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -40,50 +37,6 @@ class AccountStatementReportFooter extends StatelessWidget {
               Flexible(child: _buildTotalsBox()),
             ],
           ),
-
-          const SizedBox(height: 12),
-
-          // ── خانة التوقيعات ──
-          // ثلاث خانات Expanded بدل ثلاث خانات ثابتة 120px (كانت تفيض 44px
-          // عند 1.25×) — كل خانة تتمدد بالتساوي ضمن العرض المتاح.
-          // Three Expanded slots instead of three fixed 120px slots (which
-          // overflowed 44px at 1.25× text scale) — equal share of the width.
-          // Row(
-          //   crossAxisAlignment: CrossAxisAlignment.end,
-          //   children: const [
-          //     Expanded(child: _SignatureSlot(label: 'توقيع المحاسب')),
-          //     SizedBox(width: 8),
-          //     Expanded(child: _SignatureSlot(label: 'توقيع أمين الصندوق')),
-          //     SizedBox(width: 8),
-          //     Expanded(child: _SignatureSlot(label: 'توقيع المدير')),
-          //   ],
-          // ),
-
-          // const SizedBox(height: 12),
-
-          // ── إخلاء المسؤولية + ترقيم الصفحة ──
-          // Row(
-          //   mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          //   children: [
-          //     Expanded(
-          //       child: Text(
-          //         'يجب مراجعة هذا الكشف خلال 15 يوماً من تاريخ إصداره، وما بعد ذلك يُعتبر معتمداً.',
-          //         style: TextStyle(
-          //           fontSize: 10.5,
-          //           color: Colors.black.withValues(alpha: 0.6),
-          //         ),
-          //         textAlign: TextAlign.center,
-          //       ),
-          //     ),              
-          //   ],
-          // ),
-          // Text(
-          //       'توقيت الإصدار: $timestamp',
-          //       style: const TextStyle(
-          //         fontSize: 7,
-          //         color: Colors.black54,
-          //       ),
-          //     )
         ],
       ),
     );
@@ -144,42 +97,6 @@ class AccountStatementReportFooter extends StatelessWidget {
                 fontWeight: FontWeight.w900,
                 color: highlight ? const Color(0xFFDC2626) : Colors.black,
               ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _SignatureSlot extends StatelessWidget {
-  final String label;
-
-  const _SignatureSlot({required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // خط التوقيع يتمدد بعرض الخانة كاملة بدل عرض ثابت 120px
-        // The signature line stretches to the slot's full width.
-        Container(
-          width: double.infinity,
-          height: 1,
-          color: Colors.black54,
-        ),
-        const SizedBox(height: 4),
-        // تصغير تلقائي لملصق التوقيع عند تكبير الخط حتى لا يفيض أبداً
-        // Auto-shrink the label under large text scales — never overflows.
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text(
-            label,
-            maxLines: 1,
-            style: const TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
             ),
           ),
         ),
