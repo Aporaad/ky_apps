@@ -9,6 +9,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../workers/data/models/worker_work_report_model.dart';
 import '../../../workers/presentation/utils/worker_work_report_pdf_builder.dart';
@@ -555,9 +556,9 @@ class _MyWorkStatementScreenState extends ConsumerState<MyWorkStatementScreen> {
       ref.watch(appConfigNotifierProvider).config,
     );
 
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 3,
+    return ReportZoomView(
+      // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
+      // Natural full-page scroll — footer at content end, no on-screen A4.
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         child: ReportA4Sheet(

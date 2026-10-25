@@ -33,7 +33,7 @@ void main() {
         'ENTRY_TYPE_NAME': 'سند',
         'DETAILS': 'مقبوضات',
         'ENTRY_MNT': -50.0,
-        'BALANCE_S': 450.0,
+        'BALANCE': 450.0,
       });
 
       expect(tx.entryNo, 7654321);
@@ -42,8 +42,23 @@ void main() {
       expect(tx.entryTypeName, 'سند');
       expect(tx.description, 'مقبوضات');
       // ENTRY_MNT is negative — server maps it to credit at the response layer
-      // already, but the raw BALANCE_S fallback should still parse fine.
+      // already; the running balance arrives in the `balance` key.
       expect(tx.balance, 450.0);
+    });
+
+    test('ignores the legacy BALANCE_S snapshot column', () {
+      // BALANCE_S is a stored account-level snapshot that ignores chronology, so
+      // the server now derives every running balance from ENTRY_MNT. The client
+      // must never resurrect the column as a fallback.
+      // حقل BALANCE_S لقطة مخزّنة لا تراعي التسلسل الزمني، ولذلك يُحسب الرصيد
+      // الجاري في الخادم من ENTRY_MNT — ولا يجوز للعميل استرجاع العمود احتياطياً.
+      final tx = AccountTransactionModel.fromJson({
+        'ENTRY_NO': 1,
+        'BALANCE_S': 450.0,
+        'balance_s': 450.0,
+      });
+
+      expect(tx.balance, isNull);
     });
 
     test('applies Arabic encoding fix on mojibake text', () {

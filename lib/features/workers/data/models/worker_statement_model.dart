@@ -1,13 +1,18 @@
 import '../../../../core/utils/arabic_encoding_utils.dart';
 
 /// نموذج بيانات كشف الحساب للعمال
+///
+/// `balance` هو الرصيد الجاري المحسوب على الخادم من `ENTRY_MNT`
+/// (الافتتاحي + حركة الفترة التراكمية). لا يُقرأ `BALANCE_S` المخزَّن إطلاقاً.
+/// `balance` is the running balance computed server-side from ENTRY_MNT; the
+/// stored BALANCE_S column is never read.
 class WorkerStatementModel {
   final String? entryNo;
   final String? subEntryNo;
   final String? entryDate;
   final String? entryTypeName;
   final String? details;
-  final double balanceS;
+  final double balance;
   final double entryMnt;
   final double debit;
   final double credit;
@@ -19,7 +24,7 @@ class WorkerStatementModel {
     this.entryDate,
     this.entryTypeName,
     this.details,
-    required this.balanceS,
+    required this.balance,
     required this.entryMnt,
     required this.debit,
     required this.credit,
@@ -33,7 +38,7 @@ class WorkerStatementModel {
       entryDate: _parseString(json['entry_date'] ?? json['ENTRY_DATE'], isArabic: false),
       entryTypeName: ArabicEncodingUtils.fix(json['entry_type_name'] ?? json['ENTRY_TYPE_NAME']),
       details: ArabicEncodingUtils.fix(json['details'] ?? json['DETAILS']),
-      balanceS: _parseDouble(json['balance_s'] ?? json['BALANCE_S']),
+      balance: _parseDouble(json['balance'] ?? json['BALANCE']),
       entryMnt: _parseDouble(json['entry_mnt'] ?? json['ENTRY_MNT']),
       debit: _parseDouble(json['debit'] ?? json['DEBIT']),
       credit: _parseDouble(json['credit'] ?? json['CREDIT']),

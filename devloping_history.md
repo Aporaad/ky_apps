@@ -2657,3 +2657,79 @@ value 8 is obsolete` من إحدى الحزم، و`x86 targets will be removed`)
 **ملاحظة نطاق (لم تُعدّل):** `AccountController::getAccountStatement` و`MyStatementController`
 و`WorkerController::statementEmployee/Cutter/Tailor` لا تزال تقرأ `es.BALANCE_S` بالنمط القديم —
 مرشّحة لمهمة لاحقة إن طلب المستخدم.
+
+---
+
+## [2026-10-25 20:54] - إصلاح البيان والرصيد والرصيد النهائي في 4 كشوفات + تكبير/تصغير موحّد لكل التقارير — Qoder
+
+استكمال مباشر للمهمة السابقة: نفس ثلاث العلل التي أُصلحت في كشف العميل نُقلت إلى بقية الكشوفات
+المالية (`AccountController::getAccountStatement`, `MyStatementController::financialStatement`,
+`WorkerController::fetchStatement`)، مع توحيد مكوّن التكبير/التصغير بدل تكراره في كل شاشة.
+
+### الخلفية (Laravel API)
+- `app/Support/ArabicEncoding.php`: دالة عامة جديدة
+  ```php
+  public static function normalizeStatementText(mixed $value): string
+  // trim → fixMojibake → preg_replace('/\s+/u', ' ', …) → trim
+  ```
+  سُحبت من `CustomerController` (حُذفت نسخته الخاصة) وأصبحت الثلاثة الجديدة تستخدمها، فلا يختلف
+  نصّ البيان بين كشف وآخر.
+- `AccountController::getAccountStatement($request, $accNo)` (كشف حساب مالي + كشف الشجرة):
+  - `NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS` وحُذف `es.BALANCE_S` من قائمة الأعمدة.
+  - الرصيد: `$openingBalance += $mnt` للحركات قبل الفترة، ثم `$periodMovement += $mnt` و
+    `$runningBalance = $openingBalance + $periodMovement`.
+  - `'description' => ArabicEncoding::normalizeStatementText(...)` و`'balance' => $runningBalance`
+    و`$finalBalance = $openingBalance + $periodMovement`.
+- `MyStatementController::financialStatement()`: نفس التحويل حرفياً على حساب المستخدم المرتبط
+  (`ACC_NO` وحده — لا يحتاج `GIVING` لأن الحساب شخصي).
+- `WorkerController::fetchStatement()`: الاستعلام صار ANSI JOINs
+  (`ENTRY_SUB JOIN ENTRY_MAIN JOIN ENTRY_TYPE ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO`)، بلا
+  `BALANCE_S`، والترتيب `ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ`؛ ومفتاح السطر صار
+  `balance` بدل `balance_s`، والتفاصيل `details` عبر المساعد الجديد، والنهائي من الحركة.
+  (`AccountController::getDetailedStatement`/`getGroupStatement` كانت أصلاً تحسب الأرصدة من
+  الحركات، فلا تغيير فيهما.)
+
+### عميل Flutter
+- `lib/core/widgets/report_zoom_view.dart` **(جديد، 196 سطراً)**: المكوّن الوحيد للتكبير.
+  ```dart
+  ReportZoomView({required Widget child, double minScale = 0.5, double maxScale = 2.5, double step = 0.15})
+  ```
+  `Stack` فيه `Positioned.fill(InteractiveViewer(transformationController: …))` + شريط عائم أسفل
+  يسار (`−` · النسبة الحيّة · `+` · إعادة الضبط)، ويستمع للـ controller فيعكس نسبة الـ Pinch أيضاً.
+- طُبِّق على الشاشات الثماني التالية (كل شاشة: إضافة الاستيراد + استبدال
+  `InteractiveViewer(minScale: 0.5, maxScale: 3)` بـ `ReportZoomView`):
+  `customer_statement_screen.dart` · `my_financial_statement_screen.dart` ·
+  `account_statement_screen.dart` · `account_group_statement_screen.dart` ·
+  `account_statement_detail_screen.dart` · `worker_statement_screen.dart` ·
+  `worker_work_report_screen.dart` · `worker_group_work_report_screen.dart` ·
+  `my_work_statement_screen.dart`. المكرّر القديم في كشف العميل (`_zoomScale`/`_applyZoom`/
+  `_resetZoom`/`_syncZoomScale` و`dispose`) أُزيل بالكامل (−136 سطراً).
+- `chart_account_model.dart`: `AccountTransactionModel.balance` يقرأ `json['balance'] ?? json['BALANCE']`
+  فقط — أُزيل احتياط `BALANCE_S`/`balance_s` حتى لا يعود العمود لو ظهر في رد قديم.
+- `worker_statement_model.dart`: `balanceS` → **`balance`** (`json['balance'] ?? json['BALANCE']`)،
+  وحُدِّث مستخدماه: `worker_statement_screen.dart` (خلية الرصيد الجاري) و
+  `worker_statement_pdf_builder.dart`.
+- `account_statement_report_table.dart`: أوزان الأعمدة صارت مطابقة لكشف العميل
+  `0.85 / 1.15 / 1.0 / 3.3 / 1.2 / 1.2 / 1.45`، ومقاييس النص في `statementTableMetrics`
+  صارت (ترويسة 9.5/10.5/11.5 · بيانات 8.5/9.5/10.5 · حشو 3.0–4.5 / 1.5–4.0) — أي أن كشف
+  «حسابي المالي» و«حساب مالي» و«ميزان المجموعة» يرثونها تلقائياً.
+- `worker_statement_screen.dart`: نفس الأوزان والأحجام في جدول العامل (كان 0.9/1.1/1.2/2.8…
+  وبيانات 9.5/11/12) فصار الشكل موحّداً مع بقية الكشوفات.
+- `test/features/accounts/account_statement_models_test.dart`: اختبار المفاتيح الكبيرة يقرأ
+  `BALANCE` الآن، وأُضيف اختبار «يتجاهل BALANCE_S» يثبّت العقد الجديد.
+
+### التحقق
+- `flutter analyze` = **No issues found!** · `flutter test` = **295 ناجحاً (5 متجاوزة)**.
+- `vendor/bin/pint --dirty` = **passed** · `vendor/bin/pest` = **157 ناجحاً / 4 متجاوزة**.
+- **تحقق رقمي على القاعدة الحقيقية عبر اتصال Laravel (20 فحصاً، كلها ناجحة):**
+  - حساب **37110001**: 368 سطراً · 340 منها بلا `SUB_DETAILS` ⇒ أخذت بيان القيد الرئيسي ·
+    مجموع الحركات 4,404,400 = `final_balance` · كل رصيد سطر = التراكم الزمني · لا سطر ببيان فارغ.
+  - **كشف حسابي المالي** على نفس الحساب: نفس الأرقام حرفياً (اختلاف المسار لا يغيّر النتيجة).
+  - موظف **50 / حساب 12910127**: 207 سطراً · 67 منها بالـ fallback · 4,131,373 مجموع =
+    `final_balance` · كل الأرصدة مطابقة · لا مفتاح `balance_s` في الرد.
+- **تصحيح توثيقي:** `ALL_TAB_COLUMNS` تثبت أن أعمدة `ENTRY_TYPE` هي
+  `ENTRY_TYPE_NO · ENTRY_TYPE_NAME · SOURCE_ID · SOURCE_NAME`، وأن
+  `et.ETRY_TYPE_NO` تُفشل الاستعلام بـ `ORA-00904` — صُحّحت الملاحظة القديمة في
+  `DBdevloping_history.md` و`db_commends.md`.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 20:54 · **لا commit** (لم يُطلب) · **لا DDL/DML**.

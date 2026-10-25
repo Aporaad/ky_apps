@@ -9,6 +9,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../providers/accounts_provider.dart';
 import '../providers/currency_provider.dart';
@@ -431,9 +432,7 @@ class _AccountStatementDetailScreenState
                 ? const Center(child: CircularProgressIndicator())
                 : transactions.isEmpty
                 ? _buildEmptyState()
-                : InteractiveViewer(
-                    minScale: 0.5,
-                    maxScale: 3,
+                : ReportZoomView(
                     // تمرير طبيعي للصفحة كاملة — بلا A4 مقصوص على الشاشة
                     // Natural full-page scroll — no clipped on-screen A4.
                     child: SingleChildScrollView(

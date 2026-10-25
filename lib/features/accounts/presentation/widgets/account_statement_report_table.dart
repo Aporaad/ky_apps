@@ -38,6 +38,11 @@ const Color kStatementBorderColor = Color(0xFF4B5563);
 /// `customer_statement_screen.dart` (isVeryCompact < 450, isCompact < 650),
 /// so this feature-local table matches the on-screen density of the customer
 /// report exactly at every screen width without touching that feature.
+///
+/// الأرقام مطابقة حرفياً لجدول كشف العميل: أي تعديل هنا يجب أن يُطبَّق هناك أيضاً
+/// حتى يبقى شكل التقارير المالية واحداً على الشاشة وفي PDF.
+/// The numbers mirror the customer report table byte-for-byte; a change here
+/// must be mirrored there so every financial report still looks the same.
 ({double header, double data, double vPad, double hPad}) statementTableMetrics(
   double screenWidth,
 ) {
@@ -45,10 +50,10 @@ const Color kStatementBorderColor = Color(0xFF4B5563);
   final isVeryCompact = screenWidth < 450;
 
   return (
-    header: isVeryCompact ? 8.0 : (isCompact ? 9.5 : 11.0),
-    data: isVeryCompact ? 5.5 : (isCompact ? 9.0 : 10.0),
-    vPad: isVeryCompact ? 3.0 : (isCompact ? 4.0 : 5.5),
-    hPad: isVeryCompact ? 1.0 : (isCompact ? 2.5 : 4.0),
+    header: isVeryCompact ? 9.5 : (isCompact ? 10.5 : 11.5),
+    data: isVeryCompact ? 8.5 : (isCompact ? 9.5 : 10.5),
+    vPad: isVeryCompact ? 3.0 : (isCompact ? 3.5 : 4.5),
+    hPad: isVeryCompact ? 1.5 : (isCompact ? 2.5 : 4.0),
   );
 }
 
@@ -257,14 +262,18 @@ class AccountStatementReportTable extends StatelessWidget {
                 width: 1,
                 style: BorderStyle.solid,
               ),
+              // أوزان الأعمدة مطابقة لجدول كشف العميل: أوسع عمود للبيان،
+              // والأرقام مضغوطة حتى لا تفيض على الشاشات الضيقة.
+              // Column weights mirror the customer report table: the description
+              // gets the widest slot, amounts stay compact.
               columnWidths: const {
-                0: FlexColumnWidth(1), // السند
-                1: FlexColumnWidth(1.1), // النوع
-                2: FlexColumnWidth(1.2), // تأريخه
-                3: FlexColumnWidth(2.8), // البيان
-                4: FlexColumnWidth(1.35), // مدين
-                5: FlexColumnWidth(1.35), // دائن
-                6: FlexColumnWidth(1.4), // الرصيد
+                0: FlexColumnWidth(0.85), // السند
+                1: FlexColumnWidth(1.15), // النوع
+                2: FlexColumnWidth(1.0), // تأريخه
+                3: FlexColumnWidth(3.3), // البيان
+                4: FlexColumnWidth(1.2), // مدين
+                5: FlexColumnWidth(1.2), // دائن
+                6: FlexColumnWidth(1.45), // الرصيد
               },
               defaultVerticalAlignment: TableCellVerticalAlignment.middle,
               children: [
@@ -329,7 +338,11 @@ class AccountStatementReportTable extends StatelessWidget {
                   ],
                 ),
           
-                // أسطر الحركات، والرصيد الجاري لكل سطر مأخوذ مباشرة من BALANCE_S
+                // أسطر الحركات — الرصيد الجاري لكل سطر يحسبه الخادم تراكمياً من
+                // ENTRY_MNT (رصيد افتتاحي + حركة الفترة) ولا يُقرأ من BALANCE_S أبداً.
+                // Movement rows — the per-row running balance is computed server-side
+                // cumulatively from ENTRY_MNT (opening + period movement) and is never
+                // read from BALANCE_S.
                 ...transactions.map((tx) {
                   final debitVal = tx.debit ?? 0.0;
                   final creditVal = tx.credit ?? 0.0;

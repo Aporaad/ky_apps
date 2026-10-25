@@ -111,7 +111,11 @@ class AccountTransactionModel {
         ),
         debit: _parseDouble(json['debit'] ?? json['DEBIT']),
         credit: _parseDouble(json['credit'] ?? json['CREDIT']),
-        balance: _parseDouble(json['balance'] ?? json['BALANCE'] ?? json['BALANCE_S'] ?? json['balance_s']),
+        // الرصيد الجاري يأتي محسوباً من الخادم (`balance`) من مبالغ الحركات.
+        // لا يوجد احتياط لـ `BALANCE_S`: العمود المخزَّن أُلغي من الـ API نهائياً.
+        // The running balance is computed server-side from ENTRY_MNT. There is
+        // deliberately no BALANCE_S fallback — that stored column is gone from the API.
+        balance: _parseDouble(json['balance'] ?? json['BALANCE']),
       );
 }
 

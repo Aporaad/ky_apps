@@ -161,7 +161,7 @@ pw.Widget _table(
             pdfTd(row.details ?? '', align: pw.TextAlign.right),
             pdfTd(formatStatementAmount(row.debit)),
             pdfTd(formatStatementAmount(row.credit)),
-            pdfTd(formatStatementAmount(row.balanceS), bold: true),
+            pdfTd(formatStatementAmount(row.balance), bold: true),
           ]),
         );
       }),

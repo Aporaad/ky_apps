@@ -7,6 +7,7 @@ import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../accounts/data/models/chart_account_model.dart';
 import '../../../accounts/presentation/utils/account_statement_pdf_builder.dart';
@@ -181,9 +182,7 @@ class _MyFinancialStatementScreenState
                     ? _buildErrorState(state.error!)
                     : statementData.transactions.isEmpty
                         ? _buildEmptyState()
-                        : InteractiveViewer(
-                            minScale: 0.5,
-                            maxScale: 3,
+                        : ReportZoomView(
                             child: SingleChildScrollView(
                               padding: const EdgeInsets.symmetric(
                                   vertical: 8, horizontal: 5),

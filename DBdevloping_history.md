@@ -1102,10 +1102,13 @@ SELECT es.ENTRY_NO,
   JOIN ACCOUNTS.ENTRY_SUB  es ON es.ACC_NO  = c.ACC_NO
                              AND es.GIVING  = c.CUST_NO   -- القيد المزدوج: الحساب + العميل
   JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
-  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ETRY_TYPE_NO = em.ENTRY_TYPE_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO
  WHERE c.CUST_NO = :custNo
  ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
--- ملاحظة: اسم عمود النوع في ENTRY_TYPE هو ETRY_TYPE_NO (بلا N) كما في المخطّط الفعلي.
+-- تصحيح (2026-10-25 21:00): عمود النوع في ENTRY_TYPE هو ENTRY_TYPE_NO نفسه الموجود في
+-- ENTRY_MAIN؛ الصيغة ETRY_TYPE_NO (بلا N) كانت مأخوذة من نسخة قاعدة أخرى خلف خادم MCP
+-- وتُفشل الاستعلام بـ ORA-00904 على قاعدة التطبيق. أعمدة ENTRY_TYPE الفعلية:
+-- ENTRY_TYPE_NO · ENTRY_TYPE_NAME · SOURCE_ID · SOURCE_NAME.
 ```
 
 ### التحقق الرقمي (عبر اتصال Laravel لا عبر MCP)
@@ -1119,3 +1122,50 @@ SELECT es.ENTRY_NO,
 **المتبقي بنفس النمط القديم (خارج النطاق):** `AccountController::getAccountStatement`,
 `MyStatementController`, و`WorkerController::statementEmployee/Cutter/Tailor` تقرأ `BALANCE_S` بعد.
 **النموذج:** Qoder · **الزمن:** 2026-10-25 18:03 · لا DDL/DML ولا commit.
+
+---
+
+## [2026-10-25 20:54] - أثر إصلاح الكشوفات الأربعة على القاعدة (قراءة فقط) — Qoder
+
+**لا تغيير في المخطّط:** لا DDL ولا DML. العمل كله في طبقة الاستعلام داخل Laravel، والجداول
+`ENTRY_MAIN` / `ENTRY_SUB` / `ENTRY_TYPE` تُقرأ فقط.
+
+### ما تغيّر في طريقة القراءة
+- **البيان:** `NVL(TRIM(ENTRY_SUB.SUB_DETAILS), ENTRY_MAIN.DETAILS)` — الأولوية للتفصيل الفرعي،
+  وبيان القيد الرئيسي بديل فقط عند الفراغ (NULL أو مسافات). `SUB_DETAILS` نوعه `VARCHAR2` فيأتي
+  مبطّناً، فالـ `TRIM` شرط قبل الحكم بالفراغ.
+- **`ENTRY_SUB.BALANCE_S` لم يُعد يُقرأ في أي كشف** (لا العميل ولا الحساب ولا الشخصي ولا العاملين)،
+  لأنه لقطة على مستوى الحساب كاملاً لا تتبع الترتيب الزمني؛ الرصيد الجاري والنهائي يُشتقّان من
+  `ENTRY_MNT` مرتباً بـ `(ENTRY_DATE, ENTRY_NO, SEQ)`.
+- **خصوصية كل كشف:** العميل يحتاج `ACC_NO + GIVING = CUST_NO` (حساب المراقبة 12310000 مشترك بين
+  آلاف العملاء)، أما كشف الحساب/الشخصي/العاملين فيكفيه `ACC_NO` لأن الحساب يخص طرفاً واحداً.
+
+### أرقام البيئة التي بُني عليها التحقق (قاعدة `.env` = 127.0.0.1:1521/orcl)
+| القياس | القيمة |
+|---|---|
+| `ENTRY_SUB` (سطور) | 422,408 |
+| `ENTRY_MAIN` (قيود) | 150,127 |
+| `CHART_ACC` (حسابات) | 20,954 |
+| `APP_USERS` | 2 |
+| `TAILOR_EMPLOYEES` | 102 |
+| أكبر حسابات `ENTRY_SUB` | 41210001 = 65,199 · 12110001 = 47,740 · 12310000 = 17,968 |
+
+### الحساب المرجعي المستخدم في التحقق
+- **حساب 37110001:** 368 سطراً، منها **340 بلا `SUB_DETAILS`** (أي 92% من البيان يأتي من
+  `ENTRY_MAIN.DETAILS`) — وهو أفضل عيّنة لإثبات أن الـ fallback يعمل لا أن الاستعلام يعيد فراغاً.
+  مجموع `ENTRY_MNT` = **4,404,400** وهو مطابق تماماً لـ `summary.final_balance` و
+  `opening_balance + total_debit - total_credit`، وكل رصيد سطر يطابق التراكم الزمني.
+- **موظف 50 ⇒ حساب 12910127:** 207 سطراً، 67 منها بالـ fallback، مجموع الحركات 4,131,373 =
+  `final_balance`، ولا مفتاح `balance_s` في أي سطر من الرد.
+
+### تصحيح مرجعي مهم: عمود نوع القيد
+```sql
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'ENTRY_TYPE' ORDER BY COLUMN_ID;
+-- ENTRY_TYPE_NO · ENTRY_TYPE_NAME · SOURCE_ID · SOURCE_NAME
+```
+الصيغة `et.ETRY_TYPE_NO` (بلا N) التي وردت في توثيق سابق **خطأ على قاعدة التطبيق** وتُفشل الاستعلام:
+`ORA-00904: "ET"."ETRY_TYPE_NO": invalid identifier` (لا يوجد هذا العمود في `ENTRY_TYPE`).
+الصحيح `et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO` وقد طُبِّق فعلياً في كل الاستعلامات.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 20:54 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.

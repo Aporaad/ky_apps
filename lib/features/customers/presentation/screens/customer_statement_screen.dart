@@ -9,6 +9,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/customer_model.dart';
 import '../../data/models/customer_statement_model.dart';
@@ -193,52 +194,13 @@ class _CustomerStatementScreenState
   DateTime? _toDate;
   bool _showFilterPanel = true;
 
-  // ── التكبير والتصغير ────────────────────────────────────────────────
-  // Zoom state: pinch works out of the box, the buttons below drive the very
-  // same matrix so the report is readable on phones and on wide desktops.
-  static const double _minZoom = 0.5;
-  static const double _maxZoom = 2.5;
-  static const double _zoomStep = 0.15;
-
-  final TransformationController _zoomController = TransformationController();
-  double _zoomScale = 1.0;
-
   @override
   void initState() {
     super.initState();
-    _zoomController.addListener(_syncZoomScale);
     Future.microtask(() {
       _loadData();
     });
   }
-
-  @override
-  void dispose() {
-    _zoomController.removeListener(_syncZoomScale);
-    _zoomController.dispose();
-    super.dispose();
-  }
-
-  /// مزامنة نسبة التكبير مع أي تكبير بالإصبع (Pinch)
-  /// Keep the percentage label in step with pinch gestures.
-  void _syncZoomScale() {
-    if (!mounted) return;
-    final scale = _zoomController.value.getMaxScaleOnAxis();
-    if ((scale - _zoomScale).abs() < 0.01) return;
-    setState(() => _zoomScale = scale.clamp(_minZoom, _maxZoom));
-  }
-
-  /// تطبيق نسبة تكبير محددة
-  /// Apply a specific zoom factor.
-  void _applyZoom(double scale) {
-    final clamped = scale.clamp(_minZoom, _maxZoom);
-    _zoomController.value = Matrix4.identity()..scale(clamped);
-    setState(() => _zoomScale = clamped);
-  }
-
-  /// إعادة العرض إلى 100%
-  /// Back to 100%.
-  void _resetZoom() => _applyZoom(1.0);
 
   void _loadData() {
     final fromStr =
@@ -732,150 +694,53 @@ class _CustomerStatementScreenState
     final openingBalance = (summary['opening_balance'] ?? 0.0) as num;
     final finalBalance = (summary['final_balance'] ?? 0.0) as num;
 
-    return Stack(
-      children: [
-        InteractiveViewer(
-          transformationController: _zoomController,
-          minScale: _minZoom,
-          maxScale: _maxZoom,
-          // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
-          // Natural full-page scroll — footer at content end, no on-screen A4.
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: ReportA4Sheet(
-              orientation: ReportSheetOrientation.portrait,
-              maxPageWidth: 980,
-              // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
-              header: _buildOfficialHeader(),
-              // 2. شريط بيانات العميل والحساب والتواريخ
-              meta: _buildCustomerMetaBar(
-                customerName: displayName,
-                customerCode: displayCode,
-                currency: currency,
-                accountTitle: accountTitle,
-                fromDate: fromDate,
-                toDate: toDate,
-              ),
-              // 3. المتن — الجدول وملخص الأرصدة (قابل للتمرير)
-              body: SingleChildScrollView(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // جدول كشف الحساب
-                    _buildStatementTableLayout(
-                      rows: state.rows,
-                      totalDebit: totalDebit.toDouble(),
-                      totalCredit: totalCredit.toDouble(),
-                      openingBalance: openingBalance.toDouble(),
-                      finalBalance: finalBalance.toDouble(),
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // ملخص الأرصدة أسفل الجدول
-                    _buildBottomBalanceSummary(
-                      openingBalance: openingBalance.toDouble(),
-                      finalBalance: finalBalance.toDouble(),
-                    ),
-                  ],
+    // الغلاف المشترك: تكبير/تصغير بالأزرار والإيماءات مع نسبة حيّة.
+    // Shared zoom shell — buttons plus gestures, with a live percentage.
+    return ReportZoomView(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.portrait,
+          maxPageWidth: 980,
+          // 1. ترويسة كشف الحساب — الشريط الثلاثي الموحد
+          header: _buildOfficialHeader(),
+          // 2. شريط بيانات العميل والحساب والتواريخ
+          meta: _buildCustomerMetaBar(
+            customerName: displayName,
+            customerCode: displayCode,
+            currency: currency,
+            accountTitle: accountTitle,
+            fromDate: fromDate,
+            toDate: toDate,
+          ),
+          // 3. المتن — الجدول وملخص الأرصدة (قابل للتمرير)
+          body: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // جدول كشف الحساب
+                _buildStatementTableLayout(
+                  rows: state.rows,
+                  totalDebit: totalDebit.toDouble(),
+                  totalCredit: totalCredit.toDouble(),
+                  openingBalance: openingBalance.toDouble(),
+                  finalBalance: finalBalance.toDouble(),
                 ),
-              ),
-              // 4. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
-              footer: const ReportSignatureFooter(),
+
+                const SizedBox(height: 14),
+
+                // ملخص الأرصدة أسفل الجدول
+                _buildBottomBalanceSummary(
+                  openingBalance: openingBalance.toDouble(),
+                  finalBalance: finalBalance.toDouble(),
+                ),
+              ],
             ),
           ),
+          // 4. التذييل الرسمي — خانات التوقيع + إشعار 15 يوماً (مثبّت أسفل الورقة)
+          footer: const ReportSignatureFooter(),
         ),
-        // أدوات التكبير/التصغير — تعمل باللمس (Pinch) وبالأزرار على الحاسب
-        // Zoom toolbar — pinch on touch devices, explicit buttons on desktop.
-        Positioned(
-          left: 12,
-          bottom: 12,
-          child: _buildZoomControls(),
-        ),
-      ],
-    );
-  }
-
-  // -------------------------------------------------------------
-  // شريط أدوات التكبير والتصغير
-  // Zoom in / out / reset toolbar with the live percentage
-  // -------------------------------------------------------------
-  Widget _buildZoomControls() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.96),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.12),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _zoomButton(
-            icon: Icons.remove_rounded,
-            tooltip: 'تصغير',
-            onTap:
-                _zoomScale <= _minZoom + 0.001
-                    ? null
-                    : () => _applyZoom(_zoomScale - _zoomStep),
-          ),
-          Container(
-            width: 46,
-            alignment: Alignment.center,
-            child: Text(
-              '${(_zoomScale * 100).round()}%',
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
-          _zoomButton(
-            icon: Icons.add_rounded,
-            tooltip: 'تكبير',
-            onTap:
-                _zoomScale >= _maxZoom - 0.001
-                    ? null
-                    : () => _applyZoom(_zoomScale + _zoomStep),
-          ),
-          Container(
-            width: 1,
-            height: 18,
-            margin: const EdgeInsets.symmetric(horizontal: 2),
-            color: AppColors.border,
-          ),
-          _zoomButton(
-            icon: Icons.fit_screen_rounded,
-            tooltip: 'الحجم الطبيعي',
-            onTap: (_zoomScale - 1.0).abs() < 0.001 ? null : _resetZoom,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _zoomButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback? onTap,
-  }) {
-    return IconButton(
-      icon: Icon(icon, size: 18),
-      tooltip: tooltip,
-      onPressed: onTap,
-      visualDensity: VisualDensity.compact,
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-      color: const Color(0xFF6B2D1B),
-      disabledColor: AppColors.textMuted.withValues(alpha: 0.45),
     );
   }
 

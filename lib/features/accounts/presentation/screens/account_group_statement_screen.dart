@@ -6,6 +6,7 @@ import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/account_group_statement_model.dart';
 import '../../data/models/account_model.dart';
@@ -521,9 +522,7 @@ class _AccountGroupStatementScreenState
       );
     }
 
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 3,
+    return ReportZoomView(
       // تمرير طبيعي للصفحة كاملة مع تذييل في نهاية المحتوى (لا A4 على الشاشة)
       // Natural full-page scroll with the footer at content end (no on-screen A4).
       child: SingleChildScrollView(

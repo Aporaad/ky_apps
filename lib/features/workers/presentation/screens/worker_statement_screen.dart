@@ -11,6 +11,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_model.dart';
 import '../../data/models/worker_statement_model.dart';
@@ -575,9 +576,7 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
             ? rows.sublist(startIndex, endIndex)
             : <WorkerStatementModel>[];
 
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 3,
+    return ReportZoomView(
       // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
       // Natural full-page scroll — footer at content end, no on-screen A4.
       child: SingleChildScrollView(
@@ -789,10 +788,14 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
         final isCompact = screenWidth < 650;
         final isVeryCompact = screenWidth < 450;
 
-        final headerFontSize = isVeryCompact ? 10.0 : (isCompact ? 11.5 : 13.0);
-        final dataFontSize = isVeryCompact ? 9.5 : (isCompact ? 11.0 : 12.0);
-        final cellVPad = isVeryCompact ? 4.0 : (isCompact ? 5.0 : 6.5);
-        final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 3.0 : 5.0);
+        // أحجام النص والحشوات مطابقة لجدولي كشف العميل وكشف الحساب المالي
+        // حتى يبدو شكل التقارير المالية واحداً على كل الشاشات.
+        // Font sizes and paddings mirror the customer and account statement
+        // tables so every financial report looks identical.
+        final headerFontSize = isVeryCompact ? 9.5 : (isCompact ? 10.5 : 11.5);
+        final dataFontSize = isVeryCompact ? 8.5 : (isCompact ? 9.5 : 10.5);
+        final cellVPad = isVeryCompact ? 3.0 : (isCompact ? 3.5 : 4.5);
+        final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 2.5 : 4.0);
 
         return Table(
           border: TableBorder.all(
@@ -800,14 +803,16 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
             width: 1,
             style: BorderStyle.solid,
           ),
+          // أوزان الأعمدة مطابقة لجدول كشف العميل
+          // Column weights mirror the customer statement table.
           columnWidths: const {
-            0: FlexColumnWidth(0.9), // السند
-            1: FlexColumnWidth(1.1), // النوع
-            2: FlexColumnWidth(1.2), // تأريخه
-            3: FlexColumnWidth(2.8), // البيان
-            4: FlexColumnWidth(1.35), // مدين
-            5: FlexColumnWidth(1.35), // دائن
-            6: FlexColumnWidth(1.4), // الرصيد
+            0: FlexColumnWidth(0.85), // السند
+            1: FlexColumnWidth(1.15), // النوع
+            2: FlexColumnWidth(1.0), // تأريخه
+            3: FlexColumnWidth(3.3), // البيان
+            4: FlexColumnWidth(1.2), // مدين
+            5: FlexColumnWidth(1.2), // دائن
+            6: FlexColumnWidth(1.45), // الرصيد
           },
           defaultVerticalAlignment: TableCellVerticalAlignment.middle,
           children: [
@@ -932,7 +937,7 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
                   row.credit > 0
                       ? row.credit
                       : (row.entryMnt < 0 ? row.entryMnt.abs() : 0.0);
-              final balVal = row.balanceS;
+              final balVal = row.balance;
 
               return TableRow(
                 decoration: const BoxDecoration(color: Colors.white),

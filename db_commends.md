@@ -1698,7 +1698,7 @@ SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH
   FROM ALL_TAB_COLUMNS
  WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME IN ('ENTRY_MAIN','ENTRY_TYPE','CUST')
  ORDER BY TABLE_NAME, COLUMN_ID;
--- ENTRY_TYPE يحمل العمود ETRY_TYPE_NO (بلا N) وليس ENTRY_TYPE_NO.
+-- تصحيح (2026-10-25 21:00): العمود هو ENTRY_TYPE_NO وليس ETRY_TYPE_NO — انظر التحقق أدناه.
 ```
 
 ### (2) إثبات أن حساب المراقبة مشترك بين آلاف العملاء (جذر علة «رصيد كل العملاء»)
@@ -1754,7 +1754,7 @@ SELECT es.ENTRY_NO,
   FROM ACCOUNTS.CUST c
   JOIN ACCOUNTS.ENTRY_SUB  es ON es.ACC_NO = c.ACC_NO AND es.GIVING = c.CUST_NO
   JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
-  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ETRY_TYPE_NO = em.ENTRY_TYPE_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO
  WHERE c.CUST_NO = :custNo
  ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
 -- الرصيد والرصيد النهائي يُحسبان في PHP من ENTRY_MNT: الافتتاحي + حركة الفترة.
@@ -1762,3 +1762,119 @@ SELECT es.ENTRY_NO,
 
 **ملفّات تحقق مؤقتة** (`.tmp_statement_check.php`, `.tmp_count_check.php`, `.tmp_verify.php`, `.tmp_v2.php`
 وغيرها) أُنشئت ونُفِّذت ثم **حُذفت جميعًا** بعد التأكد من الأرقام.
+
+---
+
+## [2026-10-25 20:54] - إصلاح البيان/الرصيد في 4 كشوفات: ما نُفِّذ على القاعدة — قراءة فقط — Qoder
+
+**0 DDL · 0 DML** — كل ما يلي استعلامات قراءة فقط، نُفِّذت عبر اتصال Laravel نفسه
+(`127.0.0.1:1521/orcl`) لا عبر خادم MCP (لأن مجموعتَي البيانات مختلفتان).
+
+### (1) فحص حجم القاعدة المرجعية
+```sql
+SELECT COUNT(*) FROM ENTRY_SUB;         -- 422,408
+SELECT COUNT(*) FROM ENTRY_MAIN;        -- 150,127
+SELECT COUNT(*) FROM CHART_ACC;         -- 20,954
+SELECT COUNT(*) FROM APP_USERS;         -- 2
+SELECT COUNT(*) FROM TAILOR_EMPLOYEES;  -- 102
+```
+
+### (2) أكبر الحسابات بعدد السطور (لتفسير سبب بطء الكشوفات الكبيرة)
+```sql
+SELECT * FROM (
+  SELECT ACC_NO, COUNT(*) AS CNT FROM ENTRY_SUB GROUP BY ACC_NO ORDER BY COUNT(*) DESC
+) WHERE ROWNUM <= 10;
+-- 41210001 = 65,199 · 12110001 = 47,740 · 12310000 = 17,968 · 41110001 = 17,275
+-- 12210001 = 12,420 · 38310001 = 9,058 · 12110005 = 8,446 · 12210005 = 6,834
+```
+
+### (3) اختيار حساب العيّنة (الأكثر سطوراً ببيان فرعي فارغ)
+```sql
+SELECT * FROM (
+  SELECT es.ACC_NO, COUNT(*) AS CNT,
+         SUM(CASE WHEN TRIM(es.SUB_DETAILS) IS NULL THEN 1 ELSE 0 END) AS BLANK
+    FROM ENTRY_SUB es
+   GROUP BY es.ACC_NO
+  HAVING COUNT(*) BETWEEN 3 AND 400
+   ORDER BY SUM(CASE WHEN TRIM(es.SUB_DETAILS) IS NULL THEN 1 ELSE 0 END) DESC, COUNT(*) ASC
+) WHERE ROWNUM = 1;
+-- 37110001: 368 سطراً منها 340 بلا SUB_DETAILS ⇒ عيّنة مثالية لإثبات أن الـ fallback يعمل.
+```
+
+### (4) اختيار موظف العيّنة (الأكبر حركةً لا الأكثر سطوراً فقط)
+```sql
+SELECT * FROM (
+  SELECT te.EMP_NO, te.ACC_NO, COUNT(*) AS CNT, SUM(ABS(es.ENTRY_MNT)) AS VOL
+    FROM TAILOR_EMPLOYEES te
+    JOIN ENTRY_SUB es ON es.ACC_NO = te.ACC_NO
+   WHERE te.ACC_NO IS NOT NULL
+   GROUP BY te.EMP_NO, te.ACC_NO
+   ORDER BY SUM(ABS(es.ENTRY_MNT)) DESC
+) WHERE ROWNUM = 1;
+-- موظف 50 ⇒ حساب 12910127 (207 سطراً · 67 بالـ fallback · مجموع 4,131,373)
+```
+
+### (5) تصحيح مرجعي: أعمدة `ENTRY_TYPE` (نفي `ETRY_TYPE_NO`)
+```sql
+SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'ENTRY_TYPE' ORDER BY COLUMN_ID;
+-- ENTRY_TYPE_NO (NUMBER) · ENTRY_TYPE_NAME (VARCHAR2) · SOURCE_ID (NUMBER) · SOURCE_NAME (VARCHAR2)
+SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'ENTRY_MAIN' ORDER BY COLUMN_ID;
+-- ENTRY_NO · DETAILS · ENTRY_DATE · ENTRY_TYPE_NO
+
+-- اختبار إيجابي:
+SELECT COUNT(*) FROM ENTRY_MAIN em JOIN ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO;
+-- 150,127  ⇒ كل القيود مرتبطة بنوع صحيح
+
+-- اختبار سلبي:
+SELECT COUNT(*) FROM ENTRY_MAIN em JOIN ENTRY_TYPE et ON et.ETRY_TYPE_NO = em.ENTRY_TYPE_NO;
+-- ORA-00904: "ET"."ETRY_TYPE_NO": invalid identifier (Position 64)
+-- ⇒ الصيغة الواردة في توثيق سابق (ETRY_TYPE_NO بلا N) غير صحيحة على قاعدة التطبيق.
+```
+
+### (6) استعلام التحقق الرقمي (يُعاد تنفيذه مستقلّاً ويُقارن برد الـ API)
+```sql
+SELECT es.ENTRY_NO, es.SEQ, es.ENTRY_MNT,
+       NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS,
+       TRIM(es.SUB_DETAILS)   AS SUB_DETAILS,
+       em.DETAILS             AS MAIN_DETAILS
+  FROM ENTRY_SUB es
+  JOIN ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+ WHERE es.ACC_NO = :acc
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+-- التراكم في PHP يُقارن مع `balance` لكل سطر ومع `final_balance` (= 4,404,400 للحساب 37110001).
+```
+
+### (7) الاستعلامات المعتمدة في طبقة التطبيق بعد الإصلاح
+```sql
+-- AccountController::getAccountStatement()  (كشف حساب مالي + كشف الشجرة)
+SELECT es.ENTRY_NO,
+       SUBSTR(TO_CHAR(es.ENTRY_NO),1,1) || SUBSTR(TO_CHAR(es.ENTRY_NO),7,4) AS SUB_ENTRY_NO,
+       TO_CHAR(em.ENTRY_DATE,'DD/MM/YYYY') AS ENTRY_DATE,
+       TO_CHAR(em.ENTRY_DATE,'YYYY-MM-DD') AS RAW_DATE,
+       et.ENTRY_TYPE_NAME,
+       NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS,
+       es.ENTRY_MNT, es.SEQ_PRICE
+  FROM ENTRY_MAIN em, ENTRY_SUB es, ENTRY_TYPE et
+ WHERE es.ACC_NO = :acc_no
+   AND es.ENTRY_NO = em.ENTRY_NO
+   AND em.ENTRY_TYPE_NO = et.ENTRY_TYPE_NO
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+
+-- WorkerController::fetchStatement()  (كشف جاري العاملين) — نفس الأعمدة بلا SEQ_PRICE
+SELECT es.ENTRY_NO, /* SUB_ENTRY_NO, ENTRY_DATE, RAW_DATE */ et.ENTRY_TYPE_NAME,
+       NVL(TRIM(es.SUB_DETAILS), em.DETAILS) AS DETAILS, es.ENTRY_MNT
+  FROM ACCOUNTS.ENTRY_SUB es
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO
+ WHERE es.ACC_NO = :acc_no
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+
+-- MyStatementController::financialStatement() — نفس استعلام AccountController على
+-- ACC_NO المقروء من صف المستخدم المصادق عليه (بلا أي بارامتر من العميل).
+-- في الثلاثة: لا يوجد `es.BALANCE_S` إطلاقًا، والرصيد يُحسب في PHP من ENTRY_MNT.
+```
+
+**ملفّات تحقق مؤقتة** (`verify_statements.php`, `diag_db.php`, `diag_entry_type.php`) أُنشئت ونُفِّذت
+ثم **حُذفت جميعًا** بعد ظهور النتيجة `20 نجح / 0 فشل`.

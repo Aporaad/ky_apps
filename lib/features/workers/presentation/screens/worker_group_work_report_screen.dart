@@ -9,6 +9,7 @@ import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
 import '../../../../core/widgets/report_signature_footer.dart';
+import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../data/models/worker_group_work_report_model.dart';
 import '../../data/models/worker_model.dart';
@@ -533,9 +534,7 @@ class _WorkerGroupWorkReportScreenState
       ref.watch(appConfigNotifierProvider).config,
     );
 
-    return InteractiveViewer(
-      minScale: 0.5,
-      maxScale: 3,
+    return ReportZoomView(
       // تمرير طبيعي للصفحة كاملة — لا ارتفاع A4 مقصوص ولا تجميد للتذييل
       // Natural full-page scroll — no clipped A4 height, no frozen footer.
       child: SingleChildScrollView(

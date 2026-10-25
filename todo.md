@@ -1539,3 +1539,19 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
 - [x] **التكبير/التصغير:** شريط أدوات عائم (− نسبة٪ + إرجاع) يقود `TransformationController` نفسه المستخدم في Pinch، بمدى 50%–250%.
 - [x] **تصحيح جانبي:** الفترات السريعة ومنتقي التاريخ كانا يستخدمان تاريخاً مثبتاً (2026-09-08) → صارا `DateTime.now()`.
 - [x] **اختبارات:** `flutter analyze` = No issues found! · `flutter test` = 294 All tests passed · Pint passed · Pest = 157 passed / 4 skipped.
+
+---
+
+## 2026-10-25 (20:54) — إصلاح البيان والرصيد والرصيد النهائي في 4 كشوفات + تكبير/تصغير موحّد (Qoder)
+
+- [x] **مساعد مشترك:** `ArabicEncoding::normalizeStatementText()` = `TRIM` + إصلاح ترميز Windows-1256 + طيّ المسافات؛ بديل لدالة كانت مكرّرة داخل `CustomerController`.
+- [x] **كشف حساب مالي** `AccountController::getAccountStatement`: `NVL(TRIM(es.SUB_DETAILS), em.DETAILS)` · حذف `es.BALANCE_S` من الاستعلام · رصيد تراكمي من `ENTRY_MNT` · نهائي = افتتاحي + حركة الفترة · مفتاح السطر `balance`.
+- [x] **كشف حساب مالي من شجرة الحسابات:** نفس المسار (`AccountStatementScreen` للأوراق) + `AccountGroupStatementScreen` للعُقد البنيوية (رصيده أصلاً من الحركات) → أُضيف لهما التكبير.
+- [x] **كشف حسابي المالي** `MyStatementController::financialStatement`: نفس المعالجة (بيان + رصيد + نهائي) بلا أي عمود مخزَّن.
+- [x] **كشف جاري العاملين** `WorkerController::fetchStatement`: استعلام ANSI JOINs، بيان بالـ fallback، مفتاح `balance` بدل `balance_s`، والنهائي من الحركة.
+- [x] **موديلات Flutter:** `AccountTransactionModel.balance` يقرأ `balance`/`BALANCE` فقط (أُزيل fallback الـ `BALANCE_S`) · `WorkerStatementModel.balanceS → balance` وتحديث الشاشة وباني PDF.
+- [x] **تكبير/تصغير موحّد:** مكوّن جديد `lib/core/widgets/report_zoom_view.dart` (شريط عائم − ٪ + ↺ بمدى 50%–250% يقود نفس `TransformationController` المستخدم في Pinch) وطُبِّق على **8 تقارير**: كشف العميل · كشف حسابي المالي · كشف حساب مالي · كشف مجموعة الحسابات · كشف جاري العاملين · كشف العمل الفردي · كشف العمل الجماعي · كشف العمل من «حسابي».
+- [x] **تنسيق الجداول:** توحيد أوزان الأعمدة (`0.85/1.15/1.0/3.3/1.2/1.2/1.45`) وأحجام النص (بيانات 8.5/9.5/10.5) بين كشف الحساب المالي وكشف العاملين وكشف العميل.
+- [x] **اختبار:** تحديث `account_statement_models_test.dart` للعقد الجديد + اختبار جديد يثبت تجاهل `BALANCE_S`.
+- [x] **التحقق:** `flutter analyze` = No issues found! · `flutter test` = 295 ناجحاً (5 متجاوزة) · Pint passed · Pest = 157 ناجحاً / 4 متجاوزة · تحقق رقمي 20/20 على بيانات حقيقية.
+- [x] **تصحيح توثيقي:** عمود نوع القيد هو `ENTRY_TYPE_NO` لا `ETRY_TYPE_NO` (أُثبت بـ ORA-00904) وصُحّح في `DBdevloping_history.md` و`db_commends.md`.
