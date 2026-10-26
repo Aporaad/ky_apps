@@ -71,6 +71,10 @@ class AuthState {
   /// Current session deadline **on the device clock**; null means nothing was asserted about expiry.
   final DateTime? sessionExpiresAt;
 
+  /// آخر اسم مستخدم نجح تسجيله على هذا الجهاز — لتعبئة حقل الدخول تلقائياً عند فتح التطبيق
+  /// The last successfully signed-in username on this device, used to prefill the login field.
+  final String? lastUsername;
+
   const AuthState({
     this.isAuthenticated = false,
     this.isLoading = false,
@@ -83,6 +87,7 @@ class AuthState {
     this.permissions = const {},
     this.isAdmin = false,
     this.sessionExpiresAt,
+    this.lastUsername,
   });
 
   /// هل يملك المستخدم هذه الصلاحية؟ — نفس قواعد `PermissionResolver::can` حرفياً
@@ -120,6 +125,9 @@ class AuthState {
     // الحقل الجديد وحده يحتاج خدعة الإغلاق: تمرير null معناه «امسح الموعد» لا «أبقِ القديم»
     // Only the new field needs the closure trick: passing null must clear it, not keep the old one.
     DateTime? Function()? sessionExpiresAt,
+    // نفس الخدعة لاسم المستخدم: زر المسح يجب أن يستطيع تصفيره صراحةً
+    // The same trick for the username: the clear button must be able to null it explicitly.
+    String? Function()? lastUsername,
   }) {
     return AuthState(
       isAuthenticated: isAuthenticated ?? this.isAuthenticated,
@@ -134,6 +142,7 @@ class AuthState {
       isAdmin: isAdmin ?? this.isAdmin,
       sessionExpiresAt:
           sessionExpiresAt != null ? sessionExpiresAt() : this.sessionExpiresAt,
+      lastUsername: lastUsername != null ? lastUsername() : this.lastUsername,
     );
   }
 
@@ -167,6 +176,23 @@ class AuthState {
 /// instant of the response; without it (an older API build) the clocks are assumed to agree.
 DateTime? _resolveDeadline(String? raw, [String? serverNow]) =>
     SessionClock.resolve(deadlineText: raw, serverNowText: serverNow);
+
+/// اسم المستخدم الذي يُحفظ لتعبئة حقل الدخول — قاعدة واحدة يقرأها كل مسار دخول
+/// The username that gets remembered for the login prefill — one rule shared by every sign-in path.
+///
+/// الاسم الرسمي العائد من الخادم يفوز لأنه ما يطابقه استعلام الدخول فعلياً (`USER_NAME_EN` أولاً)،
+/// بينما ما كتبه المستخدم قد يكون الاسم العربي أو معرّفه الرقمي. وإن عاد الرسمي فارغاً يُستخدم
+/// المدخل كما هو، ومسافات فقط تعني «لا شيء يُحفظ».
+/// The canonical name from the server wins because that is what the login query matches first
+/// (`USER_NAME_EN`), while what the user typed may be the Arabic name or a numeric id. When the
+/// canonical value is empty the typed input is kept, and whitespace alone means nothing to save.
+String? usernameToRemember({required String? canonical, required String typed}) {
+  final official = canonical?.trim() ?? '';
+  if (official.isNotEmpty) return official;
+
+  final entered = typed.trim();
+  return entered.isEmpty ? null : entered;
+}
 
 /// إدارة حالة المصادقة عبر Riverpod Notifier الحديث
 class AuthNotifier extends Notifier<AuthState> {
@@ -275,6 +301,12 @@ class AuthNotifier extends Notifier<AuthState> {
 
     await refreshBiometricStatus();
 
+    // آخر اسم مستخدم محفوظ على الجهاز — يُقرأ هنا لا في شاشة الدخول، لأن شاشة البداية تنتظر
+    // ثانيتين قبل الانتقال، فتصل القيمة إلى الحقل متزامنةً بلا وميض «فارغ ثم يُملأ».
+    // The remembered username is read here rather than in the login screen: the splash waits two
+    // seconds before handing over, so the value reaches the field synchronously, with no flicker.
+    final lastUsername = await _storage.getLastUsername();
+
     final loggedIn = await _repository.isLoggedIn();
     if (loggedIn) {
       final cachedUser = await _repository.getCachedUser();
@@ -299,6 +331,7 @@ class AuthNotifier extends Notifier<AuthState> {
         selectedUserType: state.selectedUserType,
         biometricCapability: state.biometricCapability,
         isBiometricEnabled: state.isBiometricEnabled,
+        lastUsername: lastUsername,
       ).withPermissions(snapshot, deadlineOverride: restoredDeadline);
 
       // انتهت أثناء إغلاق التطبيق؟ تُغلق محلياً قبل أي طلب: الموعد استُعيد من التخزين المشفّر،
@@ -323,6 +356,9 @@ class AuthNotifier extends Notifier<AuthState> {
         permissions: const {},
         isAdmin: false,
         sessionExpiresAt: () => null,
+        // الاسم المحفوظ يبقى ظاهراً في شاشة الدخول حتى لو لم تكن هناك جلسة
+        // The remembered username stays available to the login screen even with no session.
+        lastUsername: () => lastUsername,
       );
     }
   }
@@ -373,11 +409,18 @@ class AuthNotifier extends Notifier<AuthState> {
 
     if (response.success && response.user != null) {
       await refreshBiometricStatus();
+      // الاسم يُحفظ بعد النجاح فقط: محاولة فاشلة لا تُبدّل ما هو محفوظ على الجهاز
+      // The name is remembered only after success: a failed attempt never overwrites the stored one.
+      final remembered = await _rememberUsername(
+        canonical: response.user!.username,
+        typed: username,
+      );
       state = state.copyWith(
         isAuthenticated: true,
         isLoading: false,
         user: response.user,
         errorMessage: null,
+        lastUsername: () => remembered,
       ).withPermissions(_snapshotFrom(response.user!));
       return true;
     } else {
@@ -434,12 +477,20 @@ class AuthNotifier extends Notifier<AuthState> {
     );
 
     if (response.success && response.user != null) {
+      // دخول بالبصمة لا يمر بحقل الاسم، لكن الاسم المحفوظ يجب أن يبقى مطابقاً لصاحب الجلسة
+      // Biometric sign-in skips the username field, yet the stored name must still match the
+      // account that just signed in — otherwise the next login prefills the previous user.
+      final remembered = await _rememberUsername(
+        canonical: response.user!.username,
+        typed: '',
+      );
       state = state.copyWith(
         isAuthenticated: true,
         isLoading: false,
         isBiometricLoading: false,
         user: response.user,
         errorMessage: null,
+        lastUsername: () => remembered,
       ).withPermissions(_snapshotFrom(response.user!));
       return true;
     } else {
@@ -453,6 +504,35 @@ class AuthNotifier extends Notifier<AuthState> {
     }
   }
 
+  /// حفظ اسم المستخدم لتعبئة حقل الدخول في المرة القادمة — الكتابة والحالة في مكان واحد
+  /// Persist the username for the next login prefill, keeping the write and the state in one place.
+  ///
+  /// يُعيد القيمة التي حُفظت فعلاً حتى يضعها المستدعي في الحالة بنفسه؛ و`null` تعني «لا شيء
+  /// صالح للحفظ» فيُمسح المفتاح بدل الإبقاء على اسم قديم مضلِّل.
+  /// Returns the value actually stored so the caller can put it in the state; `null` means there was
+  /// nothing worth saving, in which case the key is cleared rather than left stale.
+  Future<String?> _rememberUsername({
+    required String? canonical,
+    required String typed,
+  }) async {
+    final value = usernameToRemember(canonical: canonical, typed: typed);
+
+    if (value == null) {
+      await _storage.deleteLastUsername();
+      return null;
+    }
+
+    await _storage.saveLastUsername(value);
+    return value;
+  }
+
+  /// نسيان الاسم المحفوظ (زر المسح داخل حقل اسم المستخدم) — الجهاز المشترك يبدأ نظيفاً
+  /// Forget the remembered username (the login field's clear button), so a shared device starts clean.
+  Future<void> forgetLastUsername() async {
+    await _storage.deleteLastUsername();
+    state = state.copyWith(lastUsername: () => null);
+  }
+
   /// تسجيل الخروج
   /// Log out: the session ends, and so does every cached grant with it.
   Future<void> logout() async {
@@ -463,6 +543,9 @@ class AuthNotifier extends Notifier<AuthState> {
       selectedUserType: state.selectedUserType,
       biometricCapability: state.biometricCapability,
       isBiometricEnabled: state.isBiometricEnabled,
+      // الاسم المحفوظ يُنقل مع الحالة الجديدة، وإلا لم يظهر إلا بعد إعادة تشغيل التطبيق
+      // The remembered name travels with the fresh state; otherwise it only appears after a restart.
+      lastUsername: state.lastUsername,
     );
   }
 
@@ -483,6 +566,9 @@ class AuthNotifier extends Notifier<AuthState> {
       selectedUserType: state.selectedUserType,
       biometricCapability: state.biometricCapability,
       isBiometricEnabled: state.isBiometricEnabled,
+      // نفس السبب: الخروج الإجباري لا يطمس آخر اسم دخول ناجح
+      // Same reason: a forced logout never erases the last successful username.
+      lastUsername: state.lastUsername,
       // `reason` ظاهري بحت: القرار وأثره واحدان، والفرق فقط أن المستخدم يرى سبب الشاشة
       // `reason` is display-only: the decision and its effect are identical, the difference is that
       // the user is told why the login screen appeared.

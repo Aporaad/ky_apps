@@ -81,8 +81,8 @@ class _AccountStatementDetailScreenState
     final picked = await showDatePicker(
       context: context,
       initialDate: (isFrom ? _fromDate : _toDate) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2030),
+      firstDate:  DateTime(DateTime.now().year-5),
+      lastDate: DateTime(DateTime.now().year+5),
     );
     if (picked != null) {
       setState(() {

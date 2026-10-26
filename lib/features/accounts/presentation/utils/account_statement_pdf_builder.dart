@@ -75,6 +75,7 @@ pw.Widget _metaSection(
               pdfArabic('الحساب: [$accNo] $accName'),
               style: const pw.TextStyle(fontSize: 10),
               textDirection: kPdfShapedTextDirection,
+              textAlign : pw.TextAlign.right
             ),
           ),
           if (statement.currency != null && statement.currency!.isNotEmpty)
@@ -82,6 +83,7 @@ pw.Widget _metaSection(
               pdfArabic(statement.currency!),
               style: const pw.TextStyle(fontSize: 10),
               textDirection: kPdfShapedTextDirection,
+              textAlign : pw.TextAlign.right
             ),
         ],
       ),

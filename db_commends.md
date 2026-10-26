@@ -1878,3 +1878,270 @@ SELECT es.ENTRY_NO, /* SUB_ENTRY_NO, ENTRY_DATE, RAW_DATE */ et.ENTRY_TYPE_NAME,
 
 **ملفّات تحقق مؤقتة** (`verify_statements.php`, `diag_db.php`, `diag_entry_type.php`) أُنشئت ونُفِّذت
 ثم **حُذفت جميعًا** بعد ظهور النتيجة `20 نجح / 0 فشل`.
+
+---
+
+## [2026-10-25 22:57] تقادم `CHART_ACC.BALANCE` — كل الأوامر قراءة فقط · Qoder Agent
+
+**الزمن:** 2026-10-25 22:57 · **النموذج:** Qoder · **0 DDL · 0 DML · لا commit**.
+كل ما يلي نُفِّذ عبر إقلاع Laravel (`DB::connection('oracle')`) داخل ملفّي تحقق مؤقتين **حُذفا بعد النتيجة**:
+`diag_balances.php` (إثبات التقادم) و`verify_group_statement.php` (التحقق الرقمي 112/112).
+
+### (1) إثبات أن `CHART_ACC.BALANCE` لقطة متقادمة — تجميعي على كل الحسابات
+```sql
+-- لكل حساب: المخزّن مقابل صافي الحركات، ثم تصنيف الفروق
+SELECT c.ACC_NO,
+       c.BALANCE                            AS STORED,
+       NVL(SUM(es.ENTRY_MNT), 0)            AS LEDGER,
+       COUNT(es.ENTRY_MNT)                  AS MOVEMENTS
+  FROM CHART_ACC c
+  LEFT JOIN ENTRY_SUB es ON es.ACC_NO = c.ACC_NO
+ GROUP BY c.ACC_NO, c.BALANCE
+ ORDER BY c.ACC_NO;
+-- النتيجة: 20,954 حساباً · 19,198 مخزّنها غير صفر · 19,126 تخالف الحركات ·
+--          1,162 لها حركات ومخزّنها = 0 · تطابق تام لواحد فقط (36110007) — مصادفة.
+```
+
+### (2) مثالان موثّقان للمقارنة
+```sql
+SELECT ACC_NO, BALANCE AS STORED FROM CHART_ACC WHERE ACC_NO IN (41210001, 33110003);
+-- 41210001 →  −1,493,000,510.00      ·  33110003 →  1,944,519,285.84
+
+SELECT ACC_NO, SUM(ENTRY_MNT) AS LEDGER, COUNT(*) AS CNT, COUNT(ENTRY_MNT) AS NON_NULL
+  FROM ENTRY_SUB WHERE ACC_NO IN (41210001, 33110003) GROUP BY ACC_NO;
+-- 41210001 →  −1,801,753,216.78      ·  33110003 →  6,541,659.48
+-- ⇒ المخزّن لا يطابق الحساب في أي من الحالتين.
+```
+
+### (3) التراكم السنوي (يُثبت أن المخزّن قيمة تاريخية لا رصيداً حالياً)
+```sql
+SELECT TO_CHAR(em.ENTRY_DATE,'YYYY') AS YR,
+       SUM(es.ENTRY_MNT)             AS NET
+  FROM ENTRY_SUB es
+  JOIN ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+ WHERE es.ACC_NO = 41210001
+ GROUP BY TO_CHAR(em.ENTRY_DATE,'YYYY')
+ ORDER BY 1;
+-- 2023 → −348,326,003.00 · 2024 → −756,119,835.00 ·
+-- 2025 → −1,311,157,100.70 · 2026 → −1,801,753,216.78
+-- التراكم بعد 2026 = الرصيد النهائي، ولا يوافقه المخزّن (−1,493,000,510).
+```
+
+### (4) استعلام ميزان المجموعة بعد الإصلاح (مرور واحد ⇒ رصيدان)
+```sql
+-- $periodCond = '1 = 1' ثم يُلحق به شرطا التاريخ إن وُجدا (بارامتران :from_date / :to_date)
+-- أعمدة بلا تاريخ = الرصيد النهائي · أعمدة بالشرط = رصيد الفترة
+SELECT c.ACC_NO, c.ACC_NAME,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     AND es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_DEBIT,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     AND es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END), 0) AS LOCAL_CREDIT,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     AND es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END), 0) AS FOREIGN_DEBIT,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     AND es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END), 0) AS FOREIGN_CREDIT,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_NET,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS FOREIGN_NET,
+       NVL(SUM(CASE WHEN (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_NET_ALL,      -- النهائي
+       NVL(SUM(CASE WHEN cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS FOREIGN_NET_ALL,     -- النهائي
+       MAX(CASE WHEN cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1 THEN cc.CODE END) AS FOREIGN_CUR_CODE
+  FROM CHART_ACC c
+  LEFT JOIN (ENTRY_SUB es INNER JOIN ENTRY_MAIN em ON es.ENTRY_NO = em.ENTRY_NO)
+         ON es.ACC_NO = c.ACC_NO
+  LEFT JOIN CUR_PRICE cp ON cp.SEQ = es.SEQ_PRICE
+  LEFT JOIN CUR_CODE  cc ON cc.CUR_NO = cp.CUR_NO
+ WHERE c.GROUP_ID = :group_id              -- أو شرط ACC_PART / ACC_SUB / ACC_NO
+ GROUP BY c.ACC_NO, c.ACC_NAME             -- بلا c.BALANCE
+ ORDER BY c.ACC_NO;
+-- balance = LOCAL_NET_ALL + FOREIGN_NET_ALL · period_balance = LOCAL_NET + FOREIGN_NET
+```
+ملاحظة مؤكَّدة على البيانات: حركات العملة المحلية تُبقي `SEQ_PRICE` فارغاً، وحركات العملات الأجنبية وحدها
+تحمل `SEQ_PRICE` مرتبطاً بصف في `CUR_PRICE` — لذلك «لا صف CUR_PRICE» يعني محلية لا مجهولة.
+
+### (5) استعلام رصيد الحساب المالي الظاهر بجانب الحساب (كل قوائم الاختيار)
+```sql
+-- AccountController::getChartAccounts(): عمود BALANCE أُزيل من SELECT، والرصيد في PHP
+SELECT ACC_NO, ACC_NAME, TO_CHAR(ACC_DATE,'YYYY-MM-DD') AS ACC_DATE,
+       SEQ, GROUP_ID, LIMITED_BALANCE, STOPPING_ACC
+  FROM CHART_ACC
+ WHERE ...                                -- search / group_id
+ ORDER BY ACC_NO;                         -- ثم: net لكل ACC_NO من ENTRY_SUB بلا تواريخ
+
+-- ثم لكل صفحة (مفصولة بـ 900 رقم لتفادي حدّ IN في أوراكل):
+SELECT ACC_NO, SUM(ENTRY_MNT) AS NET
+  FROM ENTRY_SUB
+ WHERE ACC_NO IN (:chunk)
+ GROUP BY ACC_NO;
+```
+
+### (6) استعلام كشف حساب مالي بعد الإصلاح
+```sql
+-- AccountController::getAccountStatement() / MyStatementController::financialStatement()
+SELECT ACC_NO, ACC_NAME, GROUP_ID FROM CHART_ACC WHERE ACC_NO = :no;   -- بلا BALANCE
+-- account.balance = تراكم ENTRY_MNT لكل سطور الحساب قبل أي فلتر تاريخ:
+SELECT NVL(SUM(ENTRY_MNT), 0) AS LEDGER FROM ENTRY_SUB WHERE ACC_NO = :no;
+-- 41210001 ⇒ −1,801,753,216.78 (وهو نفسه الذي يُعرض بجانب الحساب في القوائم)
+```
+
+### (7) نتيجة التحقق الرقمي (`verify_group_statement.php`)
+```
+scope group_id = 7 (26 accounts) · rows returned: 26
+chart[41210001] balance=-1801753216.78  ledger=-1801753216.78  stored=-1493000510
+statement account.balance=-1801753216.78  ledger=-1801753216.78
+=== 112 passed / 0 failed ===
+```
+ثم **حُذف** `diag_balances.php` و`verify_group_statement.php` بعد ظهور النتيجة.
+
+---
+
+## [2026-10-26 00:48] — قياس النطاقات + ترقيم ميزان المجموعة (Qoder · قراءة فقط)
+
+كل ما يلي **قراءة فقط**: `SELECT` واحدة بعد الأخرى، لا `INSERT` ولا `UPDATE` ولا `DDL`.
+
+### (1) عدد الحسابات بحسب أوّل ثلاثة أرقام من رقم الحساب
+
+```sql
+SELECT SUBSTR(TO_CHAR(ACC_NO), 1, 3) AS PART, COUNT(*) AS CNT
+  FROM CHART_ACC
+ GROUP BY SUBSTR(TO_CHAR(ACC_NO), 1, 3)
+ ORDER BY 1;
+```
+
+النتيجة (بعد تجميعها بحسب الحساب الفرعي):
+
+```
+ACC_SUB = 11                                  →    23
+ACC_SUB = 12 : 121=10 · 122=15 · 123=20,469
+               124=5 · 127=48 · 128=8 · 129=219  → 20,774
+الإجمالي العام                                 → 20,954
+```
+
+الحساب الجزئي `123` وحده = **98.6%** من الشجرة، وهو النطاق الذي كان يقتل التطبيق.
+
+### (2) قالب الترقيم المستخدم (Oracle 11g — بلا `OFFSET … FETCH`)
+
+```sql
+-- الصفحة: offset = (:page - 1) * :limit، و max_row = offset + limit
+SELECT * FROM (
+    SELECT a.*, ROWNUM AS RN
+      FROM (
+            -- الاستعلام المجمّع نفسه (نفس أعمدة الميزان و$periodCond)
+            SELECT c.ACC_NO, c.ACC_NAME, …
+              FROM CHART_ACC c
+              LEFT JOIN ( … ENTRY_SUB … ) es ON es.ACC_NO = c.ACC_NO
+              LEFT JOIN CUR_PRICE cp ON cp.SEQ = es.SEQ_PRICE
+              LEFT JOIN CUR_CODE  cc ON cc.CUR_NO = cp.CUR_NO
+             WHERE SUBSTR(TO_CHAR(c.ACC_NO), 1, 3) IN ('120',…,'129')
+             GROUP BY c.ACC_NO, c.ACC_NAME
+             ORDER BY c.ACC_NO              -- الترتيب داخل الطبقة الداخلية
+           ) a
+     WHERE ROWNUM <= :max_row
+) WHERE RN > :offset;
+```
+
+`ORDER BY` داخل الاستعلام المجمّع لأن `ROWNUM` يُمنح قبل الترتيب في الطبقات الخارجية.
+
+### (3) إجماليات النطاق كاملاً (استعلام واحد · الصفحة الأولى فقط)
+
+```sql
+SELECT COUNT(*)                                     AS TOTAL_ROWS,
+       NVL(SUM(LOCAL_DEBIT), 0)                      AS LOCAL_DEBIT,
+       NVL(SUM(LOCAL_CREDIT), 0)                     AS LOCAL_CREDIT,
+       NVL(SUM(FOREIGN_DEBIT), 0)                    AS FOREIGN_DEBIT,
+       NVL(SUM(FOREIGN_CREDIT), 0)                   AS FOREIGN_CREDIT,
+       NVL(SUM(LOCAL_NET_ALL + FOREIGN_NET_ALL), 0)  AS FINAL_BALANCE,
+       NVL(SUM(LOCAL_NET + FOREIGN_NET), 0)          AS PERIOD_BALANCE
+  FROM ( -- نفس الاستعلام المجمّع أعلاه بلا طبقة ROWNUM
+       ) t;
+```
+
+### (4) التحقق من الإجماليات بمقارنة مباشرة مع الحركات
+
+```sql
+SELECT COUNT(*) AS CNT, NVL(SUM(es.ENTRY_MNT), 0) AS NET
+  FROM CHART_ACC c
+  JOIN ENTRY_SUB es ON es.ACC_NO = c.ACC_NO
+ WHERE SUBSTR(TO_CHAR(c.ACC_NO), 1, 3) IN
+       ('120','121','122','123','124','125','126','127','128','129');
+```
+
+### (5) نتيجة التحقق على القاعدة الحقيقية (`_tmp_check_page.php` — ثم حُذف)
+
+```
+page1: 2.58s rows=500
+  OK   page1 meta.total = 20774
+  OK   page1 rows = 500
+  OK   page1 has_more
+  OK   page1 total_pages = 42
+  OK   page2 rows = 500                     (أول acc_no > آخر acc_no في الأولى)
+  OK   page2 totals zeroed                  (include_totals=0)
+  OK   last page < 500 rows
+  OK   last page has_more=false
+full:  3.95s rows=20774
+  OK   full export returns 20774 rows       (limit=0 = بلا ترقيم)
+  OK   sum(row balances) == SUM(ENTRY_MNT)
+  OK   totals.balance == sum(rows)
+  OK   group 7 pages fine
+=== 13 passed / 0 failed ===
+```
+
+الاستنتاجان المهمان من القاعدة نفسها:
+- **الإجماليات لا تُجمع بين الصفحات** — استعلام `(3)` يعطي إجمالي النطاق كاملاً في الصفحة الأولى، وجمع
+  إجمالي كل صفحة كان سيضاعف الرقم.
+- **`limit = 0` يعني «كل الصفوف»** — استُخدم لمسار التصدير الكامل فقط، ويُقصّ أي `limit` موجب عند **2000**
+  داخل الخادم حتى لا يُساء استعماله.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-26 00:48 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+---
+
+## 2026-10-26 03:11 — استعلامات التحقق: هل يعيد الكشف كل صفوف الفترة؟
+
+**النموذج:** Qoder · **النوع:** قراءة فقط (SELECT) · **DDL:** 0 · **DML:** 0 · **لا commit**.
+
+```sql
+-- (1) اختيار الحساب الأكثر حركةً لاختبار كشف الحساب عليه
+SELECT ACC_NO FROM (
+    SELECT ACC_NO FROM ACCOUNTS.ENTRY_SUB
+    GROUP BY ACC_NO
+    ORDER BY COUNT(*) DESC
+) WHERE ROWNUM = 1;
+```
+
+```sql
+-- (2) هل يوجد مستخدم مرتبط بحساب مالي (لكشف «حسابي المالي»)؟
+SELECT USER_ID, ACC_NO, IS_ADMIN FROM ACCOUNTS.APP_USERS
+WHERE ACC_NO IS NOT NULL AND ROWNUM <= 5;
+-- النتيجة: لا صفوف ⇒ لا مستخدم مرتبط بـ ACC_NO في هذه القاعدة،
+-- فأُسند ACC_NO في الذاكرة داخل الاختبار (بلا أي كتابة).
+```
+
+```sql
+-- (3) عدّادات السياق التي أُخذت عبر Eloquent (SELECT COUNT فقط)
+SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE ACC_NO IS NOT NULL AND IS_ADMIN = 1;   -- = 0
+SELECT COUNT(*) FROM ACCOUNTS.APP_USERS WHERE ACC_NO IS NOT NULL;                    -- = 0
+SELECT COUNT(*) FROM ACCOUNTS.APP_USERS_PERMISSIONS up
+  JOIN ACCOUNTS.APP_PERMISSIONS p ON p.PERMISSION_ID = up.PERMISSION_ID
+ WHERE p.PERMISSION_CODE = 'my_statement.financial';                                  -- = 0
+```
+
+**ما نُفِّذ فعلياً عبر الواجهة في الاختبارات (Pest على القاعدة الحقيقية):**
+
+```sql
+-- كشف الحساب: الدفتر كامل ثم يُعاد كل صفوف الفترة بلا limit
+SELECT es.SUB_ENTRY_NO, es.ENTRY_NO, em.ENTRY_DATE, et.ENTRY_TYPE_NAME,
+       es.DETAILS, es.ENTRY_MNT, ...
+  FROM ACCOUNTS.ENTRY_SUB es, ACCOUNTS.ENTRY_MAIN em, ACCOUNTS.ENTRY_TYPE et
+ WHERE es.ACC_NO = :acc_no
+   AND es.ENTRY_NO = em.ENTRY_NO
+   AND em.ENTRY_TYPE_NO = et.ENTRY_TYPE_NO
+ ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ;
+```
+
+**النتيجة:** `StatementFullPeriodTest` = **3/3 ناجحة (17 تأكيداً)** ·
+`meta.limit = 0` و`meta.returned = meta.total` (كل حركات الفترة) · `limit=25` يعيد 25 صفاً فقط عند الطلب ·
+`CHART_ACC` لا يُلَفّ بغلاف `ROWNUM` عندما لا يوجد حد.

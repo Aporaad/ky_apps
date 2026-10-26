@@ -184,26 +184,117 @@ class GroupStatementExportMenu extends ConsumerStatefulWidget {
   /// تُقرأ لحظة الضغط ليصدَّر الميزان المعروض لا ما بُنيت عنده الشاشة.
   final TrialBalanceReport Function() report;
 
-  const GroupStatementExportMenu({required this.report, super.key});
+  /// جلب النطاق كاملاً من الخادم قبل توليد المستند.
+  ///
+  /// الشاشة تعرض الصفوف تدريجياً على أقسام، وقد تتوقف عند حدّ العرض الآمن
+  /// (2000 صف) فتكون `report().rows` جزءاً من النطاق. التصدير يجب أن يطابق
+  /// **النطاق** لا الشاشة، فهذا المنفذ يطلب كل الصفوف (`limit` بلا قيمة) قبل
+  /// كتابة الملف. غيابه يعني «لا نطاق أكبر من المعروض» فتُصدَّر الصفوف كما هي.
+  /// Fetches the whole scope before generating the document. The screen streams
+  /// rows in chunks and may stop at the safe display cap, so the on-screen rows
+  /// are only part of the scope — a printed document must match the SCOPE, not
+  /// the viewport.
+  final Future<TrialBalanceReport> Function()? fetchFull;
+
+  /// عند تمريرها يتحوّل العنصر من أيقونة في شريط التطبيق إلى زر كامل داخل
+  /// الصفحة — يُستخدم في بطاقة «النطاق واسع جدًا» حيث يجب أن يكون زر التصدير
+  /// الكامل ظاهراً لا مخفياً في قائمة.
+  /// When set, the menu renders as a full in-page button instead of an AppBar
+  /// icon (used by the "scope too wide" card).
+  final String? buttonLabel;
+
+  const GroupStatementExportMenu({
+    required this.report,
+    this.fetchFull,
+    this.buttonLabel,
+    super.key,
+  });
 
   @override
   ConsumerState<GroupStatementExportMenu> createState() =>
       _GroupStatementExportMenuState();
 }
 
-class _GroupStatementExportMenuState extends ConsumerState<GroupStatementExportMenu> {
+class _GroupStatementExportMenuState
+    extends ConsumerState<GroupStatementExportMenu> {
+  /// النطاق الكامل المحمَّل لهذه العملية — يُملأ في `_prepare` ويُستهلك فوراً.
+  /// The fully fetched scope for the current action; filled in `_prepare`.
+  TrialBalanceReport? _full;
+
+  /// المستند يُبنى من هذا: النطاق الكامل إن جُلب، وإلا ما هو معروض.
+  /// Document source: the full scope when fetched, else the on-screen report.
+  TrialBalanceReport get _current => _full ?? widget.report();
+
+  /// التجهيز المسبق لكل إجراء: لا نولّد ملفاً من نصف نطاق ثم نكتشف ذلك.
+  /// Pre-flight for every action, so a document is never generated from half a
+  /// scope without knowing it.
+  Future<bool> _prepare() async {
+    _full = null;
+    final current = widget.report();
+    // كل صفوف النطاق موجودة أصلاً على الشاشة: طلب ثانٍ لا يضيف شيئاً.
+    // Every scope row is already on screen — a second request adds nothing.
+    if (current.total <= 0 || current.rows.length >= current.total) {
+      _full = current;
+      return true;
+    }
+
+    final fetch = widget.fetchFull;
+    if (fetch == null) return true;
+
+    try {
+      final full = await fetch();
+      if (!mounted) return false;
+      if (full.isEmpty) {
+        _toast('لم يُرجع الخادم أي صف لهذا النطاق — ضيّق النطاق أو أزل الفترة');
+        return false;
+      }
+      _full = full;
+      return true;
+    } on DioException catch (e) {
+      if (mounted) _toast(_describeFailure(e));
+      return false;
+    }
+  }
+
+  /// رسالة الخادم إن وجدت؛ الـ 404 تعني خادماً أقدم لا يعرف النقطة أصلاً.
+  /// Server message when present; 404 means the running API predates the route.
+  String _describeFailure(DioException e) {
+    final data = e.response?.data;
+    final serverMessage = data is Map && data['message'] is String
+        ? data['message'] as String
+        : null;
+    if (e.response?.statusCode == 404) {
+      return 'الخادم الحالي لا يعرف نقطة التصدير (404) — حدِّث الـ API وأعد تشغيله';
+    }
+    return serverMessage ?? 'تعذّر جلب النطاق الكامل — تحقّق من الاتصال أو أعد المحاولة';
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return _ReportExportActions(
       title: 'ميزان مجموعة حسابات',
       printLabel: 'طباعة الميزان',
-      rowCount: () => widget.report().rows.length,
+      buttonLabel: widget.buttonLabel,
+      onPrepare: _prepare,
+      rowCount: () => _current.rows.length,
+      emptyMessage: 'لا توجد صفوف في هذا النطاق للتصدير',
       xlsxFileName: () => groupStatementXlsxFileName(),
       buildPdf: (letterhead) => buildAccountGroupStatementPdf(
         letterhead: letterhead,
-        report: widget.report(),
+        report: _current,
       ),
-      buildXlsx: () => buildGroupStatementXlsx(report: widget.report()),
+      buildXlsx: () => buildGroupStatementXlsx(report: _current),
     );
   }
 }
@@ -225,6 +316,10 @@ class _ReportExportActions extends ConsumerStatefulWidget {
   /// رسالة الصفوف الفارغة تخص كل تقرير: الشجرة لم تعد «توسيع عقدة»، فالمصدر القاعدة.
   final String emptyMessage;
 
+  /// تحويل العنصر إلى زر كامل داخل الصفحة بدل أيقونة في شريط التطبيق.
+  /// Turns the item into a full in-page button instead of an AppBar icon.
+  final String? buttonLabel;
+
   const _ReportExportActions({
     required this.title,
     required this.printLabel,
@@ -234,6 +329,7 @@ class _ReportExportActions extends ConsumerStatefulWidget {
     required this.buildXlsx,
     this.onPrepare,
     this.emptyMessage = 'لا توجد صفوف للتصدير — وسّع عقدة أو أزل الفلاتر',
+    this.buttonLabel,
   });
 
   @override
@@ -245,6 +341,8 @@ class _ReportExportActionsState extends ConsumerState<_ReportExportActions> {
 
   @override
   Widget build(BuildContext context) {
+    final asButton = widget.buttonLabel != null;
+
     return PermissionGate(
       // تصدير Excel صلاحيةُ تصدير، والطباعة صلاحيةُ طباعة — لا يظهر عنصر يرفضه الخادم
       code: ref.can(Perm.accountsExport) || ref.can(Perm.accountsPrint)
@@ -253,10 +351,14 @@ class _ReportExportActionsState extends ConsumerState<_ReportExportActions> {
       child: PopupMenuButton<_ExportAction>(
         enabled: !_busy,
         tooltip: 'طباعة وتصدير',
-        icon: Icon(
-          _busy ? Icons.hourglass_top_rounded : Icons.ios_share_rounded,
-          size: 20,
-        ),
+        // `icon` و`child` متعارضان في PopupMenuButton: واحد فقط يُمرَّر.
+        // PopupMenuButton rejects both at once — exactly one is passed.
+        icon: asButton
+            ? null
+            : Icon(
+                _busy ? Icons.hourglass_top_rounded : Icons.ios_share_rounded,
+                size: 20,
+              ),
         onSelected: _onSelected,
         itemBuilder: (context) => [
           if (ref.can(Perm.accountsPrint))
@@ -286,6 +388,40 @@ class _ReportExportActionsState extends ConsumerState<_ReportExportActions> {
                 hint: 'xlsx بورقتين',
               ),
             ),
+        ],
+        child: asButton ? _buildButtonShell() : null,
+      ),
+    );
+  }
+
+  /// شكل الزر الكامل: غير تفاعلي بذاته — النقر يعالجه PopupMenuButton المحيط.
+  /// The button's look only; taps are handled by the surrounding PopupMenuButton.
+  Widget _buildButtonShell() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.primary,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            _busy
+                ? Icons.hourglass_top_rounded
+                : Icons.cloud_download_outlined,
+            size: 17,
+            color: Colors.white,
+          ),
+          const SizedBox(width: 7),
+          Text(
+            widget.buttonLabel!,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
         ],
       ),
     );

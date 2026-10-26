@@ -2733,3 +2733,276 @@ value 8 is obsolete` من إحدى الحزم، و`x86 targets will be removed`)
   `DBdevloping_history.md` و`db_commends.md`.
 
 **النموذج:** Qoder · **الزمن:** 2026-10-25 20:54 · **لا commit** (لم يُطلب) · **لا DDL/DML**.
+
+---
+
+## [2026-10-25 22:13] تذكّر آخر اسم مستخدم — تعبئة تلقائية لحقل الدخول · Qoder Agent
+
+الميزة المطلوبة: بعد نجاح تسجيل الدخول يُحفظ الاسم على الجهاز، ويظهر تلقائياً في حقل «اسم المستخدم»
+عند فتح التطبيق أو بعد الخروج. لا تغيير على الخادم ولا على قاعدة البيانات — العمل كله محلي على الجهاز.
+
+### القرار المعماري: الاسم في الحالة لا في الشاشة
+`LoginScreen` كان سيقرأ التخزين في `initState` فيظهر الحقل فارغاً لجزء من الثانية ثم يُملأ. لذلك يُقرأ
+الاسم **مرة واحدة في `checkAuthStatus()`** ويوضع في `AuthState.lastUsername`، وشاشة البداية تمنح الإقلاع
+ثانيتين قبل الانتقال إلى `/login`، فيصل الاسم إلى الحقل متزامناً بلا وميض — وأيضاً يصبح الاختبار ممكناً
+باستبدال مزوّد المصادقة وحده.
+
+### ما تغيّر
+- `lib/core/storage/secure_storage_service.dart`: مفتاح `ky_last_username` وثلاث دوال
+  (`saveLastUsername` · `getLastUsername` · `deleteLastUsername`). النص الفارغ يحذف المفتاح، والقراءة
+  تعيد `null` لا `''`. **لم يُضف المفتاح إلى `clearAll()`** — بقاؤه هو الميزة نفسها؛ ويُحذف في
+  `purgeEverything()` وحده. الترميز: اسم المستخدم لاتيني (`USER_NAME_EN`) فلا يمرّ بـ `ArabicEncodingUtils.fix`.
+  وفي حال أعاد الخادم الاسم العربي وحده يُحفظ كما وصل، وهو ما يطابقه `USER_NAME_AR` حرفياً عند الدخول.
+- `lib/features/auth/presentation/providers/auth_notifier.dart`:
+  - دالة نقية `usernameToRemember({canonical, typed})` — الاسم الرسمي يفوز، وإلا النص المكتوب بعد `trim`.
+  - `AuthState.lastUsername` + `copyWith` بصيغة الإغلاق `String? Function()?` (كنمط `sessionExpiresAt`)،
+    لأن `null` يجب أن يعني «امسح» لا «أبقِ القديم» حين يضغط المستخدم زر المسح.
+  - `checkAuthStatus()` يقرأ الاسم في بدايته ويضعه في الحالتين (مسجّل/غير مسجّل).
+  - `login()` و`loginWithBiometric()`: الحفظ **بعد النجاح فقط** عبر `_rememberUsername` الذي يكتب القرص
+    ويُعيد القيمة لوضعها في الحالة — محاولة فاشلة لا تُبدّل الاسم المحفوظ.
+  - `logout()` و`forceLogout()`: تمرير `lastUsername: state.lastUsername` في `AuthState` المبني من الصفر،
+    وإلا لظهر الاسم بعد إعادة تشغيل التطبيق فقط لا بعد الخروج.
+  - `forgetLastUsername()`: يمسح المفتاح والحالة معاً (زر المسح في الحقل).
+- `lib/features/auth/presentation/screens/login_screen.dart`: تعبئة الحقل في `initState` مع وضع المؤشر
+  في آخر النص، **و`ref.listen` على `AuthState.lastUsername`** يعبّئه لو وصل بعد رسم الشاشة (إقلاع بطيء
+  أو فتح مباشر لـ `/login`) — القراءة في `initState` وحدها كانت تترك الحقل فارغاً حين يسبق بناءُ الشاشة
+  قراءةَ التخزين. التعبئة لا تستبدل نصاً كتبه المستخدم. وأُضيف `autofillHints: [AutofillHints.username]`
+  و`textInputAction: next`، ومستمع خفيف يُعيد البناء عند تغيّر «فارغ/غير فارغ» فقط (لا مع كل ضغطة)،
+  وأيقونة `close_rounded` كـ`suffix` تظهر فقط عند وجود اسم محفوظ وحقل غير فارغ. كلمة المرور تبقى فارغة
+  دائماً ولا تُحفظ إطلاقاً.
+- **لم يُلمس** `auth_repository.dart`: قاعدة الحفظ واحدة في المتحكّم (مالك الحالة)، والمستودع بقي على
+  مسؤوليته (التوكن + حزمة المستخدم + المنح).
+
+### تصحيح جانبي غير متعلق بالميزة (كان يعطّل بوابة التحليل قبل البدء)
+`flutter analyze` كان يعيد خطأين قديمين من إعادة تسمية سابقة في موديل ميزان المجموعة: الحقل
+`currentBalance` حُذف وحلّ محله `balance` (النهائي) و`periodBalance` (حركة الفترة)، لكن
+`group_statement_xlsx_builder.dart` بقي يقرأ القديم، و`account_group_statement_screen_test.dart` بقي
+يمرّره كمعامل. صُحّح الاثنان إلى `periodBalance` (العمود المعنون «رصيد الحركة»)، وصار إجمالي ذلك العمود
+`report.totals.periodBalance` بدل صفر مثبّت.
+
+### الاختبار
+- ملف جديد `test/features/auth/last_username_test.dart` (13 حالة):
+  - **قاعدة `usernameToRemember`** (3): الاسم الرسمي يفوز · الفارغ يترك المكتوب · المسافات = لا شيء.
+  - **`AuthNotifier.lastUsername`** (2): بقاء الاسم بعد `forceLogout` · مسح `forgetLastUsername`
+    للمفتاح والحالة.
+  - **مسار `login` الحقيقي** (4، بمستودع مصادقة مزيّف و`refreshBiometricStatus` معطَّل لأنه قناة منصة):
+    النجاح يحفظ الاسم الرسمي في القرص والحالة · اسم رسمي فارغ يترك ما كتبه المستخدم · محاولة فاشلة
+    لا تُبدّل المحفوظ · الخروج العادي يُبقيه جاهزاً لشاشة الدخول التالية.
+  - **شاشة الدخول (ودجت)** (4): تعبئة تلقائية · لا تعبئة بلا اسم محفوظ · زر المسح يفرّغ الحقل ·
+    تعبئة الاسم الذي يصل **بعد** بناء الشاشة عبر `ref.listen`.
+- **التحقق:** `flutter analyze` = **No issues found!** · `flutter test` = **313 ناجحاً (5 متجاوزة)**
+  منها **13 حالة جديدة** في ملف الميزة · لا تغيير في PHP ولا في أوراكل.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 22:13 · **لا commit** (لم يُطلب) · **لا DDL/DML**.
+
+---
+
+## [2026-10-25 22:57] - «رصيد الفترة» في ميزان الحسابات الجزئية + رصيد الحساب المالي الصحيح — Qoder Agent
+
+**المشكلة:** عند فلترة «كشف حساب مجموعة حسابات جزئية» بفترة، كان عمود «الرصيد» يعرض **رصيد الفترة** فقط،
+فيختفي الرصيد النهائي للحساب. وكان الرصيد المعروض بجانب الحساب المالي في كل قوائم الاختيار رقماً مخزّناً
+متقادماً لا يطابق حركات الحساب.
+
+**القرار التصميمي:** الرصيد النهائي لا يُقرأ من عمود مخزَّن إطلاقاً، بل من صافي حركات `ENTRY_SUB`. وقد أُثبت
+ذلك قياساً على القاعدة الحقيقية: `CHART_ACC.BALANCE` يخالف مجموع الحركات في **19,126** حساباً من **20,954**،
+و**1,162** حساباً له حركات ومخزّنه صفر. لذلك صار العمود المخزّن **لا يُعرض** في أي شاشة.
+
+## الخادم — `kyApp_API`
+
+### `AccountController::getGroupStatement()`
+
+- شرط التاريخ خرج من `JOIN` وصار تعبيراً داخل `SUM(CASE WHEN ({$periodCond}) …)`: المرور الواحد يُنتج
+  مدين/دائن الفترة + رصيد الفترة + الرصيد النهائي، وتبقى الحسابات التي لا حركة لها في الفترة ظاهرة بأصفار
+  (`LEFT JOIN` لم يُلمس، و`$periodCond` يبدأ بـ `1 = 1` عند غياب الفلتر).
+- أعمدة جديدة في `SELECT`: `LOCAL_NET_ALL` و`FOREIGN_NET_ALL` (بلا تاريخ) بجانب `LOCAL_NET`/`FOREIGN_NET`
+  (بالفترة)، و`GROUP BY c.ACC_NO, c.ACC_NAME` بلا `c.BALANCE`.
+- لكل سطر: `balance` = `LOCAL_NET_ALL + FOREIGN_NET_ALL` (النهائي)، `period_balance` = `LOCAL_NET + FOREIGN_NET`.
+  و`current_balance` **حُذف** من الرد (كان ناقلاً وحيداً لقيمة `CHART_ACC.BALANCE`).
+- `totals` يجمع `balance` و`period_balance`، و`data.has_period` = وجود `from_date` أو `to_date`.
+
+### `AccountController::getChartAccounts()`
+
+```php
+$balances = $this->movementBalancesFor(array_column($data, 'acc_no'), null, null);
+foreach ($data as $i => $row) {
+    $data[$i]['balance'] = $balances[$row['acc_no']]['net'] ?? 0.0;
+}
+```
+
+حُذف `BALANCE` من `SELECT`. هذا الـ endpoint يغذّي **كل** أماكن عرض رصيد الحساب المالي: قائمة اختيار الحساب
+في «كشف حساب مالي»، وقائمة الحساب في نموذج إنشاء/تعديل المستخدم (عبر `chartAccountsProvider`)، ولوحة
+الحسابات ودورة اختيار الحساب المالي — فصُحِّحت كلها بتغيير واحد.
+
+### `AccountController::getAccountStatement()` و`MyStatementController::financialStatement()`
+
+مركّم `$ledgerBalance` يجمع `ENTRY_MNT` لكل السطور **قبل** أي فلتر تاريخ، ويُصدر في `account.balance`؛
+وأُزيل عمود `BALANCE` من استعلام الحساب في الاثنين (لم يبقَ له قارئ).
+
+## الواجهة — Flutter
+
+- `account_group_statement_model.dart`: `TrialBalanceRow.balance` (النهائي) + `periodBalance` (افتراضي 0)،
+  و`TrialBalanceTotals.periodBalance`، و`TrialBalanceReport.hasPeriod` (من `has_period` أو وجود تاريخ)،
+  و`periodLabel` الذي يفرّق بين «من … إلى …» و«من تاريخ …» و«إلى تاريخ …» و«كل الحركات».
+- `account_group_statement_report_table.dart`: أعمدة ديناميكية — `showPeriod = report.hasPeriod`،
+  و`balanceIndex = showPeriod ? 8 : 7`، و`columnWidths` تُبنى شرطياً، فيظهر **«رصيد الفترة»** قبل
+  **«الرصيد»** مباشرةً (أزرق `0xFF1D4ED8` لتمييزه عن النهائي الأسود العريض)، وسطر المجاميع يعرض العمودين معاً.
+- `account_group_statement_pdf_builder.dart`: قائمة عرض منطقية واحدة تُعكس مرة واحدة (`reversedCells`) بدل
+  فهارس يدوية هشّة، مع خلية فترة شرطية وإجماليها، وتسمية العمود الأخير «الرصيد النهائي».
+- `group_statement_xlsx_builder.dart`: ترويسة/صفوف/مجاميع ديناميكية، «إجمالي رصيد الفترة» عند الفلترة و
+  «إجمالي الرصيد النهائي»، وتاريخ التقرير من `report.periodLabel`.
+- `account_group_statement_screen.dart`: ترويسة الفترة من `periodLabel`، ونص إرشادي يشرح الفرق بين العمودين.
+- `lib/core/utils/report_pdf_page.dart`: `pdfDateRangeRow` كان يطبع «كل الحركات» عند تحديد تاريخ واحد؛
+  صار يطبع الطرف المحدد فقط — إصلاح مشترك يمسّ كل تقارير PDF.
+
+## الاختبار والتحقق
+
+- `test/features/accounts/account_statement_models_test.dart`: `period_balance` في الـ fixtures، واختبارات
+  استقلال الرصيدين، والافتراضي صفر، والفترة أحادية الطرف، و`TrialBalanceReport.empty.hasPeriod == false`.
+- `test/features/accounts/account_group_statement_screen_test.dart`: اختبارا ودجت يُثبتان غياب «رصيد الفترة»
+  بلا فلترة وظهوره بها، مع بقاء قيم الرصيد النهائي معروضة.
+- **التحقق:** `php -l` نظيف · Pint نظيف · `php artisan test` = 157 ناجحاً / 4 متجاوزة (11,947 تأكيداً) ·
+  `flutter analyze` = No issues found! · `flutter test` = 308 ناجحاً (5 متجاوزة).
+- **تحقق رقمي على القاعدة الحقيقية (112/112):** مجموعة `GROUP_ID = 7` (26 حساباً) — `balance` لكل سطر =
+  مجموع `ENTRY_MNT` الكلي، و`period_balance` = مجموع نافذة 2025-01-01..2025-12-31، والمجاميع = مجموع
+  السطور، والرصيد ثابت بين الفلترين، والحساب 41210001: الحقل = −1,801,753,216.78 = الدفتر ≠ المخزّن
+  −1,493,000,510، وهو نفسه في `account.balance` وفي `GET /accounts/chart`.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 22:57 · **لا commit** (لم يُطلب) · **لا DDL/DML**.
+
+---
+
+## [2026-10-26 00:48] - إصلاح تهنيج التطبيق: ترقيم الميزان + مهلة 3 ثوانٍ + تحميل تدريجي + جدول كسول — Qoder Agent
+
+**العَرَض:** التطبيق «يتهنّج» ويُقتل عند فتح «كشف حساب مجموعة حسابات جزئية» على نطاق واسع. سجل `flutter run`
+كان صريحاً: موت على مستوى النظام لا في Dart —
+
+```
+I/Choreographer: Skipped 148 frames!
+I/scudo: SizeClassAllocator64: 1095M mapped ... 5732631 allocations; remains 2628147
+F/scudo: Scudo OOM: The process has exhausted 256M for size class 7120
+signal 3 (SIGQUIT) → tombstoned
+```
+
+**السبب الجذري (مقاساً لا مُخمَّناً):** النطاق `acc_no=1&acc_sub=12` يضم **20,774** حساباً (منها الحساب
+الجزئي 123 وحده = 20,469). كانت الشاشة تطلبه بلا ترقيم، فـ`jsonDecode` لعشرين ألف صف على الـUI isolate،
+ثم يُبنى الجدول **كاملاً** داخل `Table(children: [...rows.map(...)])`: 9 أعمدة × 20,774 صفاً ≈ **186,966 خلية**،
+ولكل خلية `ui.Paragraph` أصلي في محرّك الرسم. النتيجة 1.39GB محجوزة وموت حتمي — لا علاقة له بالشبكة ولا بالخادم.
+
+**القرار:** لا علاج تجميلي (تصغير الخط أو إخفاء أعمدة) — ثلاثة تغييرات بنيوية: الترقيم على الخادم، العرض
+على أقسام، والصفوف تصير كسولة.
+
+## الخادم — `kyApp_API`
+
+### `AccountController::getGroupStatement()`
+
+- الاستعلام المجمّع صار في متغيّر مستقل `$innerSql` (لم يُغيَّر منطق الأعمدة ولا `$periodCond`)، وأُضيفت
+  طبقة ترقيم فوقه:
+  ```php
+  $limit = $limitValue > 0 ? min(2000, $limitValue) : 0;   // 0 = بلا ترقيم
+  if ($limit > 0) {
+      $sql = 'SELECT * FROM (
+                  SELECT a.*, ROWNUM AS RN FROM ('.$innerSql.') a
+                   WHERE ROWNUM <= :max_row
+              ) WHERE RN > :offset';
+  }
+  ```
+  `ROWNUM` لا `OFFSET … FETCH` لأن الأول مدعوم في كل إصدارات Oracle 11g والثاني يحتاج 12c.
+- **الإجماليات على النطاق كله**: استعلام ثانٍ يلتف حول `{$innerSql}` نفسه (`COUNT(*)` + `SUM(...)`)، مقيَّداً
+  بـ`include_totals` ويُنفَّذ في الصفحة الأولى فقط. أُزيل تجميع الإجماليات صفاً بصف لأن الصفحة الثانية كانت
+  ستضيف إجمالي النطاق مرة أخرى (تضاعف الأرقام).
+- `meta` حقيقية: `total` · `page` · `limit` · `total_pages` · `has_more` · `totals_included`.
+  `limit = 0` يرجّع `total` في حقل `limit` إيضاحاً بأن كل الصفوف عادت.
+
+## الواجهة — Flutter
+
+- **`account_group_statement_model.dart`**: `total`/`page`/`limit`/`totalPages`/`hasMore` من `meta` مع سقوط
+  آمن لخادم أقدم (بلا `meta` ⇒ `total = rows.length`)، و`isPartial`، و`loadRatio`، و`appendPage()` الذي يدمج
+  الأقسام ويحفظ **إجماليات الصفحة الأولى** وحقول النطاق.
+- **`account_repository.dart`**: `fetchGroupStatement` يقبل `page`/`limit`/`includeTotals`؛ `limit` بلا قيمة
+  تعني «كل الصفوف» ولا تُستخدم إلا في التصدير.
+- **`account_group_statement_screen.dart`**:
+  - `fetchDelay` افتراضياً **3 ثوانٍ**: `_scheduleLoad()` تُلغي المؤقّت والطلب الجاري (رمز `CancelToken` +
+    `_runId` متزايد) وتعيد العدّ مع كل تغيير؛ أثناءها تظهر حالة «بانتظار اكتمال اختيارك» لا مؤشر تحميل كاذب.
+    التقرير السابق يُمحى فوراً — أرقام نطاق قديم تحت اسم نطاق جديد أسوأ من الانتظار. زر «تحديث» وحده فوري.
+  - قسم أول **1000 صف** يُعرض فوراً، ثم `_streamPages` تُضيف بقية الأقسام واحداً بعد آخر مع شريط تقدّم
+    «جارٍ عرض الأقسام تدريجياً — X من Y». خطأ في قسم متأخر لا يمسح ما وصل.
+  - **`kGroupStatementMaxOnScreenRows = 2000`**: تجاوزه يوقف التنزيل التلقائي ويُظهر بطاقة
+    «النطاق واسع جدًا، اختر مجموعة أدق» مع **تصدير كامل من الخادم** و**عرض كل الصفوف تدريجياً** (المسار
+    الثاني يتجاوز الحدّ صراحةً بـ`respectCap: false`).
+- **`account_group_statement_report_table.dart`**: صار `StatefulWidget` — ترويسة مثبّتة + `ListView.builder`
+  و`Scrollbar` + سطر إجمالي مثبّت. الأجزاء الثلاثة تشترك في نفس `columnWidths` وهذا وحده ما يُبقي المحاذاة
+  بينها. **الارتفاع يجب أن يكون محدوداً** (الشاشة تحسبه من المساحة المتاحة بعد خصم الترويسة والتذييل)
+  والانفجار بصوت عالٍ أفضل من عودة صامتة إلى بناء كل الصفوف.
+- **`tree_export_menu.dart`**: `GroupStatementExportMenu.fetchFull` يجلب النطاق كاملاً (`limit` بلا قيمة)
+  قبل توليد المستند، لأن المستند يجب أن يطابق النطاق لا الشاشة؛ و`buttonLabel` يحوّل العنصر من أيقونة في
+  شريط التطبيق إلى زر داخل الصفحة (للبطاقة).
+
+## الاختبار والتحقق
+
+- `test/features/accounts/account_group_statement_model_test.dart` (6 حالات): قراءة `meta` · غيابه · `has_more: "1"`
+  (نصّ أوراكل) · `appendPage` يحفظ الإجماليات ولا يجمعها · `total = 0` يحفظ الرقم المعروف · اكتمال الدمج.
+- `test/features/accounts/account_group_statement_screen_test.dart`: المستودع المزيّف صار **خادماً صغيراً**
+  (`scopeRows` + سقف صفحة + `Completer` للبوابة)، فاختُبرت: مهلة 3 ثوانٍ (0 طلب عند 2.9 ثانية) · تغيير ثانٍ
+  يعيد العدّ لا يُصطف · قسم أول 1000 ثم إضافة القسم الثاني · حدّ 2000 يوقف التنزيل ويُظهر البطاقة · قائمة
+  التصدير تُفتح من الزر · «عرض الكل» ينزّل 3 أقسام · **جدول 5000 صف لا يبني إلا المرئي** (أقل من 60 جدولاً).
+- **التحقق:** `php -l` نظيف · Pint نظيف · `php artisan test` = 157 ناجحاً / 4 متجاوزة (11,947 تأكيداً) ·
+  `flutter analyze` = No issues found! · `flutter test` = 326 ناجحاً (5 متجاوزة).
+- **تحقق على القاعدة الحقيقية (13/13):** صفحة 1 (500) في 2.58 ثانية · `total = 20,774` · `total_pages = 42` ·
+  الصفحة 2 تبدأ بعد آخر `acc_no` في الأولى وتصفير إجمالياتها · الصفحة 42 بلا `has_more` · التصدير الكامل
+  (`limit=0`) يرجّع 20,774 صفاً في 3.95 ثانية · `totals.balance` = مجموع أرصدة الصفوف = `SUM(ENTRY_MNT)`.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-26 00:48 · **لا commit** (لم يُطلب) · **لا DDL/DML**. 
+
+---
+
+## 2026-10-26 03:11 — الكشوفات: كل صفوف الفترة، بلا سقف 50 ولا ترقيم محلي
+
+**المشكلة كما وصفها المستخدم:** «لا يتم جلب السجلات المطلوبة حسب الفترة، ويعرض عدداً قليلاً لا يتجاوز 50 سجلاً؛ ولو حُددت فترة شهرين تظهر كأنها 30 يوماً» في:
+كشف حسابي المالي · كشف حساب عمل · كشف حساب مالي · كشف حساب مالي من شجرة الحسابات · كشف حساب جاري العاملين.
+
+**التشخيص:** لم يكن فلتر التاريخ مُتجاهَلاً — التواريخ تصل وتُفلتر صحيحة. الذي كان يقتطع هو:
+1) `AccountController::getAccountStatement` — `$limit = min(200, max(10, limit ?? 50))` ثم `array_slice` بعد جلب الدفتر كاملاً.
+2) `MyStatementController::financialStatement` — نفس السقف الافتراضي.
+3) `AccountController::getDetailedStatement` — نفس السقف + غلاف `ROWNUM` لا يصلح بلا حد.
+4) `AccountRepository.fetchAccountStatement` — `int limit = 50` يُرسل دائماً.
+5) `worker_statement_screen.dart` — مُرقّم محلي `_pageSize = 15` يخفي بقية الحركات خلف زر «التالي».
+
+**التعديلات:**
+
+- `kyApp_API/app/Http/Controllers/AccountController.php`
+  - `getAccountStatement`: `$limitRaw = query('limit')`؛ `null` أو `''` ⇒ `$limit = 0` ⇒ **بلا ترقيم**؛ الموجب يُقيَّد بـ 2000؛ `$offset` صفر عندما `$limit = 0`؛
+    `$transactions = $limit > 0 ? array_slice($allEntries, $offset, $limit) : $allEntries;`؛ و`meta` يحمل `limit` (0 = الكل) و`returned` و`total_pages` و`has_more`.
+  - `getDetailedStatement`: نفس المنطق، وغلاف `ROWNUM` يُبنى **فقط** عند `$limit > 0` وإلا `SELECT ACC_NO, ACC_NAME, BALANCE FROM CHART_ACC ORDER BY ACC_NO`.
+- `kyApp_API/app/Http/Controllers/MyStatementController.php`
+  - `financialStatement`: نفس عقد `limit` (غيابه = كل حركات الفترة) ونفس `meta`. `workStatement` لم يكن مُرقّماً أصلاً.
+- `lib/features/accounts/data/repositories/account_repository.dart`
+  - `fetchAccountStatement({... int? page, int? limit})` — لا يُرسل `page`/`limit` إلا عند تمريرهما صراحةً.
+- `lib/features/accounts/presentation/widgets/account_statement_report_table.dart` (إعادة بناء)
+  - من `StatelessWidget` يبني `Table` واحداً بعدد الصفوف إلى `StatefulWidget` كسول: `_slice()` للرأس/الافتتاحي/الإجمالي،
+    و`ListView.builder(cacheExtent: 600)` للحركات داخل `SizedBox` بارتفاع مشتق (55% من الشاشة محصور 240..760) أو `rowsHeight`،
+    وخريطة `_columnWidths` واحدة تُبقي الأرقام متحاذية بين الشرائح الثلاث.
+- `lib/core/widgets/lazy_report_table.dart` (جديد)
+  - `LazyReportTable(headerRows, footerRows, rowCount, rowBuilder, columnWidths, rowsHeight?, borderColor)` — نفس البنية الكسولة قابلة لإعادة الاستخدام.
+- `lib/features/workers/presentation/screens/worker_statement_screen.dart`
+  - حُذف `_pageSize`/`_currentPage`/`_buildPaginationBar`/شريط التنقل، وأُلغي معامل `isFirstPage` بعد أن لم يبقَ ترقيم؛
+    `_buildStatementTableLayout` يعيد `LazyReportTable` (رأس ذهبي `0xFFD4A853` · افتتاحي `0xFF0369A1` · إجماليات `0xFFF3F4F6`) ويعرض كل صفوف الفترة.
+- `lib/features/workers/presentation/widgets/worker_work_report_table.dart`
+  - صار كسولاً عبر `LazyReportTable`: رأس + سطرا الإجمالي مثبّتان، الصفوف تُبنى عند ظهورها، والأعمدة الخمسة بأوزانها السابقة.
+
+**الاختبارات المضافة:**
+
+- `kyApp_API/tests/Feature/StatementFullPeriodTest.php` (Pest 3، على قاعدة Oracle الحقيقية):
+  - «كل الحركات عند غياب limit»: `meta.limit === 0` · `meta.returned === meta.total` · `count(transactions) === total` · `has_more === false`.
+  - «الترقيم فقط عند طلب حد موجب»: `limit=25` ⇒ 25 صفاً و`has_more === total > 25`.
+  - «الكشف الشخصي»: مدير + `ACC_NO` مُسنَد في الذاكرة (بلا كتابة في القاعدة) ⇒ نفس المساواة.
+- `test/features/accounts/account_statement_repository_test.dart`: الفترة تُرسل ولا `limit`/`page` عند عدم الترقيم · 120 صفاً تصل كاملة · الحد الصريح يُمرَّر.
+- `test/features/accounts/account_statement_lazy_rows_test.dart`: 3000 حركة ⇒ أقل من 80 جدولاً حياً · آخر صف غير مبني قبل التمرير · التمرير يُظهره ·
+  `LazyReportTable` مع 5000 صف يبقي الرأس والتذييل مثبّتين.
+
+**التحقق (بوابات):** `php -l` نظيف · `vendor\bin\pint --dirty` نظيف بعد إصلاح تلقائي لملف الاختبار · `php artisan test` = **160 ناجحاً / 4 متجاوزة (11,964 تأكيداً)** ·
+`flutter analyze` = **No issues found! (58.8s)** · `flutter test` = **333 ناجحاً / 5 متجاوزة**.
+
+**ملاحظة:** قائمة «كشف عمل المجموعة» (`WorkerGroupWorkReportTable`) بقيت جدولاً عادياً لأنها تدمج خلايا اسم العامل رأسياً؛
+ولا يوجد فيها اقتطاع من الخادم. أي تحويلها لاحقاً إلى كسول يتطلب حساب امتداد الدمج مسبقاً.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **لا commit** (لم يُطلب).

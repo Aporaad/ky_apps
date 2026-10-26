@@ -43,6 +43,14 @@ class SecureStorageService {
   // `user_id` guard inside the blob, and wiped only by `purgeEverything`.
   static const String _homeLayoutKey = 'ky_home_layout';
 
+  // آخر اسم مستخدم نجح تسجيله — تفضيل على مستوى الجهاز لا حالة جلسة: يبقى بعد الخروج
+  // العادي وانتهاء الخمول والطرد بـ 401 حتى يُعبَّأ تلقائياً في شاشة الدخول، ويمسحه
+  // `purgeEverything` أو زر المسح داخل الحقل وحدهما. لا يُضاف إلى `clearAll()` أبداً.
+  // Last successfully signed-in username — a device-level preference, not session state: it
+  // survives a normal logout, an idle timeout and a 401 eviction so the login screen can
+  // prefill it. Only `purgeEverything` or the field's clear button removes it; never clearAll().
+  static const String _lastUsernameKey = 'ky_last_username';
+
   /// حفظ رمز الوصول (Token)
   Future<void> saveToken(String token) async {
     await _storage.write(key: _tokenKey, value: token);
@@ -93,6 +101,37 @@ class SecureStorageService {
     await _storage.delete(key: _apiBaseUrlKey);
   }
 
+  // ── آخر اسم مستخدم (تعبئة تلقائية في شاشة الدخول) ─────────
+  // Last username (login-screen autofill).
+
+  /// حفظ اسم المستخدم بعد دخول ناجح — النص الفارغ يعني «لا شيء محفوظ» فيُحذف المفتاح
+  /// Store the username after a successful sign-in; an empty text means "nothing saved".
+  Future<void> saveLastUsername(String username) async {
+    final value = username.trim();
+    if (value.isEmpty) {
+      await _storage.delete(key: _lastUsernameKey);
+      return;
+    }
+
+    await _storage.write(key: _lastUsernameKey, value: value);
+  }
+
+  /// قراءة آخر اسم مستخدم محفوظ (null = لم يدخل أحد على هذا الجهاز بعد)
+  /// Read the last saved username (null means nobody signed in on this device yet).
+  Future<String?> getLastUsername() async {
+    final value = await _storage.read(key: _lastUsernameKey);
+    if (value == null) return null;
+
+    final trimmed = value.trim();
+    return trimmed.isEmpty ? null : trimmed;
+  }
+
+  /// حذف الاسم المحفوظ — لزر المسح داخل الحقل أو لمسح البيانات بالكامل
+  /// Delete the saved username — the field's clear button, or a full data wipe.
+  Future<void> deleteLastUsername() async {
+    await _storage.delete(key: _lastUsernameKey);
+  }
+
   /// مسح بيانات جلسة المستخدم المخزنة عند تسجيل الخروج مع الاحتفاظ بعنوان الـ API
   /// ومعه حالة IBAC: الصلاحيات تتبع الجلسة، وابقاؤها بعد الخروج يجعل الواجهة ترسم أقساماً
   /// للمستخدم التالي على هذا الجهاز قبل أن تُقرأ منحُه الفعلية.
@@ -107,6 +146,9 @@ class SecureStorageService {
     await _storage.delete(key: _sessionExpiresAtKey);
     await _storage.delete(key: _sessionDeadlineLocalKey);
     // لا نمسح بيانات البصمة عند الخروج حتى يستطيع المستخدم الدخول بها مجدداً
+    // ولا آخر اسم مستخدم: الميزة كلها أن يظهر تلقائياً في شاشة الدخول التالية.
+    // Biometric enrollment and the last username both survive: the first keeps fingerprint
+    // sign-in working, the second is the whole point of the login-screen prefill.
   }
 
   // ── حالة الصلاحيات والجلسة (IBAC) ────────────────────────

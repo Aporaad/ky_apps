@@ -78,24 +78,36 @@ pw.Widget _metaSection(TrialBalanceReport report) {
 // ─── جدول ميزان المراجعة (أعمدة معكوسة لـ RTL) / Trial balance table (reversed) ──
 //
 // الأعمدة الأصلية (يمين→يسار منطقياً):
-// [رقم الحساب | إسم الحساب | العملة | مدين محلي | دائن محلي | مدين أجنبي | دائن أجنبي | الرصيد]
-// بعد العكس للـ pw.Table (الذي يرسم يسار→يمين):
-// [الرصيد | دائن أجنبي | مدين أجنبي | دائن محلي | مدين محلي | العملة | إسم الحساب | رقم الحساب]
+// [رقم الحساب | إسم الحساب | العملة | مدين محلي | دائن محلي | مدين أجنبي | دائن أجنبي
+//  | (رصيد الفترة) | الرصيد]
+// عمود «رصيد الفترة» يظهر فقط عند تحديد فترة (report.hasPeriod)، ويبقى «الرصيد»
+// للرصيد النهائي للحساب في كل الأحوال.
+// The «period balance» column is emitted only when a period is selected; «الرصيد»
+// always carries the account's final balance.
 pw.Widget _table(TrialBalanceReport report) {
   const cellStyle = 7.5;
+  final showPeriod = report.hasPeriod;
+
+  // عرض الأعمدة بالترتيب المنطقي ثم يُعكس مرة واحدة مع الخلايا، فلا تبقى فهارس
+  // مكتوبة يدوياً تحتاج تعديلاً عند إضافة عمود.
+  // Logical widths reversed once, so no hand-maintained indices drift on a new column.
+  final logicalWidths = <pw.TableColumnWidth>[
+    const pw.FlexColumnWidth(1.2), // رقم الحساب
+    const pw.FlexColumnWidth(3.2), // إسم الحساب
+    const pw.FlexColumnWidth(0.8), // العملة
+    const pw.FlexColumnWidth(1.4), // مدين محلي
+    const pw.FlexColumnWidth(1.4), // دائن محلي
+    const pw.FlexColumnWidth(1.4), // مدين أجنبي
+    const pw.FlexColumnWidth(1.4), // دائن أجنبي
+    if (showPeriod) const pw.FlexColumnWidth(1.4), // رصيد الفترة
+    const pw.FlexColumnWidth(1.5), // الرصيد النهائي
+  ];
+  final reversedWidths = logicalWidths.reversed.toList();
 
   return pw.Table(
     border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.5),
-    // الأعمدة بعد العكس (الفلكسات معكوسة)
-    columnWidths: const {
-      0: pw.FlexColumnWidth(1.5), // الرصيد (was 7)
-      1: pw.FlexColumnWidth(1.4), // دائن أجنبي (was 6)
-      2: pw.FlexColumnWidth(1.4), // مدين أجنبي (was 5)
-      3: pw.FlexColumnWidth(1.4), // دائن محلي (was 4)
-      4: pw.FlexColumnWidth(1.4), // مدين محلي (was 3)
-      5: pw.FlexColumnWidth(0.8), // العملة (was 2)
-      6: pw.FlexColumnWidth(3.2), // إسم الحساب (was 1)
-      7: pw.FlexColumnWidth(1.2), // رقم الحساب (was 0)
+    columnWidths: {
+      for (var i = 0; i < reversedWidths.length; i++) i: reversedWidths[i],
     },
     defaultColumnWidth: const pw.FlexColumnWidth(1),
     children: [
@@ -110,6 +122,7 @@ pw.Widget _table(TrialBalanceReport report) {
           pdfTh('', fontSize: 8),
           pdfTh('عملة أجنبية', fontSize: 8),
           pdfTh('', fontSize: 8),
+          if (showPeriod) pdfTh('رصيد الفترة', fontSize: 8),
           pdfTh('الرصيد', fontSize: 8),
         ]),
       ),
@@ -124,6 +137,7 @@ pw.Widget _table(TrialBalanceReport report) {
           pdfTh('دائن', fontSize: 8),
           pdfTh('مدين', fontSize: 8),
           pdfTh('دائن', fontSize: 8),
+          if (showPeriod) pdfTh('', fontSize: 8),
           pdfTh('', fontSize: 8),
         ]),
       ),
@@ -138,6 +152,8 @@ pw.Widget _table(TrialBalanceReport report) {
             pdfTd(formatStatementAmount(row.localCredit), fontSize: cellStyle),
             pdfTd(formatStatementAmount(row.foreignDebit), fontSize: cellStyle),
             pdfTd(formatStatementAmount(row.foreignCredit), fontSize: cellStyle),
+            if (showPeriod)
+              pdfTd(formatStatementAmount(row.periodBalance), fontSize: cellStyle),
             pdfTd(formatStatementAmount(row.balance),
                 fontSize: cellStyle, bold: true),
           ]),
@@ -178,8 +194,14 @@ pw.Widget _totalRow(TrialBalanceReport report) {
           style: style,
           textDirection: kPdfShapedTextDirection,
         ),
+        if (report.hasPeriod)
+          pw.Text(
+            pdfArabic('رصيد الفترة: ${formatStatementAmount(report.totals.periodBalance)}'),
+            style: style.copyWith(fontWeight: pw.FontWeight.bold),
+            textDirection: kPdfShapedTextDirection,
+          ),
         pw.Text(
-          pdfArabic('الرصيد: ${formatStatementAmount(report.totals.balance)}'),
+          pdfArabic('الرصيد النهائي: ${formatStatementAmount(report.totals.balance)}'),
           style: style.copyWith(
               fontWeight: pw.FontWeight.bold, color: ReportPdfColors.dangerRed),
           textDirection: kPdfShapedTextDirection,

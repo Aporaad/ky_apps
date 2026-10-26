@@ -4,9 +4,13 @@ import '../../data/models/account_group_statement_model.dart';
 
 /// يبني ملف XLSX لميزان مراجعة مجموعة حسابات جزئية — نفس أعمدة الجدول في الشاشة.
 /// Builds a real .xlsx for the group trial balance (GET /accounts/group-statement):
-/// one sheet mirroring the on-screen columns (local + foreign DR/CR, balance,
-/// movement balance) with a totals row, and a small «ملخص» sheet with the scope,
-/// period and headline totals.
+/// one sheet mirroring the on-screen columns (local + foreign DR/CR, and — when a
+/// period is selected — the period balance) with a totals row, and a small «ملخص»
+/// sheet with the scope, period and headline totals.
+///
+/// «الرصيد النهائي» عمود ثابت يظهر دائماً، ويُضاف «رصيد الفترة» قبله عند اختيار فترة.
+/// The final-balance column is always present; the period balance is inserted before
+/// it only when a period is selected.
 ///
 /// الأرقام تُكتب خلايا رقمية لا نصوصاً، فيستطيع المحاسب أن يجمع عليها مباشرة في
 /// Excel بدل أن يستخرج نصاً منسّقاً بالفواصل.
@@ -18,7 +22,9 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
   final summary = excel[kSummarySheet];
   excel.delete('Sheet1');
 
-  const headers = [
+  final showPeriod = report.hasPeriod;
+
+  final headers = <String>[
     'رقم الحساب',
     'اسم الحساب',
     'العملة',
@@ -26,8 +32,8 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
     'دائن (محلي)',
     'مدين (أجنبي)',
     'دائن (أجنبي)',
-    'الرصيد',
-    'رصيد الحركة',
+    if (showPeriod) 'رصيد الفترة',
+    'الرصيد النهائي',
   ];
 
   sheet.appendRow([for (final h in headers) TextCellValue(h)]);
@@ -45,8 +51,8 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
       DoubleCellValue(row.localCredit),
       DoubleCellValue(row.foreignDebit),
       DoubleCellValue(row.foreignCredit),
+      if (showPeriod) DoubleCellValue(row.periodBalance),
       DoubleCellValue(row.balance),
-      DoubleCellValue(row.currentBalance),
     ]);
   }
 
@@ -59,8 +65,8 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
     DoubleCellValue(report.totals.localCredit),
     DoubleCellValue(report.totals.foreignDebit),
     DoubleCellValue(report.totals.foreignCredit),
+    if (showPeriod) DoubleCellValue(report.totals.periodBalance),
     DoubleCellValue(report.totals.balance),
-    DoubleCellValue(0),
   ]);
   for (var c = 0; c < headers.length; c++) {
     _styleCell(sheet, c, totalsRow, cellStyle: _totalsStyle);
@@ -76,11 +82,8 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
   summary.appendRow([TextCellValue('مستوى النطاق'), TextCellValue(report.scopeLevel)]);
   summary.appendRow([
     TextCellValue('الفترة'),
-    TextCellValue(
-      report.fromDate != null && report.toDate != null
-          ? '${report.fromDate} → ${report.toDate}'
-          : 'كل الحركات (بدون فترة)',
-    ),
+    // نفس نص الفترة الموحّد المستخدم في الشاشة و PDF (يحتمل تاريخاً واحداً)
+    TextCellValue(report.periodLabel),
   ]);
   summary.appendRow([TextCellValue('تاريخ التقرير'), TextCellValue(report.asOfDate)]);
   summary.appendRow([TextCellValue('عدد الحسابات'), IntCellValue(report.rows.length)]);
@@ -103,7 +106,16 @@ List<int> buildGroupStatementXlsx({required TrialBalanceReport report}) {
     TextCellValue('إجمالي دائن (أجنبي)'),
     DoubleCellValue(report.totals.foreignCredit),
   ]);
-  summary.appendRow([TextCellValue('صافي الرصيد'), DoubleCellValue(report.totals.balance)]);
+  if (showPeriod) {
+    summary.appendRow([
+      TextCellValue('إجمالي رصيد الفترة'),
+      DoubleCellValue(report.totals.periodBalance),
+    ]);
+  }
+  summary.appendRow([
+    TextCellValue('إجمالي الرصيد النهائي'),
+    DoubleCellValue(report.totals.balance),
+  ]);
   for (var r = totalsStart; r < summary.maxRows; r++) {
     _styleCell(summary, 0, r, cellStyle: _boldStyle);
     _styleCell(summary, 1, r, cellStyle: _boldStyle);

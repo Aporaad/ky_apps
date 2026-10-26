@@ -25,11 +25,61 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
 
+  /// هل حقل اسم المستخدم غير فارغ؟ — يتحكم بظهور زر المسح وحده
+  /// Whether the username field holds text — drives the clear button's visibility.
+  bool _hasUsernameText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // القيمة وصلت من `AuthNotifier` عند الإقلاع، فتُطبَّق متزامنةً بلا وميض
+    // The value was loaded by AuthNotifier at boot, so it is applied synchronously here.
+    _restoreUsername();
+    _usernameController.addListener(_syncUsernameText);
+  }
+
   @override
   void dispose() {
+    _usernameController.removeListener(_syncUsernameText);
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  /// تعبئة الحقل بآخر اسم نجح تسجيله على هذا الجهاز
+  /// Prefill the field with the last username that signed in successfully on this device.
+  void _restoreUsername() =>
+      _applyRemembered(ref.read(authNotifierProvider).lastUsername);
+
+  /// وضع القيمة في الحقل إن كانت صالحة والحقل ما زال فارغاً
+  /// Put the value in the field when it is usable and the field is still empty.
+  ///
+  /// لا تُلمس قيمة كتبها المستخدم: التعبئة التلقائية تملأ فراغاً ولا تستبدل كتابة.
+  /// A value the user already typed is never replaced — the prefill only fills a gap.
+  void _applyRemembered(String? value) {
+    final remembered = value?.trim() ?? '';
+    if (remembered.isEmpty || _usernameController.text.isNotEmpty) return;
+
+    _usernameController.text = remembered;
+    _usernameController.selection =
+        TextSelection.collapsed(offset: remembered.length);
+    _hasUsernameText = true;
+  }
+
+  /// إعادة البناء عند تغيّر «فارغ/غير فارغ» فقط، لا مع كل ضغطة مفتاح
+  /// Rebuild only when the empty↔non-empty state flips, never on every keystroke.
+  void _syncUsernameText() {
+    final hasText = _usernameController.text.trim().isNotEmpty;
+    if (hasText == _hasUsernameText) return;
+
+    setState(() => _hasUsernameText = hasText);
+  }
+
+  /// مسح الاسم المحفوظ من الجهاز ومن الحالة — يخدم الأجهزة المشتركة
+  /// Forget the stored username on this device and in the state, for shared devices.
+  Future<void> _forgetUsername() async {
+    _usernameController.clear();
+    await ref.read(authNotifierProvider.notifier).forgetLastUsername();
   }
 
   Future<void> _handleLogin() async {
@@ -90,6 +140,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Company name from config — reflects on the login screen immediately.
     final companyName =
         ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
+
+    // لو وصل الاسم المحفوظ بعد بناء الشاشة (إقلاع بطيء أو فتح مباشر لـ `/login`) يُعبّأ فور وصوله.
+    // كانت القيمة تُقرأ مرة واحدة في `initState`، وهذا يترك الحقل فارغاً حين يسبق بناءُ الشاشة
+    // قراءةَ التخزين — وهو احتمال حقيقي على الأجهزة البطيئة.
+    // If the remembered name lands after this screen is built (slow boot, or a direct `/login`
+    // deep link) the field is filled the moment it arrives. Reading it only in `initState` left the
+    // field empty whenever the screen was built before secure storage answered.
+    ref.listen<String?>(
+      authNotifierProvider.select((s) => s.lastUsername),
+      (_, next) => _applyRemembered(next),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -225,10 +286,28 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       // حقل اسم المستخدم
                       TextFormField(
                         controller: _usernameController,
-                        decoration: const InputDecoration(
+                        textInputAction: TextInputAction.next,
+                        autocorrect: false,
+                        autofillHints: const [AutofillHints.username],
+                        decoration: InputDecoration(
                           labelText: 'اسم المستخدم',
                           hintText: 'أدخل اسم المستخدم أو رقم الحساب',
-                          prefixIcon: Icon(Icons.person_outline_rounded),
+                          prefixIcon: const Icon(Icons.person_outline_rounded),
+                          // زر المسح يظهر فقط إن وُجد اسم محفوظ والحقل غير فارغ
+                          // The clear button appears only with a stored name and a non-empty field.
+                          suffix:
+                              authState.lastUsername != null &&
+                                  _hasUsernameText
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.close_rounded,
+                                    size: 20,
+                                  ),
+                                  color: AppColors.textSecondary,
+                                  tooltip: 'مسح اسم المستخدم المحفوظ',
+                                  onPressed: _forgetUsername,
+                                )
+                              : null,
                         ),
                         validator: (value) {
                           if (value == null || value.trim().isEmpty) {

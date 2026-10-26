@@ -1,4 +1,3 @@
-import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +6,7 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/arabic_encoding_utils.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/lazy_report_table.dart';
 import '../../../../core/widgets/permission_gate.dart';
 import '../../../../core/widgets/report_a4_sheet.dart';
 import '../../../../core/widgets/report_letterhead_branding.dart';
@@ -44,9 +44,6 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
   DateTime? _toDate;
   bool _showFilterPanel = true;
 
-  // إدارة التصفح (15 سجل في الصفحة الواحدة)
-  static const int _pageSize = 15;
-  int _currentPage = 1;
 
   @override
   void initState() {
@@ -64,7 +61,6 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
             ? '${_toDate!.day.toString().padLeft(2, '0')}/${_toDate!.month.toString().padLeft(2, '0')}/${_toDate!.year}'
             : null;
 
-    setState(() => _currentPage = 1);
 
     ref
         .read(workerStatementProvider.notifier)
@@ -565,17 +561,6 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
         (summary?['opening_balance'] as num?)?.toDouble() ?? 0.0;
     final finalBalance = (summary?['final_balance'] as num?)?.toDouble() ?? 0.0;
 
-    // حساب تقسيم الصفحات (15 سجل في الصفحة)
-    final totalRows = rows.length;
-    final totalPages = max(1, (totalRows / _pageSize).ceil());
-    final effectivePage = _currentPage.clamp(1, totalPages);
-    final startIndex = (effectivePage - 1) * _pageSize;
-    final endIndex = min(startIndex + _pageSize, totalRows);
-    final pageRows =
-        totalRows > 0
-            ? rows.sublist(startIndex, endIndex)
-            : <WorkerStatementModel>[];
-
     return ReportZoomView(
       // تمرير طبيعي للصفحة كاملة — التذييل في نهاية المحتوى، بلا A4 على الشاشة
       // Natural full-page scroll — footer at content end, no on-screen A4.
@@ -601,19 +586,13 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
               children: [
                 // 3. جدول كشف الحساب المتجاوب بالكامل (بدون تمرير أفقي)
                 _buildStatementTableLayout(
-                  rows: pageRows,
-                  isFirstPage: effectivePage == 1,
+                  rows: rows,
                   totalDebit: totalDebit,
                   totalCredit: totalCredit,
                   openingBalance: openingBalance,
                   finalBalance: finalBalance,
                 ),
 
-                // 4. عناصر التنقل بين الصفحات (عند وجود أكثر من 15 حركة)
-                if (totalPages > 1) ...[
-                  const SizedBox(height: 12),
-                  _buildPaginationBar(effectivePage, totalPages, totalRows),
-                ],
 
                 const SizedBox(height: 16),
 
@@ -771,16 +750,40 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
   // -------------------------------------------------------------
   // جدول كشف الحساب المتجاوب بالكامل مع أبعاد الشاشة
   // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // جدول الكشف — رأس مثبّت + صفوف كسولة + إجماليات مثبّتة
+  // Statement table — pinned header + lazy rows + pinned totals.
+  //
+  // كان يبني كل الصفوف داخل `Table` واحد ثم يقصّها إلى 15 صفاً في الصفحة، فكان
+  // الكشف إمّا يُخفي حركات الفترة أو يستنزف الذاكرة الأصلية عند عرضها كلها.
+  // الآن تُبنى الصفوف عند ظهورها فقط، ويُعرض كل سطر في الفترة بلا استثناء.
+  // It built all rows in one Table and then sliced 15 per page, so a wide period
+  // either hid movements or exhausted the native heap. Rows are now built on demand
+  // and every row of the period is shown.
+  // -------------------------------------------------------------
   Widget _buildStatementTableLayout({
     required List<WorkerStatementModel> rows,
-    required bool isFirstPage,
     required double totalDebit,
     required double totalCredit,
     required double openingBalance,
     required double finalBalance,
   }) {
-    const borderColor = Color(0xFF4B5563);
     const headerBgColor = Color(0xFFD4A853); // اللون الذهبي المطابق للصورة
+    const totalsBgColor = Color(0xFFF3F4F6);
+    const openingColor = Color(0xFF0369A1);
+    const amountRed = Color(0xFFDC2626);
+
+    // أوزان الأعمدة مشتركة بين الشرائح الثلاث فتبقى الأرقام متحاذية.
+    // Column weights shared by all three slices keep the amounts aligned.
+    const columnWidths = <int, TableColumnWidth>{
+      0: FlexColumnWidth(0.85), // السند
+      1: FlexColumnWidth(1.15), // النوع
+      2: FlexColumnWidth(1.0), // تأريخه
+      3: FlexColumnWidth(3.3), // البيان
+      4: FlexColumnWidth(1.2), // مدين
+      5: FlexColumnWidth(1.2), // دائن
+      6: FlexColumnWidth(1.45), // الرصيد
+    };
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -797,273 +800,186 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
         final cellVPad = isVeryCompact ? 3.0 : (isCompact ? 3.5 : 4.5);
         final cellHPad = isVeryCompact ? 1.5 : (isCompact ? 2.5 : 4.0);
 
-        return Table(
-          border: TableBorder.all(
-            color: borderColor,
-            width: 1,
-            style: BorderStyle.solid,
-          ),
-          // أوزان الأعمدة مطابقة لجدول كشف العميل
-          // Column weights mirror the customer statement table.
-          columnWidths: const {
-            0: FlexColumnWidth(0.85), // السند
-            1: FlexColumnWidth(1.15), // النوع
-            2: FlexColumnWidth(1.0), // تأريخه
-            3: FlexColumnWidth(3.3), // البيان
-            4: FlexColumnWidth(1.2), // مدين
-            5: FlexColumnWidth(1.2), // دائن
-            6: FlexColumnWidth(1.45), // الرصيد
-          },
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        Widget cell(String text, {bool center = true}) => _tableDataCell(
+              text,
+              isCenter: center,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+            );
+
+        // 1) رأس الجدول الذهبي
+        final headerRow = TableRow(
+          decoration: const BoxDecoration(color: headerBgColor),
           children: [
-            // 1. رأس الجدول الذهبي
-            TableRow(
-              decoration: const BoxDecoration(color: headerBgColor),
-              children: [
-                _tableHeaderCell(
-                  'السند',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'النوع',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'تأريخه',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'البيان',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'مدين',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'دائن',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableHeaderCell(
-                  'الرصيد',
-                  fontSize: headerFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-              ],
+            _tableHeaderCell('السند',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('النوع',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('تأريخه',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('البيان',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('مدين',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('دائن',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+            _tableHeaderCell('الرصيد',
+                fontSize: headerFontSize, vPad: cellVPad, hPad: cellHPad),
+          ],
+        );
+
+        // 2) سطر الرصيد الافتتاحي (مثبّت أعلى القائمة)
+        final openingRow = TableRow(
+          decoration: const BoxDecoration(color: Colors.white),
+          children: [
+            cell(''),
+            cell(''),
+            cell(''),
+            _tableDataCell(
+              'رصيد افتتاحي',
+              isCenter: true,
+              textColor: openingColor,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
             ),
+            _tableDataCell(
+              openingBalance != 0.0 ? _formatAmount(openingBalance) : '',
+              isCenter: true,
+              textColor: amountRed,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+              fitBox: true,
+            ),
+            cell(''),
+            cell(''),
+          ],
+        );
 
-            // 2. سطر الرصيد الافتتاحي (يظهر في الصفحة الأولى)
-            if (isFirstPage)
-              TableRow(
-                decoration: const BoxDecoration(color: Colors.white),
-                children: [
-                  _tableDataCell(
-                    '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    'رصيد افتتاحي',
-                    isCenter: true,
-                    textColor: const Color(0xFF0369A1),
-                    isBold: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    openingBalance != 0.0 ? _formatAmount(openingBalance) : '',
-                    isCenter: true,
-                    textColor: const Color(0xFFDC2626), // أحمر مطابق للصورة
-                    isBold: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                  _tableDataCell(
-                    '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                ],
-              ),
-
-            // 3. أسطر الحركات
-            ...rows.map((row) {
-              final debitVal =
-                  row.debit > 0
-                      ? row.debit
-                      : (row.entryMnt > 0 ? row.entryMnt : 0.0);
-              final creditVal =
-                  row.credit > 0
-                      ? row.credit
-                      : (row.entryMnt < 0 ? row.entryMnt.abs() : 0.0);
-              final balVal = row.balance;
-
-              return TableRow(
-                decoration: const BoxDecoration(color: Colors.white),
-                children: [
-                  _tableDataCell(
-                    row.subEntryNo ?? row.entryNo ?? '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                  _tableDataCell(
-                    ArabicEncodingUtils.fix(row.entryTypeName ?? ''),
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    row.entryDate ?? '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                  _tableDataCell(
-                    ArabicEncodingUtils.fix(row.details ?? ''),
-                    isCenter: false,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                  ),
-                  _tableDataCell(
-                    debitVal > 0 ? _formatAmount(debitVal) : '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                  _tableDataCell(
-                    creditVal > 0 ? _formatAmount(creditVal) : '',
-                    isCenter: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                  _tableDataCell(
-                    _formatAmount(balVal),
-                    isCenter: true,
-                    isBold: true,
-                    fontSize: dataFontSize,
-                    vPad: cellVPad,
-                    hPad: cellHPad,
-                    fitBox: true,
-                  ),
-                ],
-              );
-            }),
-
-            // 4. سطر إجمالي العمليات
-            TableRow(
-              decoration: const BoxDecoration(color: Color(0xFFF3F4F6)),
-              children: [
-                _tableDataCell(
-                  '',
-                  isCenter: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableDataCell(
-                  '',
-                  isCenter: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableDataCell(
-                  '',
-                  isCenter: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableDataCell(
-                  'اجمالي العمليات',
-                  isCenter: true,
-                  isBold: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                ),
-                _tableDataCell(
-                  _formatAmount(totalDebit),
-                  isCenter: true,
-                  isBold: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                  fitBox: true,
-                ),
-                _tableDataCell(
-                  _formatAmount(totalCredit),
-                  isCenter: true,
-                  isBold: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                  fitBox: true,
-                ),
-                _tableDataCell(
-                  _formatAmount(totalDebit - totalCredit),
-                  isCenter: true,
-                  isBold: true,
-                  fontSize: dataFontSize,
-                  vPad: cellVPad,
-                  hPad: cellHPad,
-                  fitBox: true,
-                ),
-              ],
+        // 3) سطر إجمالي العمليات (مثبّت أسفل القائمة)
+        final totalsRow = TableRow(
+          decoration: const BoxDecoration(color: totalsBgColor),
+          children: [
+            cell(''),
+            cell(''),
+            cell(''),
+            _tableDataCell(
+              'اجمالي العمليات',
+              isCenter: true,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+            ),
+            _tableDataCell(
+              _formatAmount(totalDebit),
+              isCenter: true,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+              fitBox: true,
+            ),
+            _tableDataCell(
+              _formatAmount(totalCredit),
+              isCenter: true,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+              fitBox: true,
+            ),
+            _tableDataCell(
+              _formatAmount(totalDebit - totalCredit),
+              isCenter: true,
+              isBold: true,
+              fontSize: dataFontSize,
+              vPad: cellVPad,
+              hPad: cellHPad,
+              fitBox: true,
             ),
           ],
+        );
+
+        return LazyReportTable(
+          headerRows: [headerRow, openingRow],
+          footerRows: [totalsRow],
+          columnWidths: columnWidths,
+          rowCount: rows.length,
+          rowBuilder: (index) {
+            final row = rows[index];
+            final debitVal = row.debit > 0
+                ? row.debit
+                : (row.entryMnt > 0 ? row.entryMnt : 0.0);
+            final creditVal = row.credit > 0
+                ? row.credit
+                : (row.entryMnt < 0 ? row.entryMnt.abs() : 0.0);
+
+            return TableRow(
+              decoration: const BoxDecoration(color: Colors.white),
+              children: [
+                _tableDataCell(
+                  row.subEntryNo ?? row.entryNo ?? '',
+                  isCenter: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
+                _tableDataCell(
+                  ArabicEncodingUtils.fix(row.entryTypeName ?? ''),
+                  isCenter: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                ),
+                _tableDataCell(
+                  row.entryDate ?? '',
+                  isCenter: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
+                _tableDataCell(
+                  ArabicEncodingUtils.fix(row.details ?? ''),
+                  isCenter: false,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                ),
+                _tableDataCell(
+                  debitVal > 0 ? _formatAmount(debitVal) : '',
+                  isCenter: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
+                _tableDataCell(
+                  creditVal > 0 ? _formatAmount(creditVal) : '',
+                  isCenter: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
+                _tableDataCell(
+                  _formatAmount(row.balance),
+                  isCenter: true,
+                  isBold: true,
+                  fontSize: dataFontSize,
+                  vPad: cellVPad,
+                  hPad: cellHPad,
+                  fitBox: true,
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -1168,79 +1084,6 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
     );
   }
 
-  // -------------------------------------------------------------
-  // شريط التنقل بين الصفحات (15 حركة لكل صفحة)
-  // -------------------------------------------------------------
-  Widget _buildPaginationBar(int currentPage, int totalPages, int totalRows) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF9FAFB),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: const Color(0xFFE5E7EB)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              'صفحة $currentPage/$totalPages  ·  $totalRows حركة',
-              style: const TextStyle(
-                fontSize: 11,
-                color: AppColors.textMuted,
-                fontWeight: FontWeight.bold,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                onPressed:
-                    currentPage > 1
-                        ? () => setState(() => _currentPage--)
-                        : null,
-                icon: const Icon(Icons.chevron_right_rounded, size: 20),
-                tooltip: 'الصفحة السابقة',
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFD4A853),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  '$currentPage',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black,
-                  ),
-                ),
-              ),
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                onPressed:
-                    currentPage < totalPages
-                        ? () => setState(() => _currentPage++)
-                        : null,
-                icon: const Icon(Icons.chevron_left_rounded, size: 20),
-                tooltip: 'الصفحة التالية',
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
 
   // خلايا الجدول
   Widget _tableHeaderCell(

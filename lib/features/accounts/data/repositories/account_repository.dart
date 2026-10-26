@@ -569,12 +569,18 @@ class AccountRepository {
   }
 
   /// كشف حساب مالي
+  ///
+  /// لا يُرسل `limit` إطلاقاً ما لم يُطلب صراحةً: الخادم يعيد **كل حركات الفترة**
+  /// عند غيابه. كان هنا `limit: 50` ثابتاً فكان الكشف يعرض 50 سطراً فقط ويبدو
+  /// كأن فلتر الفترة مُتجاهَل — وهو العطل الذي أُصلح.
+  /// `limit` is omitted unless a caller pages explicitly, so the server returns every
+  /// movement of the period. The previous hardcoded `limit: 50` truncated the statement.
   Future<AccountStatementData> fetchAccountStatement(
     int accNo, {
     String? fromDate,
     String? toDate,
-    int page = 1,
-    int limit = 50,
+    int? page,
+    int? limit,
     CancelToken? cancelToken,
   }) async {
     try {
@@ -583,8 +589,8 @@ class AccountRepository {
         queryParameters: {
           if (fromDate != null) 'from_date': fromDate,
           if (toDate != null) 'to_date': toDate,
-          'page': page,
-          'limit': limit,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
         },
         cancelToken: cancelToken,
       );
@@ -634,6 +640,12 @@ class AccountRepository {
   /// GET /accounts/group-statement — same try/cancel-token/error pattern as the
   /// adjacent statement/detail methods above; scope params are all optional and
   /// the server resolves the deepest one present (see AccountController::getGroupStatement).
+  ///
+  /// الترقيم إجباري في الواجهة: النطاق الواحد قد يمتد لعشرين ألف حساب، وجلبها
+  /// دفعة واحدة كان يُفرّغ ذاكرة الجهاز. `limit` سقفه 2000 في الخادم، و`null`
+  /// تعني «بلا ترقيم» (كل الصفوف) وهي مخصصة للتصدير الكامل فقط.
+  /// `limit` null = no pagination at all (the full-export path only); the server
+  /// caps a positive limit at 2000 rows. `includeTotals` is set once, on page 1.
   Future<TrialBalanceReport> fetchGroupStatement({
     int? accNo,
     int? accSub,
@@ -641,6 +653,9 @@ class AccountRepository {
     int? groupId,
     String? fromDate,
     String? toDate,
+    int? page,
+    int? limit,
+    bool includeTotals = true,
     CancelToken? cancelToken,
   }) async {
     try {
@@ -653,6 +668,9 @@ class AccountRepository {
           if (groupId != null) 'group_id': groupId,
           if (fromDate != null) 'from_date': fromDate,
           if (toDate != null) 'to_date': toDate,
+          if (page != null) 'page': page,
+          if (limit != null) 'limit': limit,
+          'include_totals': includeTotals ? 1 : 0,
         },
         cancelToken: cancelToken,
       );

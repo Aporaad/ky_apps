@@ -195,13 +195,13 @@ class AccountStatementLetterhead extends StatelessWidget {
             builder: (context, constraints) {
               final dateRangeText = Text(
                 'من تاريخ: $fromDate   إلى تاريخ: $toDate',
-                style: const TextStyle(                  
+                style: const TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.w600,
                   color: Colors.black87,
                 ),
                 textAlign: TextAlign.center,
-              );              
+              );
 
               if (constraints.maxWidth < 520) {
                 return Column(
@@ -215,7 +215,7 @@ class AccountStatementLetterhead extends StatelessWidget {
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Flexible(child: dateRangeText)               
+                  Flexible(child: dateRangeText)
                 ],
               );
             },
@@ -228,12 +228,30 @@ class AccountStatementLetterhead extends StatelessWidget {
 
 /// السند | النوع | تأريخه | البيان | مدين | دائن | الرصيد، مع رصيد افتتاحي
 /// وصف حركات ورصيد جارٍ لكل سطر. يتجاوب مع عرض الشاشة عبر `statementTableMetrics`.
-class AccountStatementReportTable extends StatelessWidget {
+///
+/// الجدول **كسول (lazy)**: الرأس وصف الرصيد الافتتاحي في جدول ثابت أعلى، وصفوف
+/// الحركات في `ListView.builder`، وسطر الإجمالي في جدول ثابت أسفل — والثلاثة
+/// تتشارك نفس `columnWidths` فيبقى الانطباع جدولاً واحداً.
+///
+/// سبب ذلك: كشف الفترة الكاملة قد يحمل آلاف الحركات، وبناؤها كلها في `Table`
+/// واحد يُنشئ خلية أصلية لكل نص فينفد heap الجهاز ويُقتل التطبيق (Scudo OOM).
+/// The table is **lazy**: a fixed header (column titles + opening balance), a
+/// `ListView.builder` for the movement rows, and a fixed totals row — all three
+/// sharing one `columnWidths` map so it still reads as a single table. Building
+/// thousands of rows into one `Table` allocates a native paragraph per cell and
+/// exhausts the device heap (Scudo OOM), which is what this split prevents.
+class AccountStatementReportTable extends StatefulWidget {
   final List<AccountTransactionModel> transactions;
   final double openingBalance;
   final double finalBalance;
   final double totalDebit;
   final double totalCredit;
+
+  /// ارتفاع منطقة الصفوف القابلة للتمرير. `null` = يُشتق من الشاشة (55% منها،
+  /// محصور بين 240 و760). مرِّره عندما يكون الأب محدد الارتفاع لتعبئة كامل المساحة.
+  /// Height of the scrollable rows area. `null` derives it from the screen; pass a
+  /// value when the parent already has a bound and the rows should fill it.
+  final double? rowsHeight;
 
   const AccountStatementReportTable({
     super.key,
@@ -242,7 +260,247 @@ class AccountStatementReportTable extends StatelessWidget {
     required this.finalBalance,
     required this.totalDebit,
     required this.totalCredit,
+    this.rowsHeight,
   });
+
+  @override
+  State<AccountStatementReportTable> createState() =>
+      _AccountStatementReportTableState();
+}
+
+class _AccountStatementReportTableState
+    extends State<AccountStatementReportTable> {
+  /// متحكّم تمرير واحد يُمرَّر للـ Scrollbar والـ ListView معاً حتى لا يظهر شريط
+  /// تمرير منفصل عن المحتوى. One controller shared by Scrollbar and ListView.
+  final ScrollController _scroll = ScrollController();
+
+  /// أوزان الأعمدة: مشتركة بين الشرائح الثلاث، وهي ما يُبقي الأرقام متحاذية.
+  /// One column-width map shared by all three slices — this is what keeps the
+  /// amounts aligned across separate tables.
+  static const Map<int, TableColumnWidth> _columnWidths = <int, TableColumnWidth>{
+    0: FlexColumnWidth(0.85), // السند
+    1: FlexColumnWidth(1.15), // النوع
+    2: FlexColumnWidth(1.0), // تأريخه
+    3: FlexColumnWidth(3.3), // البيان
+    4: FlexColumnWidth(1.2), // مدين
+    5: FlexColumnWidth(1.2), // دائن
+    6: FlexColumnWidth(1.45), // الرصيد
+  };
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  /// شريحة جدول واحدة (رأس/افتتاحي/صف حركة/إجمالي) بنفس الحدود والأوزان.
+  /// One table slice with the shared border and column widths.
+  Widget _slice(List<TableRow> rows) {
+    return Table(
+      border: TableBorder.all(
+        color: kStatementBorderColor,
+        width: 1,
+        style: BorderStyle.solid,
+      ),
+      columnWidths: _columnWidths,
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      children: rows,
+    );
+  }
+
+  TableRow _headerRow(({double header, double data, double vPad, double hPad}) m) {
+    return TableRow(
+      decoration: const BoxDecoration(color: kStatementHeaderBgColor),
+      children: [
+        tableHeaderCell('السند', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('النوع', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('تأريخه', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('البيان', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('مدين', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('دائن', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+        tableHeaderCell('الرصيد', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
+      ],
+    );
+  }
+
+  /// سطر الرصيد الافتتاحي — ثابت أعلى القائمة، لا يتحرك مع التمرير.
+  /// Opening-balance row — pinned above the scrollable rows.
+  TableRow _openingRow(
+    ({double header, double data, double vPad, double hPad}) m,
+  ) {
+    final opening = widget.openingBalance;
+    return TableRow(
+      decoration: const BoxDecoration(color: Colors.white),
+      children: [
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell(
+          'رصيد افتتاحي',
+          isCenter: true,
+          textColor: const Color(0xFF0369A1),
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+        ),
+        tableDataCell(
+          formatStatementAmount(opening >= 0 ? opening : 0),
+          isCenter: true,
+          textColor: const Color(0xFFDC2626),
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(opening < 0 ? opening.abs() : 0),
+          isCenter: true,
+          textColor: const Color(0xFFDC2626),
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(opening),
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+      ],
+    );
+  }
+
+  /// سطر حركة — الرصيد الجاري يحسبه الخادم تراكمياً من ENTRY_MNT ولا يُقرأ
+  /// من BALANCE_S أبداً. A movement row; its running balance comes from the server
+  /// (opening + cumulative period movement), never from the stored BALANCE_S.
+  TableRow _dataRow(
+    AccountTransactionModel tx,
+    ({double header, double data, double vPad, double hPad}) m,
+  ) {
+    final debitVal = tx.debit ?? 0.0;
+    final creditVal = tx.credit ?? 0.0;
+    final balVal = tx.balance ?? 0.0;
+
+    return TableRow(
+      decoration: const BoxDecoration(color: Colors.white),
+      children: [
+        tableDataCell(
+          tx.subEntryNo?.isNotEmpty == true
+              ? tx.subEntryNo!
+              : (tx.entryNo?.toString() ?? ''),
+          isCenter: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          ArabicEncodingUtils.fix(tx.entryTypeName ?? ''),
+          isCenter: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+        ),
+        tableDataCell(
+          tx.date ?? '',
+          isCenter: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          ArabicEncodingUtils.fix(tx.description ?? ''),
+          isCenter: false,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+        ),
+        tableDataCell(
+          formatStatementAmount(debitVal),
+          isCenter: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(creditVal),
+          isCenter: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(balVal),
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+      ],
+    );
+  }
+
+  /// سطر إجمالي العمليات — ثابت أسفل القائمة.
+  /// Totals row — pinned below the scrollable rows.
+  TableRow _totalsRow(
+    ({double header, double data, double vPad, double hPad}) m,
+  ) {
+    return TableRow(
+      decoration: const BoxDecoration(color: Color(0xFFF9FAFB)),
+      children: [
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
+        tableDataCell(
+          'اجمالي العمليات',
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+        ),
+        tableDataCell(
+          formatStatementAmount(widget.totalDebit),
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(widget.totalCredit),
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+        tableDataCell(
+          formatStatementAmount(widget.finalBalance),
+          isCenter: true,
+          isBold: true,
+          fontSize: m.data,
+          vPad: m.vPad,
+          hPad: m.hPad,
+          fitBox: true,
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -254,202 +512,45 @@ class AccountStatementReportTable extends StatelessWidget {
       builder: (context, constraints) {
         final m = statementTableMetrics(constraints.maxWidth);
 
+        // ارتفاع منطقة الصفوف: من الأب إن كان محدداً، وإلا نسبة من الشاشة — القائمة
+        // внутри Column مفتوح الارتفاع تحتاج ارتفاعاً صريحاً وإلا فشل التخطيط.
+        // Row viewport: the parent's bound when it has one, otherwise a share of the
+        // screen — a ListView inside an unbounded Column needs an explicit height.
+        final rowsHeight = widget.rowsHeight ??
+            (constraints.hasBoundedHeight && constraints.maxHeight.isFinite
+                ? constraints.maxHeight
+                : (MediaQuery.sizeOf(context).height * 0.55)
+                    .clamp(240.0, 760.0)
+                    .toDouble());
+
         return Padding(
           padding: const EdgeInsets.symmetric(horizontal: 3),
-          child: Table(
-              border: TableBorder.all(
-                color: kStatementBorderColor,
-                width: 1,
-                style: BorderStyle.solid,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // الرأس + الرصيد الافتتاحي (ثابتان)
+              _slice([_headerRow(m), _openingRow(m)]),
+
+              // الحركات — تُبنى عند الظهور فقط، فالذاكرة مستوية مهما كان العدد.
+              // Movements — built lazily on appearance, so memory stays flat.
+              SizedBox(
+                height: rowsHeight,
+                child: Scrollbar(
+                  controller: _scroll,
+                  thumbVisibility: true,
+                  child: ListView.builder(
+                    controller: _scroll,
+                    cacheExtent: 600,
+                    itemCount: widget.transactions.length,
+                    itemBuilder: (context, index) =>
+                        _slice([_dataRow(widget.transactions[index], m)]),
+                  ),
+                ),
               ),
-              // أوزان الأعمدة مطابقة لجدول كشف العميل: أوسع عمود للبيان،
-              // والأرقام مضغوطة حتى لا تفيض على الشاشات الضيقة.
-              // Column weights mirror the customer report table: the description
-              // gets the widest slot, amounts stay compact.
-              columnWidths: const {
-                0: FlexColumnWidth(0.85), // السند
-                1: FlexColumnWidth(1.15), // النوع
-                2: FlexColumnWidth(1.0), // تأريخه
-                3: FlexColumnWidth(3.3), // البيان
-                4: FlexColumnWidth(1.2), // مدين
-                5: FlexColumnWidth(1.2), // دائن
-                6: FlexColumnWidth(1.45), // الرصيد
-              },
-              defaultVerticalAlignment: TableCellVerticalAlignment.middle,
-              children: [
-                TableRow(
-                  decoration: const BoxDecoration(color: kStatementHeaderBgColor),
-                  children: [
-                    tableHeaderCell('السند', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('النوع', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('تأريخه', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('البيان', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('مدين', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('دائن', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                    tableHeaderCell('الرصيد', fontSize: m.header, vPad: m.vPad, hPad: m.hPad),
-                  ],
-                ),
-          
-                // سطر الرصيد الافتتاحي
-                TableRow(
-                  decoration: const BoxDecoration(color: Colors.white),
-                  children: [
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell(
-                      'رصيد افتتاحي',
-                      isCenter: true,
-                      textColor: const Color(0xFF0369A1),
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                    ),
-                    tableDataCell(
-                      formatStatementAmount(openingBalance >= 0 ? openingBalance : 0),
-                      isCenter: true,
-                      textColor: const Color(0xFFDC2626),
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                    tableDataCell(
-                      formatStatementAmount(openingBalance < 0 ? openingBalance.abs() : 0),
-                      isCenter: true,
-                      textColor: const Color(0xFFDC2626),
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                    tableDataCell(
-                      formatStatementAmount(openingBalance),
-                      isCenter: true,
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                  ],
-                ),
-          
-                // أسطر الحركات — الرصيد الجاري لكل سطر يحسبه الخادم تراكمياً من
-                // ENTRY_MNT (رصيد افتتاحي + حركة الفترة) ولا يُقرأ من BALANCE_S أبداً.
-                // Movement rows — the per-row running balance is computed server-side
-                // cumulatively from ENTRY_MNT (opening + period movement) and is never
-                // read from BALANCE_S.
-                ...transactions.map((tx) {
-                  final debitVal = tx.debit ?? 0.0;
-                  final creditVal = tx.credit ?? 0.0;
-                  final balVal = tx.balance ?? 0.0;
-          
-                  return TableRow(
-                    decoration: const BoxDecoration(color: Colors.white),
-                    children: [
-                      tableDataCell(
-                        tx.subEntryNo?.isNotEmpty == true
-                            ? tx.subEntryNo!
-                            : (tx.entryNo?.toString() ?? ''),
-                        isCenter: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                        fitBox: true,
-                      ),
-                      tableDataCell(
-                        ArabicEncodingUtils.fix(tx.entryTypeName ?? ''),
-                        isCenter: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                      ),
-                      tableDataCell(
-                        tx.date ?? '',
-                        isCenter: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                        fitBox: true,
-                      ),
-                      tableDataCell(
-                        ArabicEncodingUtils.fix(tx.description ?? ''),
-                        isCenter: false,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                      ),
-                      tableDataCell(
-                        formatStatementAmount(debitVal),
-                        isCenter: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                        fitBox: true,
-                      ),
-                      tableDataCell(
-                        formatStatementAmount(creditVal),
-                        isCenter: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                        fitBox: true,
-                      ),
-                      tableDataCell(
-                        formatStatementAmount(balVal),
-                        isCenter: true,
-                        isBold: true,
-                        fontSize: m.data,
-                        vPad: m.vPad,
-                        hPad: m.hPad,
-                        fitBox: true,
-                      ),
-                    ],
-                  );
-                }),
-          
-                // سطر إجمالي العمليات
-                TableRow(
-                  decoration: const BoxDecoration(color: Color(0xFFF9FAFB)),
-                  children: [
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell('', fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell('اجمالي العمليات', isCenter: true, isBold: true, fontSize: m.data, vPad: m.vPad, hPad: m.hPad),
-                    tableDataCell(
-                      formatStatementAmount(totalDebit),
-                      isCenter: true,
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                    tableDataCell(
-                      formatStatementAmount(totalCredit),
-                      isCenter: true,
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                    tableDataCell(
-                      formatStatementAmount(finalBalance),
-                      isCenter: true,
-                      isBold: true,
-                      fontSize: m.data,
-                      vPad: m.vPad,
-                      hPad: m.hPad,
-                      fitBox: true,
-                    ),
-                  ],
-                ),
-              ],
+
+              // سطر الإجمالي (ثابت)
+              _slice([_totalsRow(m)]),
+            ],
           ),
         );
       },

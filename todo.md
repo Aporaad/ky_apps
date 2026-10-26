@@ -1555,3 +1555,102 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
 - [x] **اختبار:** تحديث `account_statement_models_test.dart` للعقد الجديد + اختبار جديد يثبت تجاهل `BALANCE_S`.
 - [x] **التحقق:** `flutter analyze` = No issues found! · `flutter test` = 295 ناجحاً (5 متجاوزة) · Pint passed · Pest = 157 ناجحاً / 4 متجاوزة · تحقق رقمي 20/20 على بيانات حقيقية.
 - [x] **تصحيح توثيقي:** عمود نوع القيد هو `ENTRY_TYPE_NO` لا `ETRY_TYPE_NO` (أُثبت بـ ORA-00904) وصُحّح في `DBdevloping_history.md` و`db_commends.md`.
+
+---
+
+## 2026-10-25 (22:13) — تذكّر آخر اسم مستخدم وتعبئته تلقائياً في شاشة الدخول (Qoder)
+
+- [x] **التخزين:** مفتاح مشفّر `ky_last_username` + `saveLastUsername` / `getLastUsername` / `deleteLastUsername` في `SecureStorageService`؛ لا يُحذف في `clearAll()` ويُحذف في `purgeEverything()`.
+- [x] **قاعدة القيمة:** دالة نقية `usernameToRemember(canonical, typed)` — الاسم الرسمي من الخادم أولاً ثم النص المكتوب، والمسافات وحدها تعني «لا شيء».
+- [x] **الحفظ بعد النجاح فقط:** `login` و`biometricLogin` عبر `_rememberUsername` (كتابة القرص + تحديث الحالة في مكان واحد).
+- [x] **الحالة:** `AuthState.lastUsername` يُحمَّل في `checkAuthStatus()` بصيغة الإغلاق في `copyWith`، وينتقل عبر `logout()` و`forceLogout()`.
+- [x] **شاشة الدخول:** تعبئة تلقائية في `initState` (بلا وميض) + `ref.listen` يعبّئ الاسم لو وصل بعد بناء الشاشة + `AutofillHints.username` + زر مسح يفرّغ الحقل ويستدعي `forgetLastUsername()`.
+- [x] **اختبار جديد:** `test/features/auth/last_username_test.dart` — 13 حالة (القاعدة · البقاء بعد الطرد/الخروج · مسار `login` الحقيقي نجاحاً وفشلاً · تعبئة الشاشة بما فيه الوصول المتأخر).
+- [x] **تصحيح جانبي:** `group_statement_xlsx_builder.dart` كان يقرأ `currentBalance` المحذوف → `periodBalance`، وإجمالي «رصيد الحركة» من `totals.periodBalance`، وتحديث اختبار شاشة ميزان المجموعة.
+- [x] **التحقق:** `flutter analyze` = No issues found! · `flutter test` = 313 ناجحاً (5 متجاوزة) · لا تغيير على الخادم ولا على قاعدة البيانات.
+
+---
+
+## 2026-10-25 (22:57) — عمود «رصيد الفترة» في ميزان الحسابات الجزئية + تصحيح رصيد الحساب المالي المعروض (Qoder)
+
+- [x] **الخادم — ميزان المجموعة** `AccountController::getGroupStatement`: صار يُرجع في المرور نفسه رصيدين لكل سطر:
+  `balance` = الرصيد **النهائي** (صافي كل حركات الحساب بلا أي فلتر تاريخ) و`period_balance` = صافي حركة **الفترة**؛
+  شرط التاريخ انتقل من `JOIN` إلى تعبيرات `SUM(CASE WHEN <period> …)` فبقيت الحسابات بلا حركة في الفترة ظاهرة بأصفار.
+- [x] **الخادم:** إضافة `has_period` في `data`، جمع `period_balance` في `totals`، وحذف `current_balance` (كان يحمل لقطة
+  `CHART_ACC.BALANCE` المتقادمة) — لا مستهلك له بعد الآن.
+- [x] **الخادم — رصيد الحساب المالي:** `getChartAccounts` لم يعد يقرأ `CHART_ACC.BALANCE`، بل يحسب الصافي من `ENTRY_SUB`
+  عبر `movementBalancesFor($accNos, null, null)`؛ وهذا يُصلح **كل** أماكن عرض الرصيد دفعةً واحدة: قائمة اختيار الحساب
+  في «كشف حساب مالي»، وقائمة الحساب في نموذج إنشاء/تعديل المستخدم، ولوحة الحسابات، ودورة اختيار الحساب المالي.
+- [x] **الخادم — كشفا الحساب:** `AccountController::getAccountStatement` و`MyStatementController::financialStatement`
+  صار `account.balance` = صافي الدفتر التراكمي من `ENTRY_MNT`، وأُزيل عمود `BALANCE` من استعلام الحساب في الاثنين.
+- [x] **Flutter — الموديل** `TrialBalanceRow`: `balance` (النهائي) + `periodBalance` (افتراضي 0)، ومستبعد `currentBalance`؛
+  `TrialBalanceTotals.periodBalance`، و`TrialBalanceReport.hasPeriod` + `periodLabel` (تسمية صحيحة للفترة أحادية الطرف).
+- [x] **Flutter — الجدول** `account_group_statement_report_table.dart`: أعمدة ديناميكية (8 أو 9)، عمود **«رصيد الفترة»**
+  يُدرَج قبل **«الرصيد»** مباشرةً فقط عند وجود فلترة فترة، و`columnWidths` تُبنى بحسب ظهوره، وسطر المجاميع مثله.
+- [x] **Flutter — PDF و XLSX:** عمود الفترة الشرطي في الاثنين + ترويسة الفترة من `report.periodLabel` + إجمالي رصيد الفترة،
+  و`balance` المعنون «الرصيد النهائي»؛ قائمة عرض PDF تُعكس مرة واحدة بدل فهارس يدوية.
+- [x] **Flutter — شاشة الكشف:** ترويسة الفترة من `periodLabel`، وشرح أسفل الجدول يوضّح الفرق بين العمودين.
+- [x] **إصلاح مشترك:** `pdfDateRangeRow` في `report_pdf_page.dart` كان يطبع «كل الحركات» عند وجود تاريخ واحد فقط؛
+  صار يطبع «من تاريخ: X» أو «إلى تاريخ: Y».
+- [x] **الاختبارات:** تحديث `account_statement_models_test.dart` (`period_balance` + استقلال الرصيدين + الافتراضي + الفترة
+  أحادية الطرف) واختبارَي ودجت جديدين يُثبتان إخفاء/إظهار عمود «رصيد الفترة» في `account_group_statement_screen_test.dart`.
+- [x] **التحقق:** `php -l` نظيف · Pint نظيف · `php artisan test` = 157 ناجحاً / 4 متجاوزة (11,947 تأكيداً) ·
+  `flutter analyze` = No issues found! · `flutter test` = 308 ناجحاً (5 متجاوزة) · تحقق رقمي على القاعدة الحقيقية **112/112**.
+- [x] **دليل تقادم العمود المخزّن:** `CHART_ACC.BALANCE` يخالف مجموع الحركات في **19,126** حساباً من **20,954**،
+  و**1,162** حساباً له حركات ومخزّنه صفر (مثال: 41210001 المخزّن −1,493,000,510 vs الحركات −1,801,753,216.78).
+
+---
+
+## 2026-10-26 (00:48) — إصلاح تهنيج التطبيق: ترقيم ميزان المجموعة + مهلة 3 ثوانٍ + تحميل تدريجي + جدول كسول (Qoder)
+
+**التشخيص:** سجل `flutter run` أظهر موت العملية بـ **Scudo OOM** (1,391MB محجوزة · 6,653,649 تخصيصاً ·
+«exhausted 256M for size class 7120») لا استثناء Dart ولا خطأ شبكة. السبب: `acc_sub=12` يضم **20,774**
+حساباً تُجلب دفعة واحدة بلا ترقيم، ثم تُبنى كلها داخل `Table` غير كسول (≈186,966 خلية × `ui.Paragraph` أصلي).
+
+- [x] **الخادم — ترقيم حقيقي** `AccountController::getGroupStatement`: `page` / `limit` (سقفه 2000، والقيمة `0`
+  تعني «كل الصفوف» لمسار التصدير) عبر `ROWNUM` حول نفس الاستعلام المجمّع `$innerSql`.
+- [x] **الخادم — إجماليات النطاق كله** استعلام واحد `COUNT(*) + SUM(...)` فوق `{$innerSql}` (بوابة `include_totals`)،
+  فأُزيل تجميع الإجماليات صفاً بصف (كان سيضاعف الرقم مع كل صفحة).
+- [x] **الخادم — `meta` حقيقية**: `total` · `page` · `limit` · `total_pages` · `has_more` · `totals_included`.
+- [x] **الموديل** `TrialBalanceReport`: `total`/`page`/`limit`/`totalPages`/`hasMore` من `meta`، و`isPartial`،
+  و`loadRatio`، و`appendPage()` الذي يدمج الأقسام ويُبقي إجماليات الصفحة الأولى.
+- [x] **المستودع** `fetchGroupStatement`: معاملات `page` / `limit` / `includeTotals`.
+- [x] **الشاشة — مهلة 3 ثوانٍ** `fetchDelay` (افتراضياً `Duration(seconds: 3)`): لا طلب والمستخدم يختار؛
+  كل تغيير يلغي المؤقّت والطلب الجاري ويعيد العدّ، والتقرير السابق يُمسح فوراً.
+- [x] **الشاشة — تحميل على أقسام** قسم أول 1000 صف يُعرض فوراً ثم بقية الأقسام تُضاف تدريجياً مع شريط تقدّم
+  «جارٍ عرض الأقسام تدريجياً — X من Y».
+- [x] **الشاشة — حدّ 2000 صف** `kGroupStatementMaxOnScreenRows`: يتوقف التنزيل التلقائي وتظهر بطاقة
+  **«النطاق واسع جدًا، اختر مجموعة أدق»** مع **زر تصدير كامل من الخادم** وزر **«عرض كل الصفوف تدريجياً»**.
+- [x] **الجدول — صفوف كسولة** ترويسة مثبّتة + `ListView.builder` + سطر إجمالي مثبّت، بنفس `columnWidths`
+  فتبقى المحاذاة؛ الذاكرة ثابتة مهما كبر النطاق.
+- [x] **التصدير** `GroupStatementExportMenu.fetchFull`: المستند يُبنى من **النطاق كاملاً** (`limit` بلا قيمة)
+  لا من الصفوف المعروضة، مع حراسة نقر مزدوج وزر داخل الصفحة (`buttonLabel`).
+- [x] **الاختبارات:** `account_group_statement_model_test.dart` (6 حالات: `meta` · الغياب · `has_more: "1"` ·
+  الدمج · حفظ الإجماليات · `total=0`) و`account_group_statement_screen_test.dart` (مهلة 3 ثوانٍ · إعادة العدّ ·
+  الأقسام · حدّ 2000 · قائمة التصدير · «عرض الكل» · جدول 5000 صف لا يبني إلا المرئي).
+- [x] **التحقق:** `php -l` نظيف · Pint نظيف · `php artisan test` = 157 ناجحاً / 4 متجاوزة (11,947 تأكيداً) ·
+  `flutter analyze` = No issues found! · `flutter test` = 326 ناجحاً (5 متجاوزة) · تحقق على القاعدة الحقيقية **13/13**
+  (صفحة 1: 500 صفاً في 2.58 ثانية · 42 صفحة · تصدير كامل 20,774 صفاً في 3.95 ثانية · الإجماليات = مجموع الصفوف).
+
+
+---
+
+## 2026-10-26 03:11 — إصلاح: الكشوفات تعرض كل سجلات الفترة (لا 50 سطراً)
+
+**الشكوى:** كل التقارير والكشوفات تعرض عدداً قليلاً من السجلات لا يتجاوز 50، وفترة شهرين تظهر كأنها 30 يوماً فقط.
+**السبب الجذري:** `limit` افتراضي 50 في الخادم + `limit: 50` ثابت في المستودع، إضافة إلى مُرقّم 15 صفاً في كشف العاملين.
+
+- [x] **الخادم** `AccountController::getAccountStatement`: غياب `limit` (أو `limit=0`) = **كل حركات الفترة**؛ أي قيمة موجبة تُقيَّد بـ 2000؛ `meta` يفضح `limit/returned/total_pages/has_more`.
+- [x] **الخادم** `MyStatementController::financialStatement` (كشف حسابي المالي): نفس العقد تماماً.
+- [x] **الخادم** `AccountController::getDetailedStatement`: نفس العقد، وتخطّي غلاف `ROWNUM` كلياً عند غياب الحد.
+- [x] **العميل** `AccountRepository.fetchAccountStatement`: `page`/`limit` اختياريان ولا يُرسلان إلا بطلب صريح.
+- [x] **الجدول** `AccountStatementReportTable`: صار كسولاً — رأس + رصيد افتتاحي مثبّتان، `ListView.builder` للحركات، سطر الإجمالي مثبّت، وأوزان أعمدة واحدة.
+- [x] **جدول عام** `lib/core/widgets/lazy_report_table.dart` لإعادة الاستخدام في بقية الكشوفات.
+- [x] **كشف العاملين** `worker_statement_screen.dart`: أُلغي الترقيم المحلي (15/صفحة) وأُلغي زر التنقل؛ كل الحركات تُعرض عبر `LazyReportTable`.
+- [x] **كشف العمل** `WorkerWorkReportTable`: صار كسولاً (الرأس وسطرا الإجمالي مثبّتان) — الفترة الطويلة تُعرض كاملة.
+- [x] **الاختبارات** `StatementFullPeriodTest` (3 حالات على القاعدة الحقيقية: بلا limit · limit=25 · الكشف الشخصي) و
+  `account_statement_repository_test.dart` (3) و`account_statement_lazy_rows_test.dart` (4).
+- [x] **التحقق:** `php -l` نظيف · Pint نظيف · `php artisan test` = **160 ناجحاً / 4 متجاوزة (11,964 تأكيداً)** ·
+  `flutter analyze` = No issues found! · `flutter test` = **333 ناجحاً (5 متجاوزة)**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **اقتطاع `limit`:** أُزيل · **لا commit** (لم يُطلب) · **لا DDL/DML**.

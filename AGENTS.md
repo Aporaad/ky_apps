@@ -290,10 +290,22 @@ Exact keys (`lib/core/storage/secure_storage_service.dart`):
 | `ky_user_permissions` | JSON list of granted permission codes (IBAC) |
 | `ky_is_admin` | `'1'` / `'0'` — the `IS_ADMIN` bypass flag |
 | `ky_session_expires_at` | the server's `YYYY-MM-DD HH:MM:SS` deadline text of the current session (Oracle clock, no zone marker) |
+| `ky_last_username` | the last username that signed in successfully — device-level preference for the login prefill; **survives `clearAll()`** (and therefore logout / idle timeout / 401 eviction), removed only by `purgeEverything()` or the login field's clear button |
+
+**Login prefill.** `AuthNotifier.checkAuthStatus()` reads `ky_last_username` once at boot into
+`AuthState.lastUsername`, and `LoginScreen.initState` applies it synchronously (no flicker). Because a
+slow boot (or a direct `/login` deep link) can build the screen *before* secure storage answers, the
+screen also `ref.listen`s on `AuthState.lastUsername` and fills the field whenever the value lands
+afterwards — the prefill only fills an empty field, it never overwrites what the user typed. The value
+is written **only after a successful `login`/`biometricLogin`**, and it is the canonical
+`user.username` from the response (server resolves it to `USER_NAME_EN` first) — the rule lives in the
+pure `usernameToRemember()` helper. `logout()`/`forceLogout()` rebuild `AuthState` from scratch, so
+they must carry `lastUsername` forward. The field's clear button (`forgetLastUsername()`) removes both
+the stored key and the state, for shared devices. Passwords are never stored.
 
 `clearAll()` (logout) removes token + user type + user data + the three IBAC keys, but **intentionally
-keeps** biometric enrollment and the API URL, so a logged-out user can still sign in with a
-fingerprint. `purgeEverything()` wipes all nine.
+keeps** biometric enrollment, the API URL and `ky_last_username`, so a logged-out user can still sign in
+with a fingerprint and finds their name already in the field. `purgeEverything()` wipes all ten.
 
 Biometric flow:
 - `device_token = sha256("$rawDeviceId:ky_apps_biometric_v1_2026")`

@@ -1169,3 +1169,219 @@ SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
 الصحيح `et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO` وقد طُبِّق فعلياً في كل الاستعلامات.
 
 **النموذج:** Qoder · **الزمن:** 2026-10-25 20:54 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+---
+
+## [2026-10-25 22:13] تذكّر آخر اسم مستخدم — لا تغيير على قاعدة البيانات · Qoder Agent
+
+ميزة تعبئة اسم المستخدم الأخير في شاشة الدخول **محلية بالكامل على جهاز المستخدم**: تُحفظ في
+`flutter_secure_storage` على الهاتف تحت المفتاح `ky_last_username`، ولا تُقرأ ولا تُكتب في أوراكل.
+
+- **جداول:** لا جدول جديد، ولا عمود جديد. `APP_USERS` تبقى كما هي (`USER_NAME_EN` / `USER_NAME_AR` هما
+  ما يطابقه استعلام الدخول أصلاً، ولا حاجة لعمود «آخر دخول»).
+- **SQL المُنفَّذ:** لا شيء — `0 SELECT · 0 DDL · 0 DML`. لم يُفتح اتصال أوراكل في هذه المهمة.
+- **السجل التدقيقي:** `APP_USER_ACTIVITY` لا يُكتب فيه شيء إضافي؛ أحداث `login`/`login_failed` كما كانت.
+- **`db_commends.md`:** لم يُضف سطر (لا أمر SQL نُفِّذ).
+- **الأثر على الخادم:** لا شيء — `kyApp_API` لم يُعدَّل، ولا endpoint جديد.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 22:13 · **قراءة/كتابة: 0 · لا commit**.
+
+---
+
+## [2026-10-25 22:57] تقادم `CHART_ACC.BALANCE` — القراءة من الحركات لا من العمود المخزّن · Qoder Agent
+
+هذه المهمة **لم تُنشئ جدولاً ولا عموداً ولا فهرساً**؛ غيّرت **طريقة قراءة** رصيد الحساب المالي فقط.
+السبب: قياس على القاعدة الحقيقية أثبت أن `CHART_ACC.BALANCE` **لقطة تاريخية متقادمة** لا تتبع الحركات.
+
+### القياس المرجعي (قراءة فقط)
+
+| المؤشر | القيمة |
+|---|---|
+| حسابات في `CHART_ACC` | 20,954 |
+| مخزّنها غير صفر | 19,198 |
+| **تخالف الحركات** | **19,126** |
+| **لها حركات ومخزّنها = 0** | **1,162** |
+| تطابق تام | 1 (36110007 — مصادفة) |
+
+أمثلة موثّقة:
+
+| الحساب | `CHART_ACC.BALANCE` المخزّن | صافي `SUM(ENTRY_MNT)` |
+|---|---|---|
+| 41210001 | −1,493,000,510 | **−1,801,753,216.78** |
+| 33110003 | 1,944,519,285.84 | **6,541,659.48** |
+
+### القاعدة المعتمدة
+
+- **رصيد الحساب النهائي** = `SUM(ENTRY_SUB.ENTRY_MNT)` لكل سطور الحساب، بلا أي فلتر تاريخ، و`ENTRY_MNT > 0`
+  مدين و`ENTRY_MNT < 0` دائن. لا يُقرأ `CHART_ACC.BALANCE` ولا `ENTRY_SUB.BALANCE_S` في أي شاشة بعد اليوم.
+- **رصيد الفترة** = نفس المجموع مقيّداً بـ `ENTRY_MAIN.ENTRY_DATE` بين التاريخين، ويُحسب في **نفس المسح**
+  عبر `SUM(CASE WHEN <period> …)` لا باستعلام ثانٍ ولا بشرط في `JOIN` (فلا تختفي الحسابات الساكنة).
+- المجموعة `GROUP_ID` تربط `ACC_SUB_GROUP.GROUP_ID` بـ `CHART_ACC.GROUP_ID`، والحساب الجزئي هو أول 3 أرقام
+  من `ACC_NO` (`SUBSTR(TO_CHAR(ACC_NO),1,3) = TO_CHAR(ACC_PART)`) — لم يتغيّر شيء في بنية الشجرة.
+
+### الاستعلامات المعتمدة الآن (`AccountController`)
+
+```sql
+-- getGroupStatement(): مرور واحد ⇒ مدين/دائن الفترة + رصيد الفترة + الرصيد النهائي
+SELECT c.ACC_NO, c.ACC_NAME,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     AND es.ENTRY_MNT > 0 THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_DEBIT,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     AND es.ENTRY_MNT < 0 THEN ABS(es.ENTRY_MNT) ELSE 0 END), 0) AS LOCAL_CREDIT,
+       /* FOREIGN_DEBIT, FOREIGN_CREDIT بنفس القاعدة على cp.CUR_NO <> 1 */
+       NVL(SUM(CASE WHEN ({$periodCond}) AND (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_NET,
+       NVL(SUM(CASE WHEN ({$periodCond}) AND cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS FOREIGN_NET,
+       NVL(SUM(CASE WHEN (cp.CUR_NO IS NULL OR cp.CUR_NO = 1)
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS LOCAL_NET_ALL,      -- بلا تاريخ = النهائي
+       NVL(SUM(CASE WHEN cp.CUR_NO IS NOT NULL AND cp.CUR_NO <> 1
+                     THEN es.ENTRY_MNT ELSE 0 END), 0) AS FOREIGN_NET_ALL      -- بلا تاريخ = النهائي
+  FROM CHART_ACC c
+  LEFT JOIN (ENTRY_SUB es INNER JOIN ENTRY_MAIN em ON es.ENTRY_NO = em.ENTRY_NO) ON es.ACC_NO = c.ACC_NO
+  LEFT JOIN CUR_PRICE cp ON cp.SEQ = es.SEQ_PRICE
+  LEFT JOIN CUR_CODE  cc ON cc.CUR_NO = cp.CUR_NO
+ WHERE {$scopeWhere}                       -- GROUP_ID / ACC_PART / ACC_SUB / ACC_NO
+ GROUP BY c.ACC_NO, c.ACC_NAME             -- بلا c.BALANCE
+ ORDER BY c.ACC_NO;
+
+-- getChartAccounts(): الرصيد المعروض بجانب أي حساب مالي (كل قوائم الاختيار)
+--   SELECT ... FROM CHART_ACC   (بلا عمود BALANCE)
+--   ثم في PHP: نطاقات IN على ENTRY_SUB لكل ACC_NO ⇒ net = SUM(ENTRY_MNT)
+
+-- getAccountStatement() / MyStatementController::financialStatement():
+--   SELECT ACC_NO, ACC_NAME, GROUP_ID FROM CHART_ACC WHERE ACC_NO = :no   (بلا BALANCE)
+--   و account.balance = تراكم ENTRY_MNT لكل سطور الحساب قبل أي فلتر تاريخ.
+```
+
+### التحقق الرقمي على القاعدة الحقيقية
+
+ملف مؤقت `verify_group_statement.php` بُني على إقلاع Laravel (نفس اتصال `.env`) أُنشئ ونُفِّذ ثم **حُذف**:
+
+- **112 فحصاً / 0 فشل.**
+- مجموعة `GROUP_ID = 7` = 26 حساباً: `balance` لكل سطر = مجموع حركاته الكلي، و`period_balance` = مجموع
+  نافذة 2025، والمجاميع = مجموع السطور، والرصيد **ثابت** قبل الفلترة وبعدها، و`period_balance == balance`
+  عند غياب الفلتر.
+- الحساب 41210001: `balance` = −1,801,753,216.78 = `SUM(ENTRY_MNT)` ≠ المخزّن −1,493,000,510، وهو الرقم
+  نفسه في `GET /accounts/chart` وفي `account.balance` بكشف الحساب.
+- التراكم السنوي يثبت أن المخزّن لقطة قديمة: 2023 = −348,326,003 · 2024 = −756,119,835 ·
+  2025 = −1,311,157,100.70 · 2026 = −1,801,753,216.78 — ولا يوافق أيَّها الرقم −1,493,000,510.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-25 22:57 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+---
+
+## [2026-10-26 00:48] — ترقيم ميزان المجموعة: قياس حجم النطاقات + قوالب استعلام الصفحات — Qoder Agent
+
+**لا تغيير على المخطط:** لا جدول ولا عمود ولا فهرس أُضيف. العمل كله في **شكل الاستعلام** وفي **حجم ما يُنقل**
+من `ACCOUNTS` إلى التطبيق. القاعدة تبقى ملك نظام آخر ولا تُهاجَر.
+
+### القياس الذي بنى القرار
+
+عُدّت حسابات `CHART_ACC` بحسب أوّل ثلاثة أرقام من `ACC_NO` لكل حساب فرعي (`ACC_SUB`)، على القاعدة الحقيقية:
+
+| الحساب الفرعي | الحساب الجزئي | عدد الحسابات |
+|---|---|---|
+| `ACC_SUB = 11` | — | **23** |
+| `ACC_SUB = 12` | 121 | 10 |
+| | 122 | 15 |
+| | **123** | **20,469** |
+| | 124 | 5 |
+| | 127 | 48 |
+| | 128 | 8 |
+| | 129 | 219 |
+| | **مجموع 12** | **20,774** |
+| **الإجمالي العام** | | **20,954** |
+
+الاستنتاج: المشكلة ليست في «باقي الحسابات» بل في نطاق واحد (الحساب الجزئي 123 = **98.6%** من كل الشجرة).
+أي حل لا يُرقّم هذا النطاق بالذات لن ينجح.
+
+### قالب الترقيم المستخدم (Oracle 11g)
+
+`OFFSET … FETCH NEXT` غير مدعوم قبل 12c، فاستُخدم التفاف `ROWNUM` المزدوج حول الاستعلام المجمّع نفسه:
+
+```sql
+SELECT * FROM (
+    SELECT a.*, ROWNUM AS RN
+      FROM ( *الاستعلام المجمّع كما هو* ) a
+     WHERE ROWNUM <= :max_row      -- offset + limit
+) WHERE RN > :offset;             -- offset
+```
+
+الملاحظات المهمة:
+- `ROWNUM` يُمنح **قبل** `ORDER BY` في الطبقة الداخلية، ولذلك وُضع `ORDER BY ACC_NO` **داخل** الاستعلام
+  المجمّع ليكون الترتيب ثابتاً بين الصفحات.
+- `:max_row` و`:offset` رابطان (bind) لا دمج نصّي — لا حقن SQL.
+- عند `limit = 0` (التصدير الكامل) لا تُضاف أي طبقة: يُنفَّذ الاستعلام المجمّع كما هو.
+
+### إجماليات النطاق في استعلام واحد
+
+```sql
+SELECT COUNT(*)                                AS TOTAL_ROWS,
+       NVL(SUM(LOCAL_DEBIT), 0)                AS LOCAL_DEBIT,
+       NVL(SUM(LOCAL_CREDIT), 0)               AS LOCAL_CREDIT,
+       NVL(SUM(FOREIGN_DEBIT), 0)              AS FOREIGN_DEBIT,
+       NVL(SUM(FOREIGN_CREDIT), 0)             AS FOREIGN_CREDIT,
+       NVL(SUM(LOCAL_NET_ALL + FOREIGN_NET_ALL), 0) AS FINAL_BALANCE,
+       NVL(SUM(LOCAL_NET + FOREIGN_NET), 0)         AS PERIOD_BALANCE
+  FROM ( *نفس الاستعلام المجمّع* ) t;
+```
+
+الفائدة المزدوجة: سطر الإجمالي يبقى صحيحاً منذ الصفحة الأولى، و`COUNT(*)` يعطي **عدد صفوف النطاق كاملاً**
+قبل تنزيله — وهو الرقم الذي يُقرَّر به «النطاق واسع جداً» على الشاشة.
+
+### قياس الأداء على القاعدة الحقيقية (`acc_no=1&acc_sub=12` = 20,774 حساباً)
+
+| العملية | الزمن | الصفوف | ملاحظة |
+|---|---|---|---|
+| صفحة 1 (`limit=500`, مع الإجماليات) | 2.58 ث | 500 | استعلامان: صفحة + إجماليات |
+| صفحة 2 (`limit=500`, بلا إجماليات) | — | 500 | يبدأ بعد آخر `acc_no` في الأولى، وإجمالياتها صفر |
+| الصفحة 42 (الأخيرة) | — | ≤ 500 | `has_more = false` |
+| تصدير كامل (`limit=0`) | 3.95 ث | **20,774** | `SUM(rows) == SUM(ENTRY_MNT)` |
+
+وزمن القسم الواحد (2.5–4 ثوانٍ) هو تكلفة الاستعلام التجميعي على `ENTRY_SUB`، ولذلك صار حجم القسم في
+الواجهة **1000 صف** بدل 500: نصف عدد الطلبات بنفس التكلفة لكل طلب.
+
+### خلاصة التحقق (13/13)
+
+`page1` (500 · `total=20,774` · `total_pages=42` · `has_more=true`) · `page2` (ترتيب تصاعدي مستمر ·
+إجماليات مصفّرة) · الصفحة الأخيرة (`has_more=false`) · `limit=0` يرجّع 20,774 صفاً · `totals.balance` =
+مجموع أرصدة الصفوف = `SUM(ENTRY_MNT)` · مجموعة 7 (26 حساباً) ما زالت تعمل بلا تغيير.
+
+**النموذج:** Qoder · **الزمن:** 2026-10-26 00:48 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+---
+
+## 2026-10-26 03:11 — الكشوفات تقرأ الفترة كاملة (بلا سلّم `limit` افتراضي)
+
+**لا تغيير في البنية:** لا `CREATE`/`ALTER`/`DROP`، ولا تعديل على `APP_*` أو جداول الحسابات. القاعدة للقراءة فقط في هذه المهمة.
+
+**ما تغيّر في طبقة الاستعلام:**
+
+| الاستعلام | قبل | بعد |
+|---|---|---|
+| `ENTRY_MAIN × ENTRY_SUB × ENTRY_TYPE` (كشف الحساب) | يجلب الدفتر كاملاً ثم `array_slice` على أول 50 صفاً افتراضياً | يجلب الدفتر كاملاً **ويعيد كل صفوف الفترة**، والقصّ فقط عند `limit` موجب صريح (سقفه 2000) |
+| كشف الحساب الشخصي (`my-statement/financial`) | نفس السقف الافتراضي 50 | نفس العقد الجديد |
+| `CHART_ACC` (كشف الحساب المفصل، بلا `id`) | غلاف `ROWNUM` مزدوج دائم | الغلاف يُبنى فقط عند `limit > 0`؛ بدونه استعلام مسطّح مرتّب بـ `ACC_NO` |
+| كشف جاري العاملين (`workers/*/*/statement`) | كان بلا سقف أصلاً | كما هو — الاقتطاع كان في الواجهة (15 صفاً/صفحة) وقد أُزيل |
+| كشف العمل (`workers/*/*/work-report`) | بلا سقف | كما هو — الواجهة صارت كسولة |
+
+**اعتبارات الأداء:** الفلترة على الفترة تحدث في SQL (`ENTRY_DATE BETWEEN`)، لكن ترتيب الرصيد الجاري وتحويل الصفوف يتم في PHP؛
+لذا زمن الاستجابة يتناسب مع **عدد حركات الفترة** لا مع مساحة الجدول. عند الفترات الضخمة جداً يُنصح بالبحث بحساب محدد أو بفترة أضيق.
+
+**استعلامات تحقق نُفِّذت (قراءة فقط):**
+
+```sql
+-- الحساب الأكثر حركةً لاختبار الكشف عليه
+SELECT ACC_NO FROM (
+    SELECT ACC_NO FROM ACCOUNTS.ENTRY_SUB GROUP BY ACC_NO ORDER BY COUNT(*) DESC
+) WHERE ROWNUM = 1;
+
+-- هل يوجد مستخدم مرتبط بحساب مالي؟ (أجاب: لا يوجد ⇒ استُخدم ACC_NO في الذاكرة للاختبار)
+SELECT USER_ID, ACC_NO, IS_ADMIN FROM ACCOUNTS.APP_USERS WHERE ACC_NO IS NOT NULL AND ROWNUM <= 5;
+```
+
+**نتيجة اختبارات القاعدة الحقيقية:** `StatementFullPeriodTest` = 3/3 ناجحة (17 تأكيداً) — `meta.returned == meta.total` على حساب حقيقي بفترة مفتوحة،
+و`limit=25` يقصّ 25 صفاً فقط عند الطلب، والكشف الشخصي بنفس المساواة.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.

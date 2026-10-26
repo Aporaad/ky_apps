@@ -142,7 +142,7 @@ void main() {
         'foreign_debit': 0.0,
         'foreign_credit': 0.0,
         'balance': 500.0,
-        'current_balance': 500.0,
+        'period_balance': 250.0,
       });
 
       expect(row.accNo, 12910217);
@@ -151,6 +151,7 @@ void main() {
       expect(row.localDebit, 1000.0);
       expect(row.localCredit, 500.0);
       expect(row.balance, 500.0);
+      expect(row.periodBalance, 250.0);
     });
 
     test('parses uppercase Oracle keys and defaults cur_code to YR', () {
@@ -162,12 +163,35 @@ void main() {
         'FOREIGN_DEBIT': 0,
         'FOREIGN_CREDIT': 0,
         'BALANCE': 5,
-        'CURRENT_BALANCE': 5,
+        'PERIOD_BALANCE': 2,
       });
 
       expect(row.accNo, 1);
       expect(row.curCode, 'YR');
       expect(row.localDebit, 10.0);
+      expect(row.periodBalance, 2.0);
+    });
+
+    test('keeps the final balance separate from the period balance', () {
+      // «الرصيد» هو الرصيد النهائي للحساب دائماً، و«رصيد الفترة» رقم آخر مستقل —
+      // خلطهما كان أصل الخطأ: الفلترة كانت تطمس الرصيد النهائي.
+      // The final balance is independent of the period figure; mixing them was the bug.
+      final row = TrialBalanceRow.fromJson({
+        'acc_no': 37110001,
+        'acc_name': 'حساب',
+        'balance': 4404400.0,
+        'period_balance': -125000.0,
+      });
+
+      expect(row.balance, 4404400.0);
+      expect(row.periodBalance, -125000.0);
+    });
+
+    test('period balance defaults to zero when the key is absent', () {
+      final row = TrialBalanceRow.fromJson({'acc_no': 1, 'balance': 80.0});
+
+      expect(row.balance, 80.0);
+      expect(row.periodBalance, 0);
     });
   });
 
@@ -181,6 +205,7 @@ void main() {
           'as_of_date': '21/10/2026',
           'from_date': null,
           'to_date': null,
+          'has_period': false,
           'rows': [
             {
               'acc_no': 12910217,
@@ -191,7 +216,7 @@ void main() {
               'foreign_debit': 0.0,
               'foreign_credit': 0.0,
               'balance': 50.0,
-              'current_balance': 50.0,
+              'period_balance': 50.0,
             },
             {
               'acc_no': 12910218,
@@ -202,7 +227,7 @@ void main() {
               'foreign_debit': 0.0,
               'foreign_credit': 0.0,
               'balance': 200.0,
-              'current_balance': 200.0,
+              'period_balance': 200.0,
             },
           ],
           'totals': {
@@ -211,6 +236,7 @@ void main() {
             'foreign_debit': 0.0,
             'foreign_credit': 0.0,
             'balance': 250.0,
+            'period_balance': 250.0,
           },
         },
       });
@@ -222,13 +248,29 @@ void main() {
       expect(report.totals.localDebit, 300.0);
       expect(report.totals.localCredit, 50.0);
       expect(report.totals.balance, 250.0);
+      expect(report.totals.periodBalance, 250.0);
+      // بلا تواريخ ولا has_period: لا عمود «رصيد الفترة»
+      expect(report.hasPeriod, isFalse);
+      expect(report.periodLabel, 'كل الحركات (بدون تحديد فترة)');
       expect(report.isEmpty, isFalse);
+    });
+
+    test('detects a one-sided period and labels it correctly', () {
+      // من تاريخ فقط: العمود الجديد يجب أن يظهر، والنص يعرض الطرف الواحد بدل
+      // «كل الحركات» كما كان يحدث سابقاً.
+      final report = TrialBalanceReport.fromJson({
+        'data': {'from_date': '2026-01-01', 'to_date': null, 'rows': []},
+      });
+
+      expect(report.hasPeriod, isTrue);
+      expect(report.periodLabel, 'من تاريخ: 2026-01-01');
     });
 
     test('empty returns isEmpty true', () {
       const report = TrialBalanceReport.empty;
       expect(report.isEmpty, isTrue);
       expect(report.rows, isEmpty);
+      expect(report.hasPeriod, isFalse);
     });
   });
 }

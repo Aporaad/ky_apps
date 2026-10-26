@@ -156,13 +156,23 @@ pw.Widget pdfDateRangeRow({
   required String? toDate,
   String? rightNote,
 }) {
+  // الفترة قد تكون من طرف واحد (من تاريخ فقط أو إلى تاريخ فقط) — كانت تُطبع عندها
+  // «كل الحركات» فتُخفي أن هناك فلتراً مطبَّقاً على التقرير.
+  // A one-sided period must still be printed: the old code labelled it
+  // «كل الحركات», hiding the fact that the report was filtered.
+  final periodLabel = fromDate != null && toDate != null
+      ? 'من تاريخ: $fromDate   إلى تاريخ: $toDate'
+      : fromDate != null
+      ? 'من تاريخ: $fromDate'
+      : toDate != null
+      ? 'إلى تاريخ: $toDate'
+      : 'كل الحركات (بدون تحديد فترة)';
+
   return pw.Row(
     mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
     children: [
       pw.Text(
-        pdfArabic(fromDate != null && toDate != null
-            ? 'من تاريخ: $fromDate   إلى تاريخ: $toDate'
-            : 'كل الحركات (بدون تحديد فترة)'),
+        pdfArabic(periodLabel),
         style: const pw.TextStyle(fontSize: 9),
         textDirection: kPdfShapedTextDirection,
       ),

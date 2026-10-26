@@ -1,12 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/widgets/lazy_report_table.dart';
 import '../../data/models/worker_work_report_model.dart';
 
 /// جدول "كشف العمل" - الأعمدة الخمسة المطابقة لتقرير أوراكل (FOR_CUTTER_TAILOR / FOR_TAILOR):
 /// التاريخ | الموديل | العدد | السعر | الإجمالي + سطرا الإجمالي (إجمالي العدد / الإجمالي لكم).
 ///
+/// كسول: الرأس وسطرا الإجمالي مثبّتان، وصفوف الفترة تُبنى عند ظهورها فقط — فكشف
+/// عمل لفترة طويلة (آلاف الأسطر) يُعرض كاملاً دون استنزاف ذاكرة الجهاز.
 /// The work-statement table — the same five columns the legacy Oracle report prints,
-/// followed by the two total lines (total count / total amount). Rendered RTL by the
+/// followed by the two total lines (total count / total amount). It is **lazy**:
+/// header and totals are pinned and period rows are built on appearance, so a long
+/// period renders in full without exhausting the device heap. Rendered RTL by the
 /// ambient Directionality, so the first logical column (التاريخ) sits at the right edge.
 class WorkerWorkReportTable extends StatelessWidget {
   final List<WorkerWorkRow> rows;
@@ -23,6 +28,16 @@ class WorkerWorkReportTable extends StatelessWidget {
   static const Color _borderColor = Color(0xFF4B5563);
   static const Color _headerBg = Color(0xFFD4A853); // ذهبي مطابق لقالب أوراكل
 
+  /// أوزان الأعمدة — مشتركة بين الرأس والصفوف والإجماليات فتبقى الأرقام متحاذية.
+  /// Column weights shared by header, rows and totals keep the amounts aligned.
+  static const Map<int, TableColumnWidth> _columnWidths = {
+    0: FlexColumnWidth(1.5), // التاريخ
+    1: FlexColumnWidth(1.6), // الموديل
+    2: FlexColumnWidth(1.0), // العدد
+    3: FlexColumnWidth(1.3), // السعر
+    4: FlexColumnWidth(1.5), // الإجمالي
+  };
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
@@ -36,71 +51,67 @@ class WorkerWorkReportTable extends StatelessWidget {
         final vPad = isVeryCompact ? 4.0 : (isCompact ? 5.0 : 6.5);
         final hPad = isVeryCompact ? 1.5 : (isCompact ? 3.0 : 5.0);
 
-        return Table(
-          border: TableBorder.all(color: _borderColor, width: 1),
-          columnWidths: const {
-            0: FlexColumnWidth(1.5), // التاريخ
-            1: FlexColumnWidth(1.6), // الموديل
-            2: FlexColumnWidth(1.0), // العدد
-            3: FlexColumnWidth(1.3), // السعر
-            4: FlexColumnWidth(1.5), // الإجمالي
-          },
-          defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+        // رأس الجدول الذهبي (مثبّت أعلى القائمة)
+        final headerRow = TableRow(
+          decoration: const BoxDecoration(color: _headerBg),
           children: [
-            // رأس الجدول الذهبي
-            TableRow(
-              decoration: const BoxDecoration(color: _headerBg),
-              children: [
-                _headerCell('التاريخ', headerSize, vPad, hPad),
-                _headerCell('الموديل', headerSize, vPad, hPad),
-                _headerCell('العدد', headerSize, vPad, hPad),
-                _headerCell('السعر', headerSize, vPad, hPad),
-                _headerCell('الإجمالي', headerSize, vPad, hPad),
-              ],
-            ),
-
-            // أسطر البيانات
-            ...rows.map(
-              (row) => TableRow(
-                decoration: const BoxDecoration(color: Colors.white),
-                children: [
-                  _dataCell(row.date, dataSize, vPad, hPad),
-                  _dataCell(row.styleName, dataSize, vPad, hPad, alignRight: false),
-                  _dataCell(_formatNumber(row.count), dataSize, vPad, hPad),
-                  _dataCell(_formatNumber(row.unitPrice), dataSize, vPad, hPad),
-                  _dataCell(
-                    _formatNumber(row.total),
-                    dataSize,
-                    vPad,
-                    hPad,
-                    bold: true,
-                  ),
-                ],
-              ),
-            ),
-
-            // سطر إجمالي العدد
-            if (rows.isNotEmpty)
-              _totalRow(
-                label: 'إجــمالي العدد',
-                value: _formatNumber(totalCount),
-                size: dataSize,
-                vPad: vPad,
-                hPad: hPad,
-                highlight: false,
-              ),
-
-            // سطر الإجمالي لكم (المبلغ) - مطابق للصورة
-            if (rows.isNotEmpty)
-              _totalRow(
-                label: 'الإجمــالي',
-                value: _formatNumber(totalAmount),
-                size: dataSize,
-                vPad: vPad,
-                hPad: hPad,
-                highlight: true,
-              ),
+            _headerCell('التاريخ', headerSize, vPad, hPad),
+            _headerCell('الموديل', headerSize, vPad, hPad),
+            _headerCell('العدد', headerSize, vPad, hPad),
+            _headerCell('السعر', headerSize, vPad, hPad),
+            _headerCell('الإجمالي', headerSize, vPad, hPad),
           ],
+        );
+
+        // سطرا الإجمالي (مثبّتان أسفل القائمة)
+        final footerRows = <TableRow>[
+          // إجمالي العدد
+          if (rows.isNotEmpty)
+            _totalRow(
+              label: 'إجــمالي العدد',
+              value: _formatNumber(totalCount),
+              size: dataSize,
+              vPad: vPad,
+              hPad: hPad,
+              highlight: false,
+            ),
+          // الإجمالي لكم (المبلغ) - مطابق للصورة
+          if (rows.isNotEmpty)
+            _totalRow(
+              label: 'الإجمــالي',
+              value: _formatNumber(totalAmount),
+              size: dataSize,
+              vPad: vPad,
+              hPad: hPad,
+              highlight: true,
+            ),
+        ];
+
+        return LazyReportTable(
+          headerRows: [headerRow],
+          footerRows: footerRows,
+          columnWidths: _columnWidths,
+          borderColor: _borderColor,
+          rowCount: rows.length,
+          rowBuilder: (index) {
+            final row = rows[index];
+            return TableRow(
+              decoration: const BoxDecoration(color: Colors.white),
+              children: [
+                _dataCell(row.date, dataSize, vPad, hPad),
+                _dataCell(row.styleName, dataSize, vPad, hPad, alignRight: false),
+                _dataCell(_formatNumber(row.count), dataSize, vPad, hPad),
+                _dataCell(_formatNumber(row.unitPrice), dataSize, vPad, hPad),
+                _dataCell(
+                  _formatNumber(row.total),
+                  dataSize,
+                  vPad,
+                  hPad,
+                  bold: true,
+                ),
+              ],
+            );
+          },
         );
       },
     );
