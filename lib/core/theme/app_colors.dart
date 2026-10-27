@@ -41,4 +41,8 @@ class AppColors {
   // الحدود والفواصل
   static const Color border = Color(0xFFE2E8F0);
   static const Color divider = Color(0xFFF1F5F9);
+
+  /// لون واتساب الرسمي — لزر التواصل في شاشة معلومات البرنامج والدعم
+  /// The official WhatsApp green for the contact button on the app-info screen.
+  static const Color whatsapp = Color(0xFF25D366);
 }

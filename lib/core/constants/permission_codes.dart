@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (134 كوداً في 23 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (141 كوداً في 24 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -198,6 +198,14 @@ class Perm {
   static const String jobsDelete = 'jobs.delete';
   static const String jobsToggle = 'jobs.toggle';
 
+  // ── الدعم والاستفسارات / support ─────────────────────────
+  /// الإرسال من العميل خدمة ذاتية بلا صلاحية (ويعمل قبل الدخول)، فلا يوجد `support.create`
+  /// Submitting is a self-service from the client with no grant (and works before login), so
+  /// there is no `support.create`.
+  static const String supportWildcard = 'support.*';
+  static const String supportView = 'support.view';
+  static const String supportUpdate = 'support.update';
+
   // ── الكشوفات الشخصية / my_statement ─────────────────────
   /// كشف مالي وكشف عمل خاصان بالموظف الحالي — لا يتطلبان اختيار حساب
   /// Personal statements scoped to the logged-in employee — no account picker needed.
@@ -348,6 +356,9 @@ const List<String> allPermissionCodes = [
   Perm.jobsUpdate,
   Perm.jobsDelete,
   Perm.jobsToggle,
+  Perm.supportWildcard,
+  Perm.supportView,
+  Perm.supportUpdate,
   Perm.myStatementWildcard,
   Perm.myStatementView,
   Perm.myStatementFinancial,
@@ -380,6 +391,7 @@ const List<String> permModuleOrder = [
   'sms',
   'whatsapp',
   'jobs',
+  'support',
   'my_statement',
   'system',
 ];
@@ -409,6 +421,7 @@ const Map<String, String> permModuleLabels = {
   'sms': 'خدمة الرسائل النصية',
   'whatsapp': 'خدمة رسائل واتساب',
   'jobs': 'إدارة المهام الزمنية',
+  'support': 'الدعم والاستفسارات',
   'my_statement': 'الكشوفات الشخصية',
   'system': 'النظام',
 };

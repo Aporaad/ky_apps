@@ -10,6 +10,7 @@ import 'active_sessions_screen.dart';
 import 'admin_users_screen.dart';
 import 'permissions_catalog_screen.dart';
 import 'security_settings_screen.dart';
+import 'support_inquiries_screen.dart';
 import 'user_activity_screen.dart';
 
 /// بطاقة لوحة الإدارة: العنوان والوصف والرمز واللون وصلاحية الفتح ووجهتها
@@ -91,6 +92,7 @@ class ManagementDashboardScreen extends ConsumerWidget {
               Perm.usersView,
               Perm.sessionsView,
               Perm.settingsView,
+              Perm.supportView,
             ]),
       ),
     );
@@ -131,8 +133,8 @@ class ManagementDashboardScreen extends ConsumerWidget {
     );
   }
 
-  /// البطاقات الخمس المطلوبة في الخطة (§8.4 أ) بترتيبها
-  /// The five cards the plan specifies, in order.
+  /// البطاقات الست المطلوبة في الخطة (§8.4 أ) بترتيبها
+  /// The six cards the plan specifies, in order.
   List<_AdminCard> _cards(BuildContext context, WidgetRef ref) {
     return [
       _AdminCard(
@@ -176,6 +178,14 @@ class ManagementDashboardScreen extends ConsumerWidget {
         // لا مسار «سجل عام» في الخادم (§7.4): يُختار المستخدم أولاً ثم يُفتح سجله وحده.
         // There is no server-side general trail, so a user is picked first.
         flow: (context) => _openTrail(context),
+      ),
+      _AdminCard(
+        title: 'استفسارات الدعم',
+        description: 'ما يرسله الموظفون والزوار من شاشة معلومات البرنامج',
+        icon: Icons.support_agent_outlined,
+        color: AppColors.primaryDark,
+        code: Perm.supportView,
+        screen: () => const SupportInquiriesScreen(),
       ),
     ];
   }

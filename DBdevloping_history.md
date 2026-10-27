@@ -1385,3 +1385,97 @@ SELECT USER_ID, ACC_NO, IS_ADMIN FROM ACCOUNTS.APP_USERS WHERE ACC_NO IS NOT NUL
 و`limit=25` يقصّ 25 صفاً فقط عند الطلب، والكشف الشخصي بنفس المساواة.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+---
+
+## 2026-10-27 01:50 — جدول `APP_SUPPORT_TICKETS` ومفتاح `company_services` وأكواد الدعم
+
+**ما تغيّر في البنية (DDL منفَّذ فعلياً على `ACCOUNTS`):**
+
+| الكائن | النوع | الوصف |
+|---|---|---|
+| `APP_SUPPORT_TICKETS` | جدول (13 عموداً) | تذاكر الاستفسار: `TICKET_ID` · `USER_ID` (null = زائر) · `CONTACT_NAME/PHONE` · `MESSAGE` · `STATUS` · `ADMIN_REPLY/REPLIED_BY/REPLIED_ON` · `APP_VERSION` · `PLATFORM` · `CREATED_ON` · `UPDATED_ON` |
+| `APP_SUP_PK` | قيد مفتاح أساسي | على `TICKET_ID` |
+| `APP_SUP_STATUS_CK` | قيد تحقق | `STATUS IN ('new','answered','closed')` — مطابق لحالات الشاشة والفلترة |
+| `APP_SUP_STATUS_IX` | فهرس | `(STATUS, CREATED_ON)` — يخدم شرائح الحالة الأربع وترتيب الأحدث |
+| `APP_SUP_USER_IX` | فهرس | `(USER_ID, CREATED_ON)` — يخدم ربط التذكرة بصاحبها |
+| `SEQ_APP_SUPPORT_TICKETS` | متسلسلة | `START 1 · INCREMENT 1 · NOCACHE · NOCYCLE` |
+| `TRG_APP_SUPPORT_TICKETS` | مشغّل `BEFORE INSERT` | يُسند `TICKET_ID` من المتسلسلة عند غيابه |
+
+**ملف التنفيذ:** `kyApp_API/database/oracle/08_app_support_tickets.sql` (DDL + استعلامات تحقق + تعليقات `DROP` للتراجع).
+
+**قرارات تصميم على مستوى القاعدة:**
+
+1. **لا مفتاح أجنبي** على `USER_ID` — جداول `APP_*` الإرثية تُدار خارج سيطرتنا، وحذف مستخدم لا يجوز أن يُفشل إدراج تذكرة.
+2. **اسم المتسلسلة بلا مخطط داخل PL/SQL** (`SEQ_APP_SUPPORT_TICKETS.NEXTVAL`) لأن وجود VIEW باسم `ACCOUNTS` يجعل
+   `ACCOUNTS.SEQ_...` يفشل بـ `PLS-00302` — نفس درس `01_ibac_schema.sql`.
+3. **لا حذف للتذاكر**: دورة الحياة `new ← answered ← closed`؛ الإغلاق حالة لا حذف صف، فالسجل يبقى للمراجعة.
+4. **`MESSAGE`/`ADMIN_REPLY` = 1000 محرف**، والخادم والعميل يفرضان 10..1000 و≤1000 على التوالي.
+
+**مفتاح التهيئة (بلا DDL):**
+
+- `company_services` في `ACCOUNTS.APP_SETTINGS`: `VALUE_TYPE='string'` · `SORT_ORDER=145` · `NAME_AR='نبذة عن خدمات الشركة'` · قيمة ابتدائية فارغة.
+- القيمة الفارغة مقصودة: القسم في العميل يخفي سطر «خدماتنا» حتى تُكتب النبذة، بدل نص بديل مضلّل.
+- سقف التحرير 400 محرف في الخادم (`AppConfigController::textLimit`) والعميل (`maxLength`) لأن عمود `SETTING_VALUE` = 500 بايت.
+
+**أكواد الصلاحيات (بلا DDL — بذر idempotent):**
+
+- قسم `support` قبل `my_statement` بفعلين: `support.view` («عرض استفسارات الدعم») و`support.update` («الرد على الاستفسار وإغلاقه»).
+- **بلا `support.create`**: الإرسال خدمة ذاتية من العميل تعمل قبل الدخول، فتعريفه صلاحية كان سيحجب النموذج عن الزائر.
+- أُدرجت في `APP_PERMISSIONS` بإعادة تشغيل `02_ibac_seed.php` ⇒ `inserted=3 · updated=138 · total=141`.
+
+**تحقق نُفِّذ فعلياً:**
+
+```sql
+SELECT COUNT(*) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';  -- 13
+SELECT COUNT(*) FROM USER_INDEXES     WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';  -- 3
+SELECT STATUS  FROM USER_TRIGGERS     WHERE TRIGGER_NAME = 'TRG_APP_SUPPORT_TICKETS'; -- ENABLED
+-- إدراج اختباري ⇒ TICKET_ID = 1 تلقائياً، ثم حُذف (لا صفوف اختبارية باقية)
+SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;                                  -- 141
+SELECT PERMISSION_CODE FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE LIKE 'support.%';  -- 3 أكواد
+```
+
+**الترميز:** كل كتابة عربية عبر `ArabicEncoding::toOracleSearchChars()` وكل قراءة عبر `fixMojibake()`؛
+اختبار Pest على القاعدة الحقيقية يُثبت أن نصّاً عربياً يُكتب ويُقرأ سليماً (`fixMojibake(stored) === input`).
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 01:50 · **DDL: 1 جدول + 2 فهرسان + متسلسلة + مشغّل · DML: إدراج اختباري واحد حُذف · لا commit**.
+
+---
+
+## 2026-10-27 03:10 — تعبئة `company_services` في `APP_SETTINGS` (قيمة واحدة، بلا DDL)
+
+**السبب:** قسم «معلومات الشركة» في العميل أصبح يعرض نبذة الخدمات من `company_services`، والحقل كان
+**فارغاً** منذ إنشائه (`VALUE_TYPE='string'`, `SORT_ORDER=145`) — فكانت اللوحة تُخفى ولا يظهر شيء.
+
+**التغيير (DML فقط):**
+
+| المفتاح | قبل | بعد |
+|---|---|---|
+| `company_services` | `''` (0 محرف) | نبذة 140 محرفاً عن خدمات الخياطة والتفصيل |
+
+**النص المخزَّن:**
+
+> نقدّم خدمات الخياطة والتفصيل الرجالي: أخذ المقاسات، وقصّ وتفصيل الثياب والبدلات، وتنفيذ كروت
+> التفصيل حسب الطلب، مع متابعة الطلب حتى التسليم.
+
+**كيف كُتبت:** عبر `SettingsStore::set('company_services', …)` — أي بنفس مسار شاشة إعدادات التطبيق:
+`ArabicEncoding::toOracleSearchChars()` ثم `UPDATE … SET UPDATED_ON = SYSDATE`، و`UPDATED_BY = NULL`
+لأن الكتابة إدارية لا بشرية. لم يُستخدم SQL عربي مباشر.
+
+**تحقق القراءة العكسية (نُفِّذ فعلياً):**
+
+```sql
+SELECT SETTING_KEY, LENGTH(SETTING_VALUE), SORT_ORDER
+  FROM ACCOUNTS.APP_SETTINGS WHERE SETTING_KEY = 'company_services';
+-- company_services · 140 · 145
+-- وأثناء التشغيل: BEFORE_LEN=0 · AFTER_LEN=140 · ROUND_TRIP_OK=1 · PAYLOAD_LEN=140
+```
+
+**حدود لم تتغيّر:** العمود `SETTING_VALUE VARCHAR2(500)` · سقف التحرير في الخادم والعميل 400 محرف ·
+`company_website` بقي فارغاً (لا رابط مسجَّل، والاختراع ممنوع) · `company_name` و`company_address`
+و`company_phone` بقيمها كما هي · لا تغيير في `APP_PERMISSIONS` ولا في أي جدول آخر.
+
+**للتراجع:** `UPDATE ACCOUNTS.APP_SETTINGS SET SETTING_VALUE = NULL WHERE SETTING_KEY = 'company_services';`
+— يعيد الحقل فارغاً وتختفي لوحة الخدمات تلقائياً (لم تُنفَّذ).
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **DDL: 0** · **DML: UPDATE واحد (صف واحد)** · **لا commit**.

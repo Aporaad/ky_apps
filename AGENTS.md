@@ -50,7 +50,7 @@ Three facts shape almost every decision in this codebase:
 | Sales, tailoring cards (كروت التفصيل), stores/inventory, home dashboard | **Placeholders** — `DataListScaffold`/`PortalSectionScaffold` empty states |
 | الإدارة (admin: users, grants, sessions, security settings, activity) | **Working** — `lib/features/admin/`, gated by `permission:` on both sides |
 | Customer portal (`user_type = customer`) | **Stub** — login shows "بوابة العميل قيد التطوير حالياً" |
-| Permissions & sessions (**IBAC**, not RBAC) | **Implemented** — 93-code catalog, direct per-user grants, `permission:` route guard, admin UI under الإدارة |
+| Permissions & sessions (**IBAC**, not RBAC) | **Implemented** — 141-code catalog, direct per-user grants, `permission:` route guard, admin UI under الإدارة |
 
 > **There is no RBAC and none is planned.** Permissions are attached directly to a user row
 > (Identity-Based Access Control, `APP_USERS_PERMISSIONS`), with an `IS_ADMIN = 1` full bypass.
@@ -66,12 +66,13 @@ This is a **two-repo monorepo joined by a git submodule**. Treat the boundary wi
 
 ```
 ky_apps/                          ← Flutter client (repo: github.com/Aporaad/ky_apps)
-├── lib/                          ← ALL Dart application code (122 files)
+├── lib/                          ← ALL Dart application code (244 files)
 │   ├── main.dart                 ← entry point: ProviderScope → KyApp (MaterialApp.router)
 │   ├── routing/app_router.dart   ← GoRouter, 5 flat routes
 │   ├── core/                     ← shared infrastructure
 │   │   ├── constants/api_constants.dart   ← base URL, endpoint paths, timeouts
-│   │   ├── constants/permission_codes.dart ← the 93 IBAC codes + Arabic section titles
+│   │   ├── constants/app_info.dart        ← app version/build + developer name/phone/WhatsApp
+│   │   ├── constants/permission_codes.dart ← the 141 IBAC codes + Arabic section titles
 │   │   ├── network/              ← dio_client.dart, auth_interceptor.dart, error_interceptor.dart
 │   │   ├── storage/secure_storage_service.dart
 │   │   ├── theme/                ← app_theme.dart, app_colors.dart
@@ -81,9 +82,12 @@ ky_apps/                          ← Flutter client (repo: github.com/Aporaad/k
 │   └── features/                 ← feature-first modules
 │       ├── auth/                 ├── accounts/     ├── customers/
 │       ├── workers/              ├── employee_portal/  ├── settings/
-│       └── admin/                ← IBAC administration (36 files: 7 models, 4 repos, 6 providers,
-│                                   10 screens, 9 widgets) — users, grants, sessions, security, activity
-├── test/                         ← flutter_test (4 files, 51 tests)
+│       ├── app_info/             ← «معلومات البرنامج والدعم»: 1 screen, 4 section widgets,
+│       │                            developer_tap_unlock.dart + external_links.dart
+│       ├── support/              ← inquiry model/repository/provider/form (public POST, works pre-login)
+│       └── admin/                ← IBAC administration + support inbox (39 files) — users, grants,
+│                                   sessions, security, activity, support inquiries
+├── test/                         ← flutter_test (38 files, 354 tests)
 ├── android/ ios/ web/ windows/   ← platform runners
 ├── kyApp_API/                    ← GIT SUBMODULE → github.com/Aporaad/kyApp_API (Laravel 12)
 ├── appsroles.md                  ← Flutter/Dart coding standards
@@ -105,7 +109,8 @@ features/<name>/
 └── presentation/
     ├── providers/       ← Riverpod notifiers + provider declarations
     ├── screens/         ← one file per screen, snake_case
-    └── widgets/         ← widgets reused only inside this feature
+    ├── widgets/         ← widgets reused only inside this feature
+    └── utils/           ← feature-local pure helpers (e.g. `app_info`'s tap-unlock counter)
 ```
 
 ### Submodule workflow (important)
@@ -152,8 +157,11 @@ flutter run              # or: flutter run -d chrome  /  -d <android-device-id>
 
 The client needs the API reachable. Default base URL is
 `http://192.168.0.11:8000/api` (`lib/core/constants/api_constants.dart:6`) — a LAN address.
-It is **not** baked in at build time: the URL is editable at runtime from the login screen's
-settings icon → `/api-settings`, persisted encrypted under the `ky_api_base_url` key.
+It is **not** baked in at build time: the URL is editable at runtime from the info icon at the
+top-left of the login screen's app bar → «معلومات البرنامج والدعم» → tap the developer name **5 times
+within 3 s** → the API password dialog → `/api-settings`, persisted encrypted under the
+`ky_api_base_url` key. There is no permanent unlock: leaving the screen requires the 5 taps and the
+password again.
 
 ### Laravel API
 
@@ -177,7 +185,7 @@ composer dev              # or: server + queue + pail logs + vite concurrently
 
 ```bash
 curl http://<lan-ip>:8000/api/hello     # API alive (the Flutter "test connection" probe)
-php artisan route:list --path=api       # 55 registered API endpoints
+php artisan route:list --path=api       # 129 registered API endpoints
 flutter analyze && flutter test         # client healthy
 ```
 
@@ -325,7 +333,7 @@ Android needs `USE_BIOMETRIC` + `USE_FINGERPRINT` (present in the main manifest)
 
 The client mirrors the server rules **for display only**; the server decides every request again.
 
-- `lib/core/constants/permission_codes.dart` — `Perm.*` constants for all 93 catalog codes
+- `lib/core/constants/permission_codes.dart` — `Perm.*` constants for all 141 catalog codes
   (`module.action`), `permModuleOrder`, and the Arabic section titles. **Codes are ASCII — never put
   Arabic through them**, and never invent a code that is not in `APP_PERMISSIONS`.
 - `lib/core/utils/permission_check.dart` — `canCode` / `canAnyCode` / `canAllCode`, the pure mirror of
@@ -445,7 +453,7 @@ Full details live in [`kyApp_API/AGENTS.md`](kyApp_API/AGENTS.md). The essential
   tools — prefer `search-docs`, `database-query`, `database-schema`, `record-rule` over manual
   equivalents. Skills live in `kyApp_API/.agents/skills/`.
 
-### Endpoint surface (71 routes)
+### Endpoint surface (129 API routes)
 
 Every route carries **two** layers where relevant: `auth:sanctum` for the session, then
 `permission:<code>` for the grant. Deny-by-default: no grant ⇒ **403** with the missing permission's
@@ -453,23 +461,25 @@ Arabic name. `IS_ADMIN = 1` bypasses the grant table entirely.
 
 | Layer | Routes | Which |
 |---|---|---|
-| **Public (3)** | 3 | `POST /auth/login`, `POST /auth/biometric/login`, `GET /hello` (the client's connectivity probe) |
+| **Public (6)** | 6 | `POST /auth/login`, `POST /auth/biometric/login`, `GET /hello` (the client's connectivity probe), `GET /app-config` (branding/settings before login), `POST /app-config/verify-api-password` (`throttle:5,1`), `POST /support/inquiries` (`throttle:5,1` — the inquiry form works before login) |
 | **`auth:sanctum` only (6)** | 6 | `logout`, `me`, `user`, `auth/permissions`, `biometric/register`, `biometric/revoke` — these are the session's *own* property: gating `me` behind a grant would lock out a user who has none and could never learn why |
-| **`auth:sanctum` + `permission:*`** | 62 | all business + admin routes |
+| **`auth:sanctum` + `permission:*`** | 117 | all business + admin routes |
 
 Business guards: customers (6) · workers as three independent modules `employees`/`cutters`/`tailors`
 (18) · accounts (12: `view` reads, `create`/`update` items, `structure_manage` for the tree,
 `statement` for extracts) · currencies (8: `currencies.*` for the vocabularies,
-`currencies.prices_view`/`prices_manage` for prices) · invoices (2) · `selectFromTable` behind
-`system.*`.
+`currencies.prices_view`/`prices_manage` for prices) · invoices (2) · jobs (5) ·
+services/providers (12) · messaging `sms`/`whatsapp` (11) · app config (2) ·
+`selectFromTable` behind `system.*`.
 
-Admin (`/users`, `/permissions`, `/sessions`, `/settings`, `/users/{id}/activity` — 16 routes) uses
-`users.view` / `users.create` / `users.update` / `users.toggle` / `users.delete` /
-`users.permissions_manage` / `users.activity_view` / `sessions.view` / `sessions.terminate` /
-`settings.view` / `settings.update`.
+Admin (`/users`, `/permissions`, `/sessions`, `/settings`, `/users/{id}/activity`,
+`/support/inquiries` — 18 routes) uses `users.view` / `users.create` / `users.update` /
+`users.toggle` / `users.delete` / `users.permissions_manage` / `users.activity_view` /
+`sessions.view` / `sessions.terminate` / `settings.view` / `settings.update` /
+`support.view` / `support.update`.
 
 `tests/Feature/BusinessRoutesSealedTest.php` is what *proves* this table (no public route outside
-the three, every other route carries a guard, 401/403 samples per module) — if you change
+the six, every other route carries a guard, 401/403 samples per module) — if you change
 `routes/api.php`, that test is the gate.
 
 No API version prefix (`/v1`) and no route names anywhere.
@@ -487,10 +497,11 @@ The real schema is legacy Oracle 11g, owner `ACCOUNTS`, `prefix_schema => 'accou
 | Table | Purpose |
 |---|---|
 | `APP_USERS` | staff/customer logins. PK is **`USER_ID`** (`USER_NO` is gone — it was the legacy ERP number). Biometric columns: `DEVICE_TOKEN`, `DEVICE_NAME`, `PLATFORM`, `BIOMETRIC_ENABLED`, `BIOMETRIC_REGISTERED_AT`, `BIOMETRIC_LAST_USED`. IBAC adds **`IS_ADMIN`** (1 = full bypass, grant-free) |
-| `APP_PERMISSIONS` | the catalog: 93 rows, 17 modules, ASCII `PERMISSION_CODE` (`module.action`) + Arabic `NAME_AR`/`DESCRIPTION_AR`. Seeded, not edited from the UI |
+| `APP_PERMISSIONS` | the catalog: 141 rows, 24 modules, ASCII `PERMISSION_CODE` (`module.action`) + Arabic `NAME_AR`/`DESCRIPTION_AR`. Seeded, not edited from the UI |
 | `APP_USERS_PERMISSIONS` | **the IBAC core** — direct user→permission grants (`USER_ID`, `PERMISSION_ID`, `GRANTED_BY`, `IS_ACTIVE`, `EXPIRES_ON`) |
-| `APP_SETTINGS` | 10 security/session settings with `VALUE_TYPE` (`int` / `bool` / `string`) and bounds, read through `SettingsStore` |
+| `APP_SETTINGS` | security/session settings plus the runtime branding keys (company name/address/website/phone/services, app name, theme colors, font) with `VALUE_TYPE` (`int` / `bool` / `string`) and bounds, read through `SettingsStore` / `AppConfig` |
 | `APP_USER_ACTIVITY` | audit trail (`ACTION_TYPE`, `DESCRIPTION_AR`, `STATUS`, `IP_ADDRESS`, `CREATED_ON`), written by `ActivityLogger` |
+| `APP_SUPPORT_TICKETS` | support inquiries sent from the app's info screen (`MESSAGE` ≤ 1000, `STATUS` = `new`/`answered`/`closed`, admin reply + `USER_ID` nullable for pre-login guests). **No FK on `USER_ID`** — legacy user rows are managed outside our control. Rows are closed, never deleted |
 | `PERSONAL_ACCESS_TOKENS` | Sanctum tokens; **`EXPIRES_AT` is what the session policy actually enforces** (idle window, sliding) |
 | `CUST` | customers (incl. `LIMITED_BALANCE` credit limit, `STOPPING_CUST` deactivation) |
 | `TAILOR_EMPLOYEES`, `CUTTER`, `TAILOR` | the three worker registries, each with its own `ACC_NO` |
@@ -501,8 +512,10 @@ The real schema is legacy Oracle 11g, owner `ACCOUNTS`, `prefix_schema => 'accou
 
 The five IBAC tables plus their sequences and triggers are **DDL scripts, not migrations**, in
 `kyApp_API/database/oracle/`: `01_ibac_schema.sql` (tables/sequences/triggers), `02_ibac_seed.php`
-(catalog + settings), `03_ibac_bootstrap.php` (foundational grants), `04_ibac_rollback.sql`. They
-were applied by hand through the Oracle MCP and are recorded line by line in `db_commends.md`.
+(catalog + settings), `03_ibac_bootstrap.php` (foundational grants), `04_ibac_rollback.sql`,
+`05_app_settings_company_en.sql` (branding settings), `08_app_support_tickets.sql`
+(`APP_SUPPORT_TICKETS` + sequence + trigger, `DROP` statements as trailing comments). They
+were applied by hand and are recorded line by line in `db_commends.md`.
 
 `DBdevloping_history.md` (root) and `kyApp_API/DBdevloping_history.md` are the **de-facto schema
 documentation** — read them before writing any SQL.
@@ -781,7 +794,7 @@ Match that style. Never commit unless the user asks. Never `--no-verify`. Never 
 
 | File | What it is | Read it when… |
 |---|---|---|
-| `ibac_permissions_plan.md` | **The IBAC design record** — accepted decisions D1–D8, the data model, catalog (17 modules / 93 codes), session policy, phases 0–9 with what was actually built, and the deviation tables | touching permissions, sessions, `APP_USERS`, or any admin screen |
+| `ibac_permissions_plan.md` | **The IBAC design record** — accepted decisions D1–D8, the data model, catalog (grew from the original 17 modules / 93 codes to 24 / 141), session policy, phases 0–9 with what was actually built, and the deviation tables | touching permissions, sessions, `APP_USERS`, or any admin screen |
 | `appsroles.md` | Flutter/Dart coding standards (aspirational) | starting a new Flutter feature |
 | `DBdevloping_history.md` | **Oracle schema documentation** — tables, columns, encoding story, the `12310000` rule | writing any SQL or touching models |
 | `devloping_history.md` | Flutter-side changelog with exact file paths per task | tracing why something was built the way it was |
@@ -828,8 +841,8 @@ Backend         Laravel 12.69, PHP ^8.2.12, Sanctum 4, yajra/laravel-oci8 12.0, 
 Database        Oracle 11g, schema ACCOUNTS, charset WE8MSWIN1252 (Arabic = CP1256 bytes)
 Default API     http://192.168.0.11:8000/api   (runtime-configurable, key ky_api_base_url)
 Health probe    GET /api/hello
-Routes          71 in routes/api.php — 3 public, 6 auth-only, the rest auth:sanctum + permission:<code>
-Access          IBAC: APP_PERMISSIONS (93 codes / 17 modules) + APP_USERS_PERMISSIONS, IS_ADMIN bypass
+Routes          129 in routes/api.php — 6 public, 6 auth-only, the rest auth:sanctum + permission:<code>
+Access          IBAC: APP_PERMISSIONS (141 codes / 24 modules) + APP_USERS_PERMISSIONS, IS_ADMIN bypass
 Sessions        SessionPolicy on PERSONAL_ACCESS_TOKENS.EXPIRES_AT (idle 240′ sliding, absolute 14d) —
                 all time via SessionPolicy::dbNow() (Oracle clock), dead tokens deleted on rejection,
                 purgeExpired() on login + sessions screen, X-Session-Expires-At header + 30 s client watchdog

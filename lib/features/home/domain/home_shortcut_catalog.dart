@@ -301,7 +301,11 @@ const List<HomeShortcut> homeShortcutCatalog = [
     icon: Icons.admin_panel_settings_rounded,
     sectionId: 'management',
     target: SectionTarget('management'),
-    codes: [Perm.managementView],
+    // نفس أكواد قسم «الإدارة» في سجل البوابة: بطاقة الاستفسارات تعيش هناك، وحاملُ
+    // `support.view` وحدها يجب أن يصل إليها من الرئيسية أيضاً.
+    // The same codes as the portal's management section: the support card lives there, and a
+    // holder of support.view alone must reach it from the home grid too.
+    codes: [Perm.managementView, Perm.supportView],
     defaultOn: true,
   ),
   HomeShortcut(

@@ -54,6 +54,9 @@ dependencies:
     sdk: flutter
   excel: ^4.0.6
   share_plus: ^12.0.2
+  # فتح روابط tel:/https: من شاشة معلومات البرنامج والدعم (هاتف المطور وواتسابه)
+  # Open tel:/https: links from the app-info screen (the developer's phone and WhatsApp).
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:

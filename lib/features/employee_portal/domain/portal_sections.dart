@@ -136,7 +136,9 @@ const List<PortalSection> portalSections = [
     title: PortalSectionTitles.management,
     icon: Icons.admin_panel_settings_outlined,
     builder: _buildManagement,
-    viewCodes: [Perm.managementView],
+    // حاملُ صلاحية الدعم وحدها يصل أيضاً: بطاقة «استفسارات الدعم» تعيش داخل لوحة الإدارة
+    // A holder of the support grant alone reaches it too: the support card lives in that dashboard.
+    viewCodes: [Perm.managementView, Perm.supportView],
   ),
   // القسم يظهر لأيٍّ من أكواد العرض الخمسة؛ ولا يُضاف إلى الشريط السفلي (يبقى خمسة)
   // The section appears for any of the five view codes; it stays out of the bottom bar (keeps five).

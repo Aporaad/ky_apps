@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/constants/app_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/biometric_service.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
+import '../../../app_info/presentation/screens/app_info_screen.dart';
 import '../providers/auth_notifier.dart';
-import '../widgets/api_password_dialog.dart';
 import '../widgets/biometric_login_button.dart';
 import '../widgets/user_type_selector.dart';
 
@@ -124,13 +125,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     }
   }
 
-  /// بوابة كلمة السر لإعدادات الـ API من شاشة الدخول: تحقق ثم افتح الشاشة إن نجح
-  /// API-settings password gate from the login screen: verify first, then open on success.
-  Future<void> _openApiSettingsWithGate() async {
-    final allowed = await ApiPasswordDialog.show(context);
-    if (allowed && mounted) {
-      context.push('/api-settings');
-    }
+  /// فتح شاشة «معلومات البرنامج والدعم» — ومنها وحدها تُتاح بوابة إعدادات الـ API
+  /// Open the app-info & support screen — the only place the API-settings gate is live.
+  void _openAppInfo() {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => const AppInfoScreen(allowApiUnlock: true),
+      ),
+    );
   }
 
   @override
@@ -154,21 +156,24 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
+      // شريط علوي بأيقونة واحدة: «معلومات البرنامج والدعم» في أعلى اليسار
+      // A one-icon app bar: "app info & support" at the top-left corner.
+      //
+      // التطبيق عربي RTL، فخانة `actions` تُرسم على اليسار — وهي الجهة المطلوبة. ولا يبقى
+      // في الشريط أي طريق إلى إعدادات الـ API: تلك بوابة النقر الخمسي داخل الشاشة نفسها.
+      // The app is RTL, so [actions] renders on the left — the requested corner. Nothing in this
+      // bar leads to the API settings: that is the five-tap gate inside the screen itself.
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.background,
+        foregroundColor: AppColors.textPrimary,
         elevation: 0,
+        scrolledUnderElevation: 0,
         surfaceTintColor: Colors.transparent,
         actions: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: IconButton(
-              // اللون ديناميكي الآن — لا يصلح const على Icon
-              // The color is dynamic now — no const on Icon.
-              icon: const Icon(Icons.settings_outlined),
-              color: AppColors.textSecondary,
-              tooltip: 'إعدادات خادم الـ API',
-              onPressed: () => _openApiSettingsWithGate(),
-            ),
+          IconButton(
+            onPressed: _openAppInfo,
+            icon: const Icon(Icons.info_outline_rounded),
+            tooltip: 'معلومات البرنامج والدعم',
           ),
         ],
       ),
@@ -375,6 +380,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                                 ),
                               )
                             : const Text('دخول'),
+                      ),
+                      const SizedBox(height: 10),
+
+                      // لا زر عريض هنا: «معلومات البرنامج والدعم» صار أيقونة في الشريط العلوي
+                      // No wide button here: "app info & support" is now an app-bar icon.
+                      Text(
+                        'الإصدار v$kAppVersionBadge',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
                       ),
 
                       // // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز

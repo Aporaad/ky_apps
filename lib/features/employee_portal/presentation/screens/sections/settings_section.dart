@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../../../core/constants/app_info.dart';
 import '../../../../../../core/constants/permission_codes.dart';
 import '../../../../../../core/theme/app_colors.dart';
 import '../../../../../../core/widgets/permission_gate.dart';
 import '../../../../app_config/presentation/screens/app_config_screen.dart';
+import '../../../../app_info/presentation/screens/app_info_screen.dart';
 
 /// واجهة قسم الإعدادات - تصميم مستقل ومقسم إلى أقسام واضحة
 /// لا تستخدم PortalSectionScaffold لأنها ليست قائمة بيانات
@@ -363,21 +365,24 @@ class _GeneralSettingsCard extends StatelessWidget {
 
         const _SettingsDivider(),
 
-        // معلومات التطبيق
+        // معلومات التطبيق — نفس الشاشة الموحّدة، لكن بلا بوابة إعدادات الـ API
+        // App info — the same unified screen, but without the API-settings gate.
         _SettingsTile(
           icon: Icons.info_outline_rounded,
           iconColor: AppColors.textMuted,
           title: 'معلومات التطبيق',
-          subtitle: 'الإصدار الحالي والرخصة',
-          trailing: const Text(
-            'v1.0.0',
+          subtitle: 'بيانات الشركة والدعم والإصدار',
+          trailing: Text(
+            'v$kAppVersion',
             style: TextStyle(
               fontSize: 11,
               color: AppColors.textMuted,
               fontWeight: FontWeight.w600,
             ),
           ),
-          onTap: () {},
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute<void>(builder: (_) => const AppInfoScreen()),
+          ),
           textScaler: textScaler,
           isNarrow: isNarrow,
         ),

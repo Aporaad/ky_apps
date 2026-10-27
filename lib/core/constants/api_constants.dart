@@ -35,6 +35,11 @@ class ApiConstants {
   static const String myFinancialStatement = '/my-statement/financial';
   static const String myWorkStatement = '/my-statement/work';
 
+  // استفسارات الدعم — الإرسال عام (يعمل قبل الدخول)، والقراءة والرد خلف صلاحية support.*
+  // Support inquiries — submission is public (works before login); listing and replying
+  // sit behind the support.* grants.
+  static const String supportInquiries = '/support/inquiries';
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

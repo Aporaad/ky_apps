@@ -52,5 +52,18 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+
+        <!-- شاشة «معلومات البرنامج والدعم» تفتح موقع الشركة وواتساب المطور عبر url_launcher؛
+             بدون هذين الإعلانين يرفض أندرويد 11+ رؤية أي تطبيق يلتقط الرابط.
+             The app-info screen opens the company website and the developer's WhatsApp through
+             url_launcher; without these two intents Android 11+ hides every handler. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="tel"/>
+        </intent>
     </queries>
 </manifest>

@@ -3006,3 +3006,271 @@ signal 3 (SIGQUIT) → tombstoned
 ولا يوجد فيها اقتطاع من الخادم. أي تحويلها لاحقاً إلى كسول يتطلب حساب امتداد الدمج مسبقاً.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-27 01:50 — شاشة «معلومات البرنامج والدعم» + استفسارات الدعم (عميل + خادم)
+
+> المرجع: خطة `App_Info_and_Support_Screen_dd420571.md`. تفاصيل القاعدة في `DBdevloping_history.md`
+> و`db_commends.md`، والطلب الأصلي في `user_commends.md`، وقائمة المهام في `todo.md` بنفس الطابع الزمني.
+
+**الهدف:** إزالة فتح إعدادات الـ API من شاشة الدخول، وإضافة شاشة معلومات برنامج بثلاثة أقسام
+(معلومات الشركة · معلومات المطور · الاستفسار والدعم)، مع بوابة خفية (5 نقرات على اسم المطور خلال 3 ثوانٍ
++ كلمة السر) لإعدادات الـ API، ونموذج استفسار يُخزَّن في قاعدة البيانات ويُدار من لوحة الإدارة.
+
+### الخادم (`kyApp_API/`)
+
+**ملفات جديدة:**
+
+- `database/oracle/08_app_support_tickets.sql` — جدول `ACCOUNTS.APP_SUPPORT_TICKETS`
+  (13 عموداً · PK · قيد حالة · فهرسان · متسلسلة · مشغّل) مع ملف تراجع كتعليقات `DROP` في آخره.
+- `app/Http/Controllers/SupportInquiryController.php` — ثلاثة أفعال: `store` (عام، يربط `USER_ID`
+  إن وُجد توكن صالح وإلا يُخزَّن كزائر، ويشتق الاسم من `USER_NAME_AR` عند الجلسة) ·
+  `index` (قائمة إدارية بـ `status`/`search`/`page`/`limit` و`meta` بشكل `UserAdminController`) ·
+  `reply` (يحفظ `ADMIN_REPLY`/`REPLIED_BY`/`REPLIED_ON` ويحوّل الحالة إلى `answered`/`closed`).
+  كل نص عربي يُكتب بـ `ArabicEncoding::toOracleSearchChars()` ويُقرأ بـ `fixMojibake()`،
+  وكل الاستعلامات مربوطة (bind) بلا لصق نصي، و`ActivityLogger` للإرسال المصادق والرد دون إفشال الطلب.
+- `tests/Feature/SupportInquiryTest.php` — 6 حالات (إرسال زائر ناقص/ناجح، ربط الجلسة،
+  حرمان 403 للمفتاحين، رد صالح/غير صالح، وتحقّق بنيوي من `throttle:5,1` على المسار العام).
+
+**ملفات معدّلة:**
+
+- `app/Support/AppConfig.php` — `public const COMPANY_SERVICES = 'company_services';` مع إضافته إلى
+  `DEFAULTS` و`WRITABLE_KEYS` ⇒ يدخل تلقائياً في `publicPayload()`.
+- `app/Http/Controllers/AppConfigController.php` — `textLimit()` يقيّد `company_services` بـ 400 محرف
+  (حد دفاعي تحت سعة العمود 500 بايت).
+- `app/Support/PermissionCatalog.php` — قسم `support` قبل `my_statement` بـ `view`/`update` فقط
+  (لا `create`، فالإرسال خدمة ذاتية عامة) ⇒ الكتالوج 138 ⇒ **141** كوداً.
+- `database/oracle/02_ibac_seed.php` — صف `company_services` في `$settings`
+  (`VALUE_TYPE='string'`, `NAME_AR='نبذة عن خدمات الشركة'`, `SORT_ORDER=145`).
+- `routes/api.php` — `POST /support/inquiries` عام بـ `throttle:5,1`، و`GET /support/inquiries`
+  بـ `permission:support.view`، و`PUT /support/inquiries/{ticketId}` بـ `permission:support.update`
+  داخل `auth:sanctum`.
+- `tests/Feature/BusinessRoutesSealedTest.php` — المسار العام الجديد في قائمة المسموح، وعيّنتا
+  401/403 للمسارين المحميين.
+- `tests/Feature/IbacCoreTest.php` — العدد `138` ⇒ `141` (24 قسماً).
+
+### العميل (Flutter)
+
+**ثوابت ونماذج مشتركة (جديدة):**
+
+- `lib/core/constants/app_info.dart` — `kAppVersion`/`kAppBuildNumber` (مصدر واحد يُحدَّث مع
+  `pubspec.yaml`) و`kDeveloperName`/`kDeveloperPhone`/`kDeveloperWhatsappUrl`، و`kAppVersionBadge`
+  لشارة `v1.1.0 (2)`.
+- ثوابت معدّلة: `app_colors.dart` (+`whatsapp`)، `api_constants.dart` (+`supportInquiries`)،
+  `permission_codes.dart` (`support.*`/`support.view`/`support.update` + الترتيب + التسمية،
+  وتحديث تعليق الترويسة إلى 141 كوداً في 24 قسماً).
+
+**تهيئة التطبيق:**
+
+- `app_config_model.dart` — حقل `companyServices` (مُنشئ/`defaults`/`fromJson` بمفتاحين/`copyWith`/
+  `toJsonForUpdate`)، و`app_config_screen.dart` — حقل `maxLines: 3` `maxLength: 400` تحت حقل الهاتف.
+
+**شاشة معلومات البرنامج (جديدة): `lib/features/app_info/`**
+
+- `presentation/screens/app_info_screen.dart` — `ConsumerStatefulWidget` بمعامل `allowApiUnlock`
+  (true من شاشة الدخول فقط)؛ `Scaffold` + `AppBar('معلومات البرنامج والدعم')` + `SingleChildScrollView`
+  بعرض أقصى 760؛ رأس (شعار + اسم الشركة + شارة الإصدار) ثم الأقسام الثلاثة ثم تذييل.
+  `_handleDeveloperUnlock`: حماية `allowApiUnlock` ⇒ `registerTap()` ⇒ `ApiPasswordDialog.show`
+  ⇒ `Navigator.push(ApiSettingsScreen())` — بلا أي حالة فتح مخزَّنة، فكل دخول يحتاج 5 نقرات + الرمز.
+- `presentation/widgets/app_info_card.dart` — بطاقة موحّدة (`BorderRadius` 14، حد `AppColors.border`،
+  رأس 15/عريض بأيقونة داخل مربع ملوّن شفاف). `tint` من نوع `Color?` لأن `AppColors.primary` دالّة
+  وقت التشغيل لا ثابت، و`surface`/`border`/`info`/`whatsapp` ثوابت.
+- `presentation/widgets/company_info_section.dart` — الاسم/العنوان العربي/الإنجليزي/الموقع/الهاتف/النبذة
+  من `appConfigNotifierProvider` (كاش فوري ثم مزامنة) مع حالات تحميل وفراغ وزر تحديث.
+- `presentation/widgets/developer_info_section.dart` — اسم المطور (هدف النقر الخفي عبر
+  `onDeveloperNameTap`) ورقم الهاتف كزر `tel:` وزر واتساب بلون `AppColors.whatsapp`.
+- `presentation/widgets/support_inquiry_section.dart` — نص تعريفي + أزرار اتصال/واتساب + النموذج.
+- `presentation/utils/developer_tap_unlock.dart` — منطق نقي: `required: 5`، `window: 3s`،
+  `registerTap()` يعيد `true` مرة واحدة ويُصفّر العدّاد، وفجوة أطول من النافذة تُصفّره
+  (التصفير يحدث عند النقرة التالية لا بمؤقّت خلفي).
+- `presentation/utils/external_links.dart` — `openUrl`/`openTel`/`openWhatsapp` عبر `url_launcher`
+  مع `try/catch` ورسالة «تعذّر فتح الرابط» بدل الانهيار، وبلا `canLaunchUrl`.
+
+**ميزة الدعم (جديدة): `lib/features/support/`**
+
+- `data/models/support_inquiry_model.dart` — قراءة مزدوجة الحالة (`ticket_id`/`TICKET_ID`)،
+  `_parseInt`/`_parseString`، تمرير كل نص عبر `ArabicEncodingUtils.fix()`، و`statusLabel`/`statusColor`.
+- `data/repositories/support_repository.dart` — `submitInquiry`/`fetchInquiries`/`replyToInquiry`
+  مع `CancelToken`، وقراءة `message` من الغلاف، وتمييز 429 برسالة «محاولات كثيرة، حاول لاحقاً».
+- `presentation/providers/support_inquiry_provider.dart` — `{submitting, submitted, errorMessage}`.
+- `presentation/widgets/support_inquiry_form.dart` — تحقق محلي قبل الشبكة (اسم ≥ 2 · هاتف 7..15 رقماً ·
+  رسالة 10..1000)؛ الزائر يرى الاسم/الهاتف، وصاحب الجلسة يرى الرسالة وحدها لأن الخادم يشتق الاسم من
+  `USER_NAME_AR` — نفس الشرط الذي يفرضه الخادم فلا يُرفض نموذج مكتمل ولا يُقبل ناقص؛ ولوحة نجاح مع
+  «إرسال استفسار آخر»، وأخطاء الخادم inline.
+
+**شاشات معدّلة:**
+
+- `auth/presentation/screens/login_screen.dart` — حُذف `AppBar` وأيقونة إعدادات الـ API و
+  `_openApiSettingsWithGate`؛ وأُضيف `OutlinedButton.icon('معلومات البرنامج والدعم')` أسفل زر «دخول»
+  مع سطر `الإصدار v$kAppVersionBadge`، يفتح `AppInfoScreen(allowApiUnlock: true)`.
+- `employee_portal/.../sections/settings_section.dart` — عنصر «معلومات التطبيق» يفتح `AppInfoScreen()`
+  **بدون** `allowApiUnlock`، و`trailing` صار `v$kAppVersion` بدل النص المثبّت.
+
+**لوحة الإدارة (جديدة/معدّلة):**
+
+- `admin/presentation/providers/support_inquiries_provider.dart` (جديد) — حالة قائمة بنمط
+  `active_sessions_provider` (فلتر حالة، بحث، صفحة، `hasMore`، `CancelToken`، `_requestVersion`).
+- `admin/presentation/screens/support_inquiries_screen.dart` (جديد) — `PermissionGate(supportView)`،
+  شرائح حالة، بحث مؤجَّل 300 ms، سحب للتحديث، تحميل المزيد، الحالات الأربع، وتفاصيل في
+  `showModalBottomSheet` بحقل رد وأزرار «تم الرد»/«إغلاق» خلف `PermissionGate(supportUpdate)`.
+- `management_dashboard_screen.dart` — بطاقة سادسة «استفسارات الدعم» وإضافة `Perm.supportView`
+  إلى `canAny`.
+- `employee_portal/domain/portal_sections.dart` — قسم `management`: `[managementView, supportView]`.
+- `home/domain/home_shortcut_catalog.dart` — نفس المرآة في `codes` حتى يبقى اختبار
+  `home_catalog_test` متوافقاً مع سجل بوابة الموظف (كان يفشل قبله).
+
+**المنصات:**
+
+- `pubspec.yaml` — `url_launcher: ^6.3.1`.
+- `android/app/src/main/AndroidManifest.xml` — `VIEW/https` و`VIEW/tel` داخل `<queries>` الحالي
+  (بلا `canLaunchUrl` فلم يُحتج لإعداد iOS).
+
+### الاختبارات
+
+**جديدة:** `test/features/app_info/developer_tap_unlock_test.dart` (7 حالات: 5 نقرات ⇒ true،
+4 ⇒ false، فجوة > 3s تُصفّر عند النقرة التالية، تصفير بعد النجاح) ·
+`test/features/app_info/app_info_screen_test.dart` (5 حالات: عرض الأقسام الثلاثة ببيانات شركة
+مُستبدَلة · 5 نقرات مع `allowApiUnlock: true` ⇒ حوار كلمة السر · مع `false` ⇒ لا شيء ·
+إرسال فارغ ⇒ أخطاء تحقق بلا طلب شبكة) · `test/features/support/support_inquiry_model_test.dart`
+(7 حالات: مفتاحان، إصلاح العربية، تسميات/ألوان الحالة).
+
+**مضافة إلى ملفات قائمة:** `test/app_config_model_test.dart` (قراءة/كتابة `company_services`
+مع القيمة الفارغة) · `test/features/auth/last_username_test.dart` (زر «معلومات البرنامج والدعم»
+موجود · أيقونة `Icons.settings_outlined` وتلميحها غائبان · سطر الإصدار ظاهر).
+
+**التحقق (بوابات):**
+
+- `flutter analyze` = **No issues found!**
+- `flutter test` = **354 ناجحاً / 5 متجاوزة — All tests passed!**
+- `php -l app/Http/Controllers/SupportInquiryController.php` نظيف · `vendor/bin/pint --dirty` نظيف.
+- `php artisan test --filter='SupportInquiry|BusinessRoutesSealed|IbacCore|AppConfig'`
+  = **37 ناجحاً (262 تأكيداً)**.
+- `php artisan route:list --path=support` = **3 مسارات** (POST عام · GET محمي · PUT محمي).
+
+**ملاحظات تنفيذية:** إخفاء زر إعدادات الـ API لا يُغني عن الحماية الخادمية — المسار ما زال محمياً
+بـ `permission:app_config.update` وكلمة السر في العميل تُتحقّق من الخادم. وإعادة تشغيل
+`02_ibac_seed.php` لازمة على كل بيئة جديدة لإدراج مفتاح `company_services` وأكواد `support`.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 01:50 · **لا DDL/DML من العميل** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-27 02:46 — زر «معلومات البرنامج والدعم» صار أيقونة في أعلى يسار الشريط العلوي
+
+**الطلب:** نقل زر «معلومات البرنامج والدعم» من بطاقة شاشة الدخول إلى أعلى يسار الشريط العلوي
+وإظهاره أيقونةً فقط بلا نص.
+
+### الملفات المعدّلة
+
+- `lib/features/auth/presentation/screens/login_screen.dart`
+  - عاد `AppBar` إلى الشاشة لكنه شريط أيقونة واحدة: `backgroundColor: AppColors.background`,
+    `elevation: 0`, `scrolledUnderElevation: 0`, `surfaceTintColor: Colors.transparent` — فلا كتلة
+    بصرية فوق الشعار. الشاشة عربية RTL، فخانة `actions` تُرسم على **اليسار** وهو الموضع المطلوب.
+  - `IconButton(Icons.info_outline_rounded)` بـ `tooltip: 'معلومات البرنامج والدعم'` ويستدعي
+    `_openAppInfo()` نفسه (لا منطق مكرّر).
+  - حُذف `OutlinedButton.icon` العريض من البطاقة (وكان يحمل `Icons.support_agent_rounded`).
+  - **بقي** سطر `الإصدار v$kAppVersionBadge` أسفل زر «دخول»: المطلوب نقل الزر لا حذف معلومة النسخة،
+    فحُذف تباعد واحد (`SizedBox(height: 8)`) وأُبقي النص مكانه.
+- `test/features/auth/last_username_test.dart`
+  - الحالة أُعيدت صياغتها إلى «أيقونة معلومات البرنامج والدعم في الشريط العلوي بلا نص» وتؤكد الآن:
+    `Icons.info_outline_rounded` موجود مرة واحدة · `find.byTooltip('معلومات البرنامج والدعم')` موجود ·
+    `find.text('معلومات البرنامج والدعم')` **غائب** (أيقونة فقط) · `Icons.support_agent_rounded` غائب ·
+    الأيقونة داخل `find.byType(AppBar)` عبر `find.descendant` لا داخل البطاقة · أيقونة
+    `Icons.settings_outlined` وتلميحها ما زالا غائبين · سطر النسخة ما زال ظاهراً.
+
+### ما لم يتغيّر
+
+- بوابة إعدادات الـ API: ما زالت خمس نقرات على اسم المطور خلال ثلاث ثوانٍ في `AppInfoScreen` ثم
+  `ApiPasswordDialog` — لا طرح ولا مسار مباشر من الشريط، ولا حالة فتح مخزَّنة.
+- عنصر «معلومات التطبيق» في إعدادات الموظف يفتح الشاشة نفسها بـ `allowApiUnlock: false` كما هو.
+- لا تغيير في الخادم ولا في قاعدة البيانات ولا في الأصول.
+
+### التحقق
+
+- `flutter analyze` = **No issues found!** (93.5s).
+- `flutter test test/features/auth/last_username_test.dart test/features/app_info` = **26 ناجحاً**.
+- `flutter test` (كامل) = **354 ناجحاً / 5 متجاوزة — All tests passed!**
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 02:46 · **لا DDL/DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-27 03:10 — قسم «معلومات الشركة» صار بطاقة هوية رسمية تُغذّيها قاعدة البيانات
+
+**الطلب:** تحسين قسم «معلومات الشركة» في شاشة «معلومات البرنامج والدعم» ليعرض الاسم والعنوان والموقع
+ومعلومات التواصل ولمحة عن الخدمات، مع جلْب كل القيم من قاعدة البيانات.
+
+### العميل — `lib/features/app_info/`
+
+- `presentation/widgets/company_info_section.dart` — **إعادة كتابة** القسم (365 سطراً بدل 190):
+  - `_CompanyData`: كائن قيمة يحمل الحقول السبعة مطبَّعة (`trim`) مع `isEmpty` واحدة تقرّر حالة الفراغ،
+    فلا تتكرّر شروط «هل الحقل فارغ؟» في كل مكان.
+  - `_CompanyDetails`: كتلة الهوية ثم الشبكة ثم لوحة الخدمات.
+    - **كتلة الهوية:** شريط عمودي بلون `AppColors.primary` على جهة البداية (`BorderDirectional(start:)`
+      — اليمين في RTL) ثم `company_name` بخط 14.5 عريض و`company_name_en` تحته بخط 10.5 لاتيني
+      بتباعد حروف — ترتيب الترويسة المطبوعة نفسها.
+    - **الشبكة:** `_grid()` تختار عمودين عند `maxWidth >= 460` وعموداً واحداً دونه. في وضع العمودين
+      تُبنى صفوفاً داخل `IntrinsicHeight` + `Row(stretch)` + `Expanded` كي يتساوى ارتفاع بطاقتي الصف
+      (بطاقة العنوان أطول بسبب سطرها الإنجليزي، وبدون التساوي تبدو الشبكة مكسورة).
+  - `_CompanyTile`: بطاقة بيان واحدة على خلفية `AppColors.surfaceSubtle` — أيقونة وتسمية في الأعلى ثم
+    القيمة، مع رمز إجراء في الطرف (خريطة/رابط/اتصال) ولون `AppColors.accent` حين تكون فعّالة.
+    التسمية `maxLines: 1` مع `ellipsis` فلا تتجاوز على أي عرض.
+  - `_ServicesPanel`: لوحة مصبوغة (`primary` بشفافية 0.055 + حدّ 0.16) بأيقونة `checkroom_rounded`
+    وعنوان «نبذة عن خدماتنا» ونص `company_services` بتباعد أسطر 1.75.
+  - `_CompanyEmptyState`: حالة الفراغ السابقة كما هي (لا بيانات أصلاً) لكنها صارت widget مستقلة.
+  - حُذف بناء الأسطر القديم، وحُذفت فقرة «خدماتنا» المنفصلة (اندمجت في اللوحة).
+- `presentation/utils/external_links.dart`:
+  - أُضيف `openMap(context, address)`: يفتح
+    `https://www.google.com/maps/search/?api=1&query=<العنوان>` بعد `Uri.encodeComponent`.
+    لا إحداثيات ولا عمود lat/long جديد: البحث النصي يفتح الخريطة على أقرب مطابقة.
+    الرابط يمرّ عبر `_launch` المشتركة (رسالة فشل واحدة موحّدة) ويستفيد من `scheme="https"` المعلَن
+    مسبقاً في `<queries>` على أندرويد.
+  - `openTel` صار يبني رابطه من `buildTelUri(phone)` — دالة نقية تُطبّع الرقم: رقم `APP_SETTINGS`
+    محلي (`780154000`) كان يتحوّل إلى `+780154000` أي رقم لا وجود له. التطبيع يحذف `00` البادئة
+    والصفر المحلي، ويترك الرقم الذي يحمل `967` أو 12 خانة كما هو، ويعيد `null` حين لا أرقام.
+    (`kDeveloperPhone` = 967776422777 يمرّ سليماً كما هو، وهو مُثبَت باختبار.)
+- `presentation/widgets/app_info_card.dart` — حُذف `AppInfoRow` بالكامل (171 سطراً): آخر مستهلك له
+  كان القسم القديم، وتركه كان كوداً ميتاً. بقيت `AppInfoCard` وحدها.
+- `presentation/screens/app_info_screen.dart` — `_header()` لم يعد يأخذ اسم الشركة ولم يعد يرسمه:
+  الشعار ثم شارة الإصدار فقط، لأن البطاقة تحته تعرض الاسم فصار يُرسم **مرة واحدة** في النافذة
+  (كان يُرسم مرتين على مسافة 20 بكسل). التذييل ما زال يستعمل الاسم في سطر الحقوق.
+
+### العميل — الاختبارات
+
+- `test/features/app_info/app_info_screen_test.dart`:
+  - `useLargeSurface` → `useSurface(tester, [Size])`، و`pumpScreen` صار يقبل `config` و`surface`،
+    و`fullConfig()` مرجعاً لكل الحقول مضبوطة.
+  - الحالة الأولى صارت أدق: الاسم `findsOneWidget` (لا `findsWidgets`) + تسميات «العنوان»
+    و«الموقع الإلكتروني» و«الهاتف» و«نبذة عن خدماتنا» + الاسم الإنجليزي من القاعدة.
+  - **3 حالات جديدة:** الحقول الفارغة لا ترسم بطاقات ولا لوحة خدمات · بلا أي بيانات تظهر حالة الفراغ
+    (لا بطاقة صامتة) · على شاشة 360px تنزل الشبكة إلى عمود واحد بلا استثناء تجاوز
+    (`tester.takeException()` = null) مع تأكيد تراكم البطاقات رأسياً.
+- `test/features/app_info/external_links_test.dart` — **ملف جديد**: 6 حالات لتطبيع رقم الهاتف
+  (محلي 9 خانات · صفر بادئة · `967` مسبقاً · `+`/مسافات/`00` · `kDeveloperPhone` · بلا أرقام).
+
+### قاعدة البيانات (بلا DDL)
+
+- `ACCOUNTS.APP_SETTINGS` → `company_services`: كانت فارغة (0 محرف) فكانت اللوحة تُخفى دائماً.
+  كُتبت نبذة واقعية 140 محرفاً عبر مسار التطبيق نفسه (`SettingsStore::set()` ⇒
+  `ArabicEncoding::toOracleSearchChars()` ثم `UPDATE`)، وتحقّقت القراءة العكسية
+  (`ROUND_TRIP_OK=1`, `PAYLOAD_LEN=140`). السقف 400 محرف (العمود 500 بايت) كما هو.
+- `company_website` بقي فارغاً: لا رابط موقع مسجَّل ولم نخترع واحداً؛ بطاقته لا تُرسم حتى يُكتب.
+
+### ما لم يتغيّر
+
+- شاشة إعدادات التطبيق وحقولها (`company_services` بحد 400) — لا تعديل عليها.
+- الخادم: لا ملف PHP تغيّر (لا `AppConfig`، لا متحكم، لا مسار)؛ القراءة ما زالت `GET /app-config` العامة.
+- بوابة النقر الخمسي على اسم المطور و`allowApiUnlock` كما هي، وقسم المطور والاستفسار كما هما.
+- الأصول والصلاحيات واللغة: لا تغيير.
+
+### التحقق
+
+- `flutter analyze` = **No issues found!** (17.5s).
+- `flutter test` (كامل) = **363 ناجحاً / 5 متجاوزة — All tests passed!** (كان 354؛ +9 حالات).
+- `flutter test test/features/app_info` = **21 ناجحاً** (15 شاشة + 6 تطبيع رقم).
+- `php artisan test --filter=AppConfig` = **9 ناجحاً (33 تأكيداً)** · `IbacCore` = **16 (77)** ·
+  `BusinessRoutesSealed` = **6 (95)**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **لا DDL** · **DML: صف واحد في `APP_SETTINGS`** ·
+**لا commit** (لم يُطلب).

@@ -2145,3 +2145,152 @@ SELECT es.SUB_ENTRY_NO, es.ENTRY_NO, em.ENTRY_DATE, et.ENTRY_TYPE_NAME,
 **النتيجة:** `StatementFullPeriodTest` = **3/3 ناجحة (17 تأكيداً)** ·
 `meta.limit = 0` و`meta.returned = meta.total` (كل حركات الفترة) · `limit=25` يعيد 25 صفاً فقط عند الطلب ·
 `CHART_ACC` لا يُلَفّ بغلاف `ROWNUM` عندما لا يوجد حد.
+
+---
+
+# 2026-10-27 01:50 — جدول استفسارات الدعم + مفتاح نبذة الخدمات + أكواد الدعم
+
+**الملف:** `kyApp_API/database/oracle/08_app_support_tickets.sql` — يتبع نمط `01_ibac_schema.sql`
+(متسلسلة + مشغّل، واسم المتسلسلة **بلا بادئة مخطط داخل PL/SQL** لتفادي `PLS-00302` بسبب وجود VIEW باسم `ACCOUNTS`).
+
+```sql
+-- (1) الجدول
+CREATE TABLE ACCOUNTS.APP_SUPPORT_TICKETS (
+  TICKET_ID     NUMBER(12)     NOT NULL,
+  USER_ID       NUMBER(5),                     -- null = زائر قبل الدخول
+  CONTACT_NAME  VARCHAR2(100),
+  CONTACT_PHONE VARCHAR2(30),
+  MESSAGE       VARCHAR2(1000) NOT NULL,
+  STATUS        VARCHAR2(20) DEFAULT 'new' NOT NULL,
+  ADMIN_REPLY   VARCHAR2(1000),
+  REPLIED_BY    NUMBER(5),
+  REPLIED_ON    DATE,
+  APP_VERSION   VARCHAR2(20),
+  PLATFORM      VARCHAR2(30),
+  CREATED_ON    DATE DEFAULT SYSDATE NOT NULL,
+  UPDATED_ON    DATE,
+  CONSTRAINT APP_SUP_PK PRIMARY KEY (TICKET_ID),
+  CONSTRAINT APP_SUP_STATUS_CK CHECK (STATUS IN ('new','answered','closed'))
+);
+-- النتيجة: TABLE_CREATED (13 عموداً)
+
+-- (2) الفهارس
+CREATE INDEX ACCOUNTS.APP_SUP_STATUS_IX ON ACCOUNTS.APP_SUPPORT_TICKETS (STATUS, CREATED_ON);
+CREATE INDEX ACCOUNTS.APP_SUP_USER_IX   ON ACCOUNTS.APP_SUPPORT_TICKETS (USER_ID, CREATED_ON);
+-- النتيجة: INDEX_STATUS_CREATED · INDEX_USER_CREATED
+
+-- (3) المتسلسلة
+CREATE SEQUENCE ACCOUNTS.SEQ_APP_SUPPORT_TICKETS
+  START WITH 1 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE;
+-- النتيجة: SEQUENCE_CREATED
+
+-- (4) المشغّل — الاسم بلا مخطط داخل PL/SQL (VIEW ACCOUNTS يجعل ACCOUNTS.SEQ_APP_SUPPORT_TICKETS يفشل بـ PLS-00302)
+CREATE OR REPLACE TRIGGER ACCOUNTS.TRG_APP_SUPPORT_TICKETS
+BEFORE INSERT ON ACCOUNTS.APP_SUPPORT_TICKETS FOR EACH ROW
+BEGIN
+  IF :NEW.TICKET_ID IS NULL THEN
+    SELECT SEQ_APP_SUPPORT_TICKETS.NEXTVAL INTO :NEW.TICKET_ID FROM DUAL;
+  END IF;
+END;
+/
+-- النتيجة: TRIGGER_CREATED
+```
+
+```sql
+-- (5) التحقق من البنية
+SELECT COUNT(*) FROM USER_TABLES      WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';        -- = 1
+SELECT COUNT(*) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';        -- = 13
+SELECT COUNT(*) FROM USER_INDEXES     WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';        -- = 3 (المفتاح + فهرسان)
+SELECT COUNT(*) FROM USER_SEQUENCES   WHERE SEQUENCE_NAME = 'SEQ_APP_SUPPORT_TICKETS'; -- = 1
+SELECT STATUS FROM USER_TRIGGERS      WHERE TRIGGER_NAME  = 'TRG_APP_SUPPORT_TICKETS'; -- = ENABLED
+-- القيود: APP_SUP_PK (P) · APP_SUP_STATUS_CK (C)
+```
+
+```sql
+-- (6) اختبار المشغّل (DML ثم تنظيف)
+INSERT INTO ACCOUNTS.APP_SUPPORT_TICKETS (MESSAGE, STATUS, PLATFORM)
+VALUES ('اختبار مشغّل المتسلسلة', 'new', 'test');
+SELECT TICKET_ID, STATUS FROM ACCOUNTS.APP_SUPPORT_TICKETS WHERE PLATFORM = 'test';
+-- النتيجة: id=1 · status=new (TICKET_ID أُسند تلقائياً)
+DELETE FROM ACCOUNTS.APP_SUPPORT_TICKETS WHERE PLATFORM = 'test';
+-- النتيجة: TRIGGER_CLEANUP_OK
+```
+
+```sql
+-- (7) إعادة بذر الكتالوج + التهيئة (idempotent)
+-- php artisan tinker database/oracle/02_ibac_seed.php
+-- النتيجة: PERMISSIONS catalog=141 inserted=3 updated=138 total=141
+--           SETTINGS  seeded=23  inserted=1 updated=22  total=25
+SELECT SETTING_KEY, VALUE_TYPE, SORT_ORDER FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY = 'company_services';   -- = ('company_services', 'string', 145)
+SELECT PERMISSION_CODE FROM ACCOUNTS.APP_PERMISSIONS
+ WHERE PERMISSION_CODE LIKE 'support.%';    -- = support.* · support.view · support.update
+SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;  -- = 141
+```
+
+**ملاحظات تنفيذ:**
+
+- لا مفتاح أجنبي على `USER_ID`: الجداول الإرثية تُدار خارج سيطرتنا، وحذف مستخدم لا يجوز أن يُفشل الإدراج.
+- `MESSAGE`/`ADMIN_REPLY` بسعة 1000 محرف، وحدود الخادم والعميل أضيق منها (10..1000 للرسالة).
+- الترميز: الكتابة عبر `ArabicEncoding::toOracleSearchChars()` والقراءة عبر `fixMojibake()` (لا نصّ عربي مباشر في SQL).
+- ملف التراجع: تعليقات `DROP TRIGGER/TABLE/SEQUENCE` في نهاية `08_app_support_tickets.sql` (لم تُنفَّذ).
+- **لا commit** (لم يُطلب).
+
+### 2026-10-27 01:50 — إعادة تحقّق قراءة فقط قبل الإغلاق
+
+```sql
+-- نُفِّذت عبر جلسة التطبيق نفسها (php artisan tinker) — قراءة فقط، بلا DDL/DML
+SELECT COUNT(*) FROM USER_TABLES    WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';      -- = 1
+SELECT COUNT(*) FROM USER_TAB_COLUMNS WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS';    -- = 13
+SELECT COUNT(*) FROM USER_SEQUENCES WHERE SEQUENCE_NAME = 'SEQ_APP_SUPPORT_TICKETS'; -- = 1
+SELECT STATUS   FROM USER_TRIGGERS  WHERE TRIGGER_NAME = 'TRG_APP_SUPPORT_TICKETS';  -- = ENABLED
+SELECT INDEX_NAME FROM USER_INDEXES WHERE TABLE_NAME = 'APP_SUPPORT_TICKETS'
+ ORDER BY INDEX_NAME;
+-- = APP_SUP_PK · APP_SUP_STATUS_IX · APP_SUP_USER_IX
+SELECT SETTING_KEY, SORT_ORDER FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY = 'company_services';           -- = ('company_services', 145)
+SELECT PERMISSION_CODE FROM ACCOUNTS.APP_PERMISSIONS
+ WHERE PERMISSION_CODE LIKE 'support%' ORDER BY PERMISSION_CODE;
+-- = support.* · support.update · support.view
+SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;     -- = 141
+SELECT COUNT(*) FROM ACCOUNTS.APP_SUPPORT_TICKETS; -- = 0 (لا صفوف اختبار متروكة)
+```
+
+**النتيجة:** كل كائنات الخطة حيّة ومطابقة للموثَّق أعلاه · جدول التذاكر نظيف (0 صف) ·
+**قراءة فقط: 0 DDL · 0 DML · لا commit**.
+
+### 2026-10-27 03:10 — كتابة نبذة خدمات الشركة في `APP_SETTINGS` (صف واحد)
+
+```sql
+-- قراءة أولية: الحقل كان فارغاً فكانت لوحة «نبذة عن خدماتنا» تُخفى دائماً
+SELECT SETTING_KEY, LENGTH(SETTING_VALUE) FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY = 'company_services';        -- company_services · 0
+
+-- DML — نُفِّذت عبر مسار التطبيق نفسه (SettingsStore::set) داخل php artisan tinker،
+-- لا نص عربي مباشر في SQL: القيمة تمرّ بـ ArabicEncoding::toOracleSearchChars() أولاً
+UPDATE ACCOUNTS.APP_SETTINGS
+   SET SETTING_VALUE = :setting_value,   -- نبذة 140 محرفاً بعد الترميز
+       UPDATED_BY    = :updated_by,      -- NULL (سكربت إداري لا مستخدم)
+       UPDATED_ON    = SYSDATE
+ WHERE SETTING_KEY = 'company_services';         -- 1 row updated
+COMMIT;
+
+-- تحقق بعد الكتابة: القراءة العكسية عبر fixMojibake() + الحمولة العامة
+-- BEFORE_LEN=0 · AFTER_LEN=140 · ROUND_TRIP_OK=1 · PAYLOAD_LEN=140
+SELECT SETTING_KEY, LENGTH(SETTING_VALUE), SORT_ORDER FROM ACCOUNTS.APP_SETTINGS
+ WHERE SETTING_KEY = 'company_services';        -- company_services · 140 · 145
+```
+
+**النص المكتوب (140 محرفاً، سقف العمود 500 بايت وسقف التحرير 400):**
+
+> نقدّم خدمات الخياطة والتفصيل الرجالي: أخذ المقاسات، وقصّ وتفصيل الثياب والبدلات، وتنفيذ كروت
+> التفصيل حسب الطلب، مع متابعة الطلب حتى التسليم.
+
+**ملاحظات تنفيذ:**
+
+- `company_website` **لم يُكتب**: لا رابط موقع مسجَّل للشركة، والاختراع ممنوع — بطاقته في العميل لا تُرسم وهي فارغة.
+- الكاش لا يمسّ هذه القيمة: `company_*` ليست من المفاتيح الساخنة (`SettingsStore::HOT_KEYS`)، فـ`publicPayload` يقرأها مباشرة من القاعدة.
+- السكربت المؤقت (`_seed_services.php`) حُذف بعد التشغيل — لا أثر له في المستودع.
+- **لا DDL · DML: صف واحد · لا commit**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **DDL: 0** · **DML: UPDATE واحد على صف `company_services`**.

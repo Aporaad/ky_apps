@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:ky_apps/core/constants/app_info.dart';
 import 'package:ky_apps/core/network/dio_client.dart';
 import 'package:ky_apps/core/storage/secure_storage_service.dart';
 import 'package:ky_apps/features/app_config/data/models/app_config_model.dart';
@@ -352,6 +353,38 @@ void main() {
 
       expect(find.text('khaled'), findsOneWidget);
       expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+    });
+
+    testWidgets('أيقونة معلومات البرنامج والدعم في الشريط العلوي بلا نص', (
+      tester,
+    ) async {
+      await pumpLogin(tester);
+
+      // أيقونة وحدها في الشريط العلوي (أعلى اليسار في RTL)، بلا زر عريض ولا نص ظاهر
+      // A lone icon in the app bar (top-left in RTL): no wide button, no visible label.
+      expect(find.byIcon(Icons.info_outline_rounded), findsOneWidget);
+      expect(find.byTooltip('معلومات البرنامج والدعم'), findsOneWidget);
+      expect(find.text('معلومات البرنامج والدعم'), findsNothing);
+      expect(find.byIcon(Icons.support_agent_rounded), findsNothing);
+
+      // الأيقونة داخل الـ AppBar لا داخل البطاقة
+      // The icon lives in the AppBar, not in the card body.
+      expect(
+        find.descendant(
+          of: find.byType(AppBar),
+          matching: find.byIcon(Icons.info_outline_rounded),
+        ),
+        findsOneWidget,
+      );
+
+      // الأيقونة القديمة أُزيلت: لم يبقَ في الشاشة طريق مباشر إلى إعدادات الخادم
+      // The old icon is gone: no direct route to the server settings is left on this screen.
+      expect(find.byIcon(Icons.settings_outlined), findsNothing);
+      expect(find.byTooltip('إعدادات خادم الـ API'), findsNothing);
+
+      // سطر النسخة بقي كما هو أسفل زر الدخول
+      // The version line stays where it was, under the sign-in button.
+      expect(find.text('الإصدار v$kAppVersionBadge'), findsOneWidget);
     });
   });
 }

@@ -106,6 +106,33 @@ void main() {
       expect(json['company_name_en'], 'AL-KABOODI TAILORING');
       expect(json['company_address_en'], 'Hadda Street - Sanaa');
     });
+
+    test('نبذة الخدمات: قراءة بمفتاحين وكتابة في جسم التحديث', () {
+      // `company_services` مفتاح قابل للكتابة في `AppConfig::WRITABLE_KEYS`
+      // company_services is a writable key in the server's AppConfig::WRITABLE_KEYS list.
+      const brief = 'خياطة رجالية وتفصيل كروت وبدلات رسمية.';
+
+      expect(AppConfigModel.fromJson(const {'company_services': brief})
+          .companyServices, brief);
+
+      // صفوف أوراكل قد تصل بأحرف كبيرة
+      // Oracle rows may arrive with uppercase keys.
+      expect(AppConfigModel.fromJson(const {'COMPANY_SERVICES': brief})
+          .companyServices, brief);
+
+      // الفراغ يبقى فراغاً لا نصاً بديلاً: القسم يخفي سطر «خدماتنا» حينها
+      // A blank stays blank rather than becoming filler text: the section hides "our services"
+      // in that case.
+      expect(AppConfigModel.fromJson(const {'company_services': '   '})
+          .companyServices, '');
+      expect(AppConfigModel.defaults().companyServices, '');
+
+      expect(
+        AppConfigModel.defaults().copyWith(companyServices: brief)
+            .toJsonForUpdate()['company_services'],
+        brief,
+      );
+    });
   });
 
   test('defaults تطابق لوحة AppPalette الافتراضية', () {

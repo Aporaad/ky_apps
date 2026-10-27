@@ -25,6 +25,7 @@ class AppConfigModel {
     required this.fontFamily,
     this.companyNameEn = '',
     this.companyAddressEn = '',
+    this.companyServices = '',
   });
 
   // ── معلومات الشركة / company info ────────────────────────
@@ -42,6 +43,14 @@ class AppConfigModel {
   /// the wording of the printed header.
   final String companyNameEn;
   final String companyAddressEn;
+
+  /// نبذة قصيرة عن خدمات الشركة — تُعرض في شاشة «معلومات البرنامج والدعم».
+  /// فارغة افتراضياً، والشاشة تُخفي فقرتها بدل عرض سطر فارغ. حدّها 400 محرف في العميل
+  /// والخادم (سعة عمود `SETTING_VALUE` أضيق من ذلك).
+  /// A short brief about the company's services, shown on the app-info screen. Empty by
+  /// default, and the screen omits the paragraph rather than showing a blank line. Capped at
+  /// 400 chars on both client and server (the `SETTING_VALUE` column is tighter than that).
+  final String companyServices;
 
   /// اسم التطبيق الظاهر في الشريط العلوي/nice title
   final String appName;
@@ -67,6 +76,7 @@ class AppConfigModel {
       appName: 'الكبودي للخياطة الرجاليه',
       companyNameEn: "ALKABODI FOR MEN's TAILORING",
       companyAddressEn: '',
+      companyServices: '',
       primaryColor: AppPalette.primary,
       secondaryColor: AppPalette.accent,
       backgroundColor: AppPalette.background,
@@ -104,6 +114,10 @@ class AppConfigModel {
         src['company_address_en'] ?? src['COMPANY_ADDRESS_EN'],
         '',
       ),
+      companyServices: _readString(
+        src['company_services'] ?? src['COMPANY_SERVICES'],
+        '',
+      ),
       primaryColor: _parseHexColor(
         src['theme_primary_color'],
         AppPalette.primary,
@@ -138,6 +152,7 @@ class AppConfigModel {
       'company_phone': companyPhone,
       'company_name_en': companyNameEn,
       'company_address_en': companyAddressEn,
+      'company_services': companyServices,
       'app_name': appName,
       'theme_primary_color': _colorToHex(primaryColor),
       'theme_secondary_color': _colorToHex(secondaryColor),
@@ -158,6 +173,7 @@ class AppConfigModel {
     String? appName,
     String? companyNameEn,
     String? companyAddressEn,
+    String? companyServices,
     Color? primaryColor,
     Color? secondaryColor,
     Color? backgroundColor,
@@ -173,6 +189,7 @@ class AppConfigModel {
       appName: appName ?? this.appName,
       companyNameEn: companyNameEn ?? this.companyNameEn,
       companyAddressEn: companyAddressEn ?? this.companyAddressEn,
+      companyServices: companyServices ?? this.companyServices,
       primaryColor: primaryColor ?? this.primaryColor,
       secondaryColor: secondaryColor ?? this.secondaryColor,
       backgroundColor: backgroundColor ?? this.backgroundColor,

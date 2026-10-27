@@ -1654,3 +1654,101 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
   `flutter analyze` = No issues found! · `flutter test` = **333 ناجحاً (5 متجاوزة)**.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-26 03:11 · **اقتطاع `limit`:** أُزيل · **لا commit** (لم يُطلب) · **لا DDL/DML**.
+
+---
+
+## 2026-10-27 01:50 — شاشة «معلومات البرنامج والدعم» + استفسارات الدعم
+
+**الهدف:** زر ظاهر على شاشة الدخول يفتح شاشة بثلاثة أقسام (بيانات الشركة من القاعدة · معلومات المطور · الاستفسار والدعم)،
+مع بقاء إعدادات الـ API سرّية عبر 5 نقرات على اسم المطور + كلمة السر، ونفس الشاشة في إعدادات الموظف بلا بوابة.
+
+### قاعدة البيانات (Oracle 11g)
+
+- [x] **جدول جديد** `ACCOUNTS.APP_SUPPORT_TICKETS` في `kyApp_API/database/oracle/08_app_support_tickets.sql`
+  (13 عموداً · قيد `APP_SUP_STATUS_CK` على `new/answered/closed` · فهرسان `APP_SUP_STATUS_IX` و`APP_SUP_USER_IX` ·
+  متسلسلة `SEQ_APP_SUPPORT_TICKETS` + مشغّل `TRG_APP_SUPPORT_TICKETS` · وصف `DROP` للتراجع في نهاية الملف).
+- [x] **بلا مفتاح أجنبي** على `USER_ID`: الجداول الإرثية تُدار خارج سيطرتنا وحذف مستخدم لا يجوز أن يُفشل الإدراج.
+- [x] **مفتاح جديد** `company_services` في بذر `02_ibac_seed.php` داخل `$settings` (`string` · `SORT_ORDER=145` · «نبذة عن خدمات الشركة»).
+- [x] **صلاحيات الدعم** في `PermissionCatalog.php`: قسم `support` قبل `my_statement` بفعلين فقط (`view` · `update`) — بلا `create`
+  لأن الإرسال خدمة ذاتية تعمل قبل الدخول. الأكواد: `support.*` · `support.view` · `support.update` (المجموع **141** بدل 138).
+- [x] **التنفيذ على القاعدة الحقيقية:** الجدول + الفهرسـان + المتسلسلة + مشغّل مُفعَّل · إعادة البذر ⇒ `inserted=3 updated=138 total=141`
+  و`company_services sort=145` · اختبار المشغّل أدرج صفاً وأعاد `TICKET_ID` تلقائياً ثم حُذف.
+
+### الخادم
+
+- [x] **`App\Support\AppConfig`:** الثابت `COMPANY_SERVICES` + إضافته إلى `DEFAULTS` و`WRITABLE_KEYS` ⇒ يدخل `publicPayload()` تلقائياً.
+- [x] **`AppConfigController::textLimit()`:** `company_services => 400` (سقف العمود 500 بايت، والحدّ يحترم الترميز).
+- [x] **`SupportInquiryController`** جديد: `store` (عام، يربط `USER_ID` بتوكن Sanctum اختياري ويشتق الاسم من `USER_NAME_AR`)،
+  `index` (ترقيم `ROW_NUMBER` · `meta {total,page,limit,pages}` · بحث بالاسم/الهاتف/النص · `user_name` من `APP_USERS`)،
+  `reply` (حالة + رد · 404 إن لم توجد · `REPLIED_BY/REPLIED_ON/UPDATED_ON`).
+- [x] **العربية:** كتابة عبر `ArabicEncoding::toOracleSearchChars()` وقراءة عبر `fixMojibake()` في كل مسار.
+- [x] **المسارات:** `POST /support/inquiries` عام بـ `throttle:5,1` · `GET` بـ `permission:support.view` · `PUT /{ticketId}` بـ `permission:support.update`.
+- [x] **`ActivityLogger`** للإرسال المصادق وللرد، وفشل التسجيل لا يُفشل الطلب.
+
+### العميل (Flutter)
+
+- [x] **ثوابت** `lib/core/constants/app_info.dart`: `kAppVersion='1.1.0'` · `kAppBuildNumber='2'` · اسم المطور ورقمه ورابط واتساب.
+- [x] **التهيئة:** حقل `companyServices` في النموذج (قراءة بمفتاحين · `copyWith` · `toJsonForUpdate`) وحقل نصّي 3 أسطر `maxLength: 400` في شاشة إعدادات التطبيق.
+- [x] **`AppInfoScreen`** (`allowApiUnlock`) — رأس بالشعار واسم الشركة وشارة النسخة، الأقسام الثلاثة، ثم تذييل النسخة والحقوق.
+- [x] **قسم الشركة** يقرأ من `appConfigNotifierProvider` (كاش فوري + مزامنة) مع حالة فراغ وزر تحديث، ويعمل قبل الدخول.
+- [x] **قسم المطور:** الاسم هدف النقر الخفي (`DeveloperTapUnlock`: 5 نقرات / 3 ثوانٍ) ثم `ApiPasswordDialog` ثم `ApiSettingsScreen` —
+  ولا يُخزَّن أي إذن: العدّاد يُصفَّر بعد النجاح والخروج يُلغي البوابة.
+- [x] **قسم الدعم:** أزرار اتصال/واتساب + `SupportInquiryForm` (اسم وهاتف للزائر فقط، تحقق محلي مطابق للخادم، خطأ الخادم inline، لوحة نجاح برقم المتابعة).
+- [x] **شاشة الدخول:** حُذف `IconButton` إعدادات الـ API و`_openApiSettingsWithGate`، وأُضيف زر «معلومات البرنامج والدعم» + سطر النسخة.
+- [x] **إعدادات الموظف:** عنصر «معلومات التطبيق» يفتح نفس الشاشة بلا `allowApiUnlock`، والـ `trailing` صار `v$kAppVersion`.
+- [x] **لوحة الإدارة:** بطاقة سادسة «استفسارات الدعم» + شاشة `SupportInquiriesScreen` (شرائح حالة · بحث مؤجَّل 300 ms ·
+  سحب للتحديث · تحميل المزيد · الحالات الأربع · لوحة سفلية للتفاصيل والرد) ومزوّد بنمط `ActiveSessionsNotifier`.
+- [x] **مرآة الصلاحيات:** `Perm.supportWildcard/supportView/supportUpdate` + `allPermissionCodes` + ترتيب الأقسام وتسميتها.
+- [x] **بيانات الشركة والسجل:** قسم `management` في سجل البوابة وفي كتالوج اختصارات الرئيسية يقبل `support.view` أيضاً.
+- [x] **الاعتماديات:** `url_launcher: ^6.3.1` + `queries` في AndroidManifest (`https` و`tel`) — بلا `canLaunchUrl`.
+
+### الاختبارات والتحقق
+
+- [x] **Flutter:** `developer_tap_unlock_test` (7) · `app_info_screen_test` (5) · `support_inquiry_model_test` (7) ·
+  `app_config_model_test` (+1 `company_services`) · `last_username_test` (+1: الزر ظاهر وأيقونة الإعدادات غائبة).
+- [x] **Pest:** `SupportInquiryTest` (6 حالات / 57 تأكيداً) + تحديث `BusinessRoutesSealedTest` (مسار عام مسموح · 401 · 403 للأكواد)
+  و`IbacCoreTest` (141 كوداً · 25 تعريفاً في التهيئة).
+- [x] **التحقق:** `flutter analyze` = **No issues found!** · `flutter test` = **354 ناجحاً (5 متجاوزة)** ·
+  `php artisan test --filter='SupportInquiry|BusinessRoutesSealed|IbacCore|AppConfig'` = **37 ناجحاً (262 تأكيداً)** · Pint نظيف.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 01:50 · **لا commit** (لم يُطلب) · **DDL/DML:** جدول + متسلسلة + مشغّل + إعادة بذر فقط.
+
+---
+
+## 2026-10-27 02:46 — زر «معلومات البرنامج والدعم» أيقونة في الشريط العلوي
+
+- [x] **العميل:** حذف `OutlinedButton.icon` العريض من بطاقة شاشة الدخول.
+- [x] **العميل:** إعادة `AppBar` شفاف (بلا ظل، بلون الخلفية) بأيقونة واحدة في `actions` — أعلى
+  اليسار في RTL — `Icons.info_outline_rounded` مع `tooltip: 'معلومات البرنامج والدعم'`.
+- [x] **العميل:** إبقاء سطر «الإصدار v1.1.0 (2)» أسفل زر «دخول» (نقل الزر لا حذف معلومة النسخة).
+- [x] **الاختبارات:** تحديث حالة `last_username_test.dart` إلى «أيقونة … بلا نص» مع تأكيد وجود الأيقونة
+  داخل `AppBar`، وغياب النص المرئي، وغياب `Icons.support_agent_rounded`، وبقاء غياب أيقونة إعدادات الخادم.
+- [x] **التحقق:** `flutter analyze` = **No issues found!** · `flutter test` = **354 ناجحاً (5 متجاوزة)** ·
+  لا تغيير في الخادم أو القاعدة.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 02:46 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-27 03:10 — تحسين قسم «معلومات الشركة» (البيانات كلها من القاعدة)
+
+- [x] **العميل:** إعادة كتابة `company_info_section.dart` كبطاقة هوية: كتلة ترويسة (الاسم العربي +
+      الإنجليزي) · شبكة بطاقات (العنوان + العنوان الإنجليزي، الموقع الإلكتروني، الهاتف) · لوحة
+      «نبذة عن خدماتنا» — وكل قيمة من `appConfigNotifierProvider` أي من `APP_SETTINGS`.
+- [x] **العميل:** شبكة متجاوبة: عمودان عند `maxWidth >= 460` داخل `IntrinsicHeight` (ارتفاع متساوٍ
+      للبطاقتين) وعمود واحد على الهاتف؛ الحقل الشاغر لا يرسم بطاقة ولا لوحة.
+- [x] **العميل:** `ExternalLinks.openMap()` — النقر على العنوان يفتح خرائط جوجل بالبحث عن العنوان
+      المخزَّن (بلا إحداثيات ولا عمود جديد).
+- [x] **العميل:** تطبيع رقم الهاتف في `buildTelUri()` — الرقم المحلي `780154000` كان يُطلب
+      `+780154000`؛ الآن يُكمَّل بمفتاح اليمن `967` ويُحذف صفر البداية/بادئة `00`، والدولي يبقى كما هو.
+- [x] **العميل:** حذف `AppInfoRow` من `app_info_card.dart` (كود ميت بعد إعادة الكتابة).
+- [x] **العميل:** إزالة اسم الشركة المكرَّر من رأس `AppInfoScreen` (يبقى الشعار + شارة الإصدار).
+- [x] **القاعدة:** كتابة `company_services` (140 محرفاً) بعد أن كانت فارغة — عبر `SettingsStore::set()`
+      مع تحقق قراءة عكسية (`ROUND_TRIP_OK=1`)؛ `company_website` بقي فارغاً بلا اختراع رابط.
+- [x] **الاختبارات:** 3 حالات جديدة (حقول فارغة · بيانات صفرية · تجاوب 360px بلا تجاوز) + 6 حالات
+      لتطبيع رقم الهاتف في `external_links_test.dart` + تشديد الحالة الأولى (الاسم مرة واحدة، تسميات
+      البطاقات، الاسم الإنجليزي) ⇒ 21 اختباراً لشاشة معلومات البرنامج والدعم ومرفقاتها.
+- [x] **التحقق:** `flutter analyze` = **No issues found!** · `flutter test` = **363 ناجحاً (5 متجاوزة)** ·
+      Pest: `AppConfig` 9 · `IbacCore` 16 · `BusinessRoutesSealed` 6 — كلها ناجحة.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **لا DDL** · **DML:** صف `APP_SETTINGS` واحد · **لا commit** (لم يُطلب).

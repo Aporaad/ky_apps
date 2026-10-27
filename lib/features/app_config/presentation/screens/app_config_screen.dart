@@ -33,6 +33,7 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
   late final TextEditingController _companyAddressEn;
   late final TextEditingController _companyWebsite;
   late final TextEditingController _companyPhone;
+  late final TextEditingController _companyServices;
   late final TextEditingController _appName;
 
   // ── مفاتيح الألوان السداسية (تُحرَّر يدوياً) / hex controllers ──
@@ -69,6 +70,7 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
     _companyAddressEn = TextEditingController(text: config.companyAddressEn);
     _companyWebsite = TextEditingController(text: config.companyWebsite);
     _companyPhone = TextEditingController(text: config.companyPhone);
+    _companyServices = TextEditingController(text: config.companyServices);
     _appName = TextEditingController(text: config.appName);
 
     _primary = config.primaryColor;
@@ -95,6 +97,7 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
     _companyAddressEn.dispose();
     _companyWebsite.dispose();
     _companyPhone.dispose();
+    _companyServices.dispose();
     _appName.dispose();
     _primaryHex.dispose();
     _secondaryHex.dispose();
@@ -116,6 +119,7 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
       companyAddressEn: _companyAddressEn.text.trim(),
       companyWebsite: _companyWebsite.text.trim(),
       companyPhone: _companyPhone.text.trim(),
+      companyServices: _companyServices.text.trim(),
       appName: _appName.text.trim(),
       primary: _primary,
       secondary: _secondary,
@@ -179,6 +183,16 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
             _textField(_companyAddressEn, 'العنوان بالإنجليزية', ltr: true),
             _textField(_companyWebsite, 'الموقع الإلكتروني'),
             _textField(_companyPhone, 'الهاتف', phone: true),
+            // النبذة فقرة لا سطر: ثلاثة أسطر وحد 400 محرف، وهو ما يبقى داخل سعة عمود
+            // SETTING_VALUE البالغة 500 بايت في أوراكل.
+            // The brief is a paragraph, not a line: three lines and a 400-char ceiling, which keeps
+            // it inside Oracle's 500-byte SETTING_VALUE column.
+            _textField(
+              _companyServices,
+              'نبذة عن خدمات الشركة',
+              maxLines: 3,
+              maxLength: 400,
+            ),
             _textField(_appName, 'اسم التطبيق'),
 
             const SizedBox(height: 24),
@@ -247,12 +261,18 @@ class _AppConfigScreenState extends ConsumerState<AppConfigScreen> {
     String label, {
     bool phone = false,
     bool ltr = false,
+    int maxLines = 1,
+    int? maxLength,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: TextField(
         controller: controller,
-        keyboardType: phone ? TextInputType.phone : TextInputType.text,
+        keyboardType: phone
+            ? TextInputType.phone
+            : (maxLines > 1 ? TextInputType.multiline : TextInputType.text),
+        maxLines: maxLines,
+        maxLength: maxLength,
         // النص اللاتيني يحتاج اتجاهًا صريحًا وإلا ورَدَ مقلوبًا داخل واجهة RTL
         // Latin text needs an explicit direction, otherwise it renders mirrored in an RTL app.
         textDirection: ltr ? TextDirection.ltr : null,
@@ -452,6 +472,7 @@ class AppConfigModelBuild {
     required String companyAddressEn,
     required String companyWebsite,
     required String companyPhone,
+    required String companyServices,
     required String appName,
     required Color primary,
     required Color secondary,
@@ -475,6 +496,7 @@ class AppConfigModelBuild {
       'company_address_en': companyAddressEn,
       'company_website': companyWebsite,
       'company_phone': companyPhone,
+      'company_services': companyServices,
       'app_name': appName,
       'theme_primary_color': hex(primary),
       'theme_secondary_color': hex(secondary),
