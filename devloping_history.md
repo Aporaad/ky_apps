@@ -3274,3 +3274,64 @@ signal 3 (SIGQUIT) → tombstoned
 
 **النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **لا DDL** · **DML: صف واحد في `APP_SETTINGS`** ·
 **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-28 08:49 — قسم التفصيل: استعراض فاتورة تفصيل كامل + ثلاث واجهات أولية (Flutter + Laravel)
+
+### الخادم (Laravel)
+
+- `kyApp_API/app/Http/Controllers/TailoringController.php` — متحكم جديد **قراءة فقط**، مغلّف الردود القياسي،
+  والاستعلامات كلها مربوطة (bind) بلا لصق نصي:
+  - `index` قائمة مُجمَّعة `GROUP BY BILL_NO, YEAR` بالأحدث أولاً، مع البحث في
+    (رقم الفاتورة · الرقم اليدوي · اسم العميل · الهاتف · اسم المستفيد عبر `EXISTS`) والفلترة الزمنية والتصفح.
+  - `show` يعيد `header` + `models[]` (الموديل يحمل المستفيد والمقاسات والمواصفات) وكل موديل يحمل
+    `pieces[]` (القطعة تحمل القماش والقصّاص والخيّاط وأعلام الإنجاز) — التجميع في PHP على صفوف الـ VIEW.
+  - `movements` سجل الحركة من `CUTING_TRANSD` + `ORDSTATE` بأرقام القطع التي يحملها العميل فعلاً.
+  - `reference` تسميات المقاسات من `GENERAL_LABELS_CODING` + الأنواع + الأشكال + الحالات.
+  - `activity` صف واحد في `APP_USER_ACTIVITY` فقط، ولا يمسّ أي جدول إرث.
+- حجب خانات المال: عند غياب `tailoring.payments_view` يعود `payment = null` من الخادم وتُعاد المفاتيح `null`
+  صراحةً — الحجب على الخادم لا في الواجهة وحدها.
+- `PermissionCatalog.php` ثلاثة أكواد في قسم `tailoring` (`payments_view` · `export` · `progress`) ⇒ **144**،
+  و`IbacCoreTest` و`BusinessRoutesSealedTest` محدّثان.
+- `routes/api.php` خمسة مسارات، كلها خلف `auth:sanctum` + `permission:` وبقيود regex على رقم الفاتورة والسنة.
+- الطُعم: «لا يوجد» في `TAILOR_NAME1` تُطبَّع إلى `null` على الخادم (`normalizeTailorName`).
+
+### العميل (Flutter)
+
+- ميزة جديدة `lib/features/tailoring/`:
+  - `data/models/` — `cutting_bill_summary_model` · `cutting_bill_detail_model` · `cutting_model_item` ·
+    `cutting_piece_item` · `cutting_movement_model` · `tailoring_reference_model` · `tailoring_parse`.
+  - `data/repositories/tailoring_repository.dart` — قراءة فقط + `TailoringException(notFoundInView)` لتمييز
+    404 «خارج نطاق الـ VIEW» عن خطأ الشبكة، و`recordActivity` لا يُفشل الإجراء.
+  - `presentation/providers/tailoring_providers.dart` — القائمة (`NotifierProvider` بحث مؤجَّل + حارس بصمة
+    الطلب + `CancelToken`)، التفصيل والحركة (`FutureProvider.autoDispose.family`)، والمرجعيات.
+  - `presentation/screens/` — لوحة القسم · قائمة الفواتير (ثلاثة أنماط: استعراض/منتقي تعديل/منتقي متابعة) ·
+    شاشة الاستعراض · النماذج الأولية الثلاثة.
+  - `presentation/widgets/` — 14 ودجت: ترويسة الفاتورة، بطاقة العميل، بطاقة الدفع، شريط الموديلات،
+    شبكة المقاسات، لوحة المواصفات، جدول الأقمشة، جدول الحركة، خط السير، بطاقة القائمة، نموذج الإدخال،
+    شريط الحفظ الأولي، بطاقة القسم/الشريحة، وبطاقة الإجراء.
+  - `presentation/utils/cutting_bill_pdf_builder.dart` — PDF بالترويسة الموحدة (`report_pdf_page` +
+    `report_pdf_arabic` + `report_pdf_fonts`) وجداول بأعمدة معكوسة وتذييل توقيعات.
+- الربط بالواجهة الرئيسية: `tailoring_section.dart` يعيد `TailoringDashboardScreen`، وأربع بطاقات جديدة
+  (`tailoring.bills` مفعّلة افتراضياً، `tailoring.add`, `tailoring.edit`, `tailoring.progress`)،
+  وإزالة `underDevelopment` من `tailoring.section`.
+- سجلات التدقيق: `tailoring.bill_viewed` عند الفتح، `tailoring.bill_printed` و`tailoring.bills_exported`
+  عند الطباعة والتصدير — كلها في `APP_USER_ACTIVITY` بلا أي كتابة في جداول الإرث.
+
+### مزالق حقيقية أُصلحت في هذه الجولة
+
+1. **`AppColors` ديناميكية:** `primary`/`accent`/`background`/`textPrimary`/`textSecondary`/`primaryDark`
+   هي `static get` تقرأ `AppPalette` وقت التشغيل، فلا تصلح داخل تعبير `const` ولا كقيمة افتراضية لمَعامل
+   `const`. أُزيل `const` من 15 ملفاً (54 موضعاً) وحُوّل `accent`/`color` في `TailoringSectionCard` و
+   `TailoringChip` إلى `null` مع بديل وقت البناء.
+2. **`AsyncValue.valueOrNull` غير موجودة في riverpod 3.3.2** ⇒ استُخدمت `.value`.
+3. **`CuttingBillKey key` يتعارض مع `Widget.key`** ⇒ حقل الهوية اسمه `billKey` في الشاشات الثلاث.
+4. `ReportZoomView` في `core/widgets/` لا `core/utils/`.
+5. **مرآة الصلاحيات:** الأكواد الثلاثة أُضيفت إلى `Perm` ولم تُضف إلى `allPermissionCodes`، فأسقطها
+   `home_catalog_test` — أُضيفت في موضعها من ترتيب الكتالوج.
+6. **مجموعة الافتراضيات** ارتفعت إلى 15 `defaultOn` (بعد `tailoring.bills`) و16 نشِطة في أول تشغيل،
+   فحُدِّث `home_notifier_test`.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-28 08:49 · **لا commit** (لم يُطلب).

@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (141 كوداً في 24 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (144 كوداً في 24 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -33,6 +33,12 @@ class Perm {
   static const String tailoringDelete = 'tailoring.delete';
   static const String tailoringPrint = 'tailoring.print';
   static const String tailoringDeliver = 'tailoring.deliver';
+  // خانات المال في الكرت صلاحية مستقلة: رؤية الفاتورة لا تعني رؤية ما دُفع فيها. الخادم يعيد
+  // المبالغ `null` عند غيابها، فالحجب على الخادم لا في الواجهة وحدها.
+  // Money fields are their own grant: the server nulls the amounts when it is missing.
+  static const String tailoringPaymentsView = 'tailoring.payments_view';
+  static const String tailoringExport = 'tailoring.export';
+  static const String tailoringProgress = 'tailoring.progress';
 
   // ── العملاء / customers ──────────────────────────────────
   static const String customersWildcard = 'customers.*';
@@ -239,6 +245,9 @@ const List<String> allPermissionCodes = [
   Perm.tailoringDelete,
   Perm.tailoringPrint,
   Perm.tailoringDeliver,
+  Perm.tailoringPaymentsView,
+  Perm.tailoringExport,
+  Perm.tailoringProgress,
   Perm.customersWildcard,
   Perm.customersView,
   Perm.customersCreate,
@@ -444,6 +453,8 @@ const Map<String, String> permActionLabels = {
   'group_work_report': 'تقرير عمل مجموعة',
   'toggle': 'تفعيل/تعطيل',
   'deliver': 'تسليم',
+  'payments_view': 'عرض الدفع',
+  'progress': 'متابعة السير',
   'edit_limit': 'تعديل السقف',
   'structure_manage': 'إدارة الهيكل',
   'prices_view': 'عرض الأسعار',

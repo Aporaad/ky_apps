@@ -1752,3 +1752,24 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
       Pest: `AppConfig` 9 · `IbacCore` 16 · `BusinessRoutesSealed` 6 — كلها ناجحة.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **لا DDL** · **DML:** صف `APP_SETTINGS` واحد · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-28 08:49 — قسم التفصيل: استعراض فاتورة التفصيل (تنفيذ كامل) + ثلاث واجهات أولية
+
+- [x] **الخادم:** `TailoringController` جديد (قراءة فقط، مغلّف `success/message/data/meta`) بخمسة مسارات خلف `auth:sanctum` + `permission:`:
+      `GET /tailoring/bills` · `GET /tailoring/bills/{billNo}/{year}` · `GET .../movements` · `GET /tailoring/reference` · `POST .../activity`.
+- [x] **الخادم:** المفتاح المركّب `(BILL_NO, YEAR)` في كل مسار واستعلام — رقم الفاتورة وحده غير فريد، فلا نسخ لنمط `InvoiceController::show`.
+- [x] **الخادم:** خانات المال تُحجب من الخادم (`payment: null`) عند غياب `tailoring.payments_view`، والواجهة تُغلقها ببوابة ثانية.
+- [x] **الخادم:** ثلاثة أكواد في `PermissionCatalog` (144 = 141 + 3): `tailoring.payments_view` · `tailoring.export` · `tailoring.progress` + تحديث `IbacCoreTest` و`BusinessRoutesSealedTest`.
+- [x] **القاعدة:** بذر الصلاحيات (`02_ibac_seed.php` الـ idempotent) — `APP_PERMISSIONS` = **144** صفاً، منها **10** لكودات التفصيل.
+- [x] **العميل:** ميزة جديدة `lib/features/tailoring/` = 6 شاشات + 14 ودجت + 7 ملفات نماذج + مستودع + 5 مزودات + مولّد PDF.
+- [x] **العميل:** لوحة القسم وقائمة الفواتير (بحث مؤجَّل 300ms · نطاقات زمنية جاهزة · ترقيم لا نهائي) وشاشة الاستعراض بالأقسام الثمانية داخل `ReportZoomView`.
+- [x] **العميل:** الطباعة والتصدير عبر `Printing` بالترويسة الموحدة، وكل إجراء يسجّل `tailoring.bill_printed` / `tailoring.bills_exported`.
+- [x] **العميل:** النماذج الأولية الثلاثة (إضافة · تعديل · متابعة سير) **قراءة فقط** بلا أي INSERT/UPDATE في جداول الإرث.
+- [x] **الربط:** `tailoring_section.dart` ⇒ `TailoringDashboardScreen`، وأربع بطاقات في كتالوج الاختصارات، وإزالة `underDevelopment` من `tailoring.section`.
+- [x] **الاختبارات:** `cutting_bill_models_test` (25) · `tailoring_repository_test` (9) · `cutting_bill_view_screen_test` (7) + تحديث `home_catalog_test` و`home_notifier_test` ومرآة `allPermissionCodes`.
+- [x] **التحقق:** `flutter analyze` = **No issues found!** · `flutter test` = **407 ناجحاً (5 متجاوزة)** · Pest `Tailoring` = **11 اختباراً / 221 تأكيداً** · `vendor/bin/pint --dirty` = **passed**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-28 08:49 · **لا DDL** · **DML:** 3 صفوف `APP_PERMISSIONS` (بذر) + صفوف `APP_USER_ACTIVITY` من مسارات التدقيق · **لا commit** (لم يُطلب).

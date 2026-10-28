@@ -40,6 +40,22 @@ class ApiConstants {
   // sit behind the support.* grants.
   static const String supportInquiries = '/support/inquiries';
 
+  // قسم التفصيل — كل المسارات خلف صلاحية tailoring.* والقراءة فقط من الـ VIEW.
+  // Tailoring — every route sits behind tailoring.* grants and reads the view only.
+  // هوية الفاتورة مركّبة (رقم، سنة) لأن رقم الفاتورة وحده غير فريد.
+  // The bill identity is the composite (number, year) because the number alone is not unique.
+  static const String tailoringBills = '/tailoring/bills';
+  static const String tailoringReference = '/tailoring/reference';
+
+  static String tailoringBill(int billNo, int year) =>
+      '$tailoringBills/$billNo/$year';
+
+  static String tailoringMovements(int billNo, int year) =>
+      '$tailoringBills/$billNo/$year/movements';
+
+  static String tailoringActivity(int billNo, int year) =>
+      '$tailoringBills/$billNo/$year/activity';
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

@@ -16,6 +16,9 @@ import '../../customers/data/models/customer_model.dart';
 import '../../customers/presentation/screens/customer_statement_screen.dart';
 import '../../customers/presentation/screens/edit_customer_screen.dart';
 import '../../customers/presentation/widgets/customer_picker_screen.dart';
+import '../../tailoring/data/models/cutting_bill_summary_model.dart';
+import '../../tailoring/presentation/screens/cutting_bill_edit_screen.dart';
+import '../../tailoring/presentation/screens/cutting_bills_list_screen.dart';
 import '../../workers/data/models/worker_model.dart';
 import '../../workers/presentation/screens/add_edit_worker_screen.dart';
 
@@ -312,4 +315,44 @@ class _AccountPickerSheetState extends ConsumerState<_AccountPickerSheet> {
       ),
     );
   }
+}
+
+/// شاشة قائمة فواتير التفصيل — مرجع بنّاء ليبقى الكتالوج `const`
+/// The cutting-bill list screen — a builder reference so the catalog stays `const`.
+Widget buildCuttingBillsListScreen() => const CuttingBillsListScreen();
+
+/// تعديل فاتورة تفصيل: اختيار فاتورة من القائمة ثم نموذج التعديل
+/// Cutting-bill edit: pick a bill from the list, then the edit form.
+///
+/// القائمة تُرجع الفاتورة المختارة (`pop`) في وضع «اختيار التعديل»، فالدفع هنا لا داخلها — وهذا
+/// الفرق الوحيد بينها وبين وضع المتابعة.
+/// The list returns the chosen bill (`pop`) in edit-picker mode, so the push happens here and not
+/// inside it — the only difference from the progress mode.
+Future<void> openCuttingBillEdit(BuildContext context) async {
+  final picked = await Navigator.of(context).push<CuttingBillSummary>(
+    MaterialPageRoute(
+      builder: (_) => const CuttingBillsListScreen(
+        mode: CuttingBillsListMode.editPicker,
+      ),
+    ),
+  );
+  if (picked == null || !context.mounted) return;
+
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => CuttingBillEditScreen(billKey: picked.key),
+    ),
+  );
+}
+
+/// متابعة سير فاتورة: القائمة تفتح شاشة المتابعة بنفسها في وضع «اختيار المتابعة»
+/// Cutting-bill progress: the list opens the progress screen itself in progress-picker mode.
+Future<void> openCuttingBillProgress(BuildContext context) async {
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => const CuttingBillsListScreen(
+        mode: CuttingBillsListMode.progressPicker,
+      ),
+    ),
+  );
 }

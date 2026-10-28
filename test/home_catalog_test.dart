@@ -22,7 +22,7 @@ void main() {
     // A floor rather than equality: more than one agent may add cards, and this test guards
     // against deletion, not growth.
     test('holds every planned shortcut with unique ASCII ids', () {
-      expect(homeShortcutCatalog.length, greaterThanOrEqualTo(37));
+      expect(homeShortcutCatalog.length, greaterThanOrEqualTo(41));
 
       final ids = homeShortcutCatalog.map((shortcut) => shortcut.id).toList();
       expect(ids.toSet(), hasLength(ids.length));
@@ -57,12 +57,12 @@ void main() {
       );
     });
 
-    test('fourteen shortcuts are on by default, and exactly one is pinned', () {
+    test('fifteen shortcuts are on by default, and exactly one is pinned', () {
       final defaults = homeShortcutCatalog.where(
         (shortcut) => shortcut.defaultOn,
       );
 
-      expect(defaults, hasLength(14));
+      expect(defaults, hasLength(15));
       expect(homeShortcutCatalog.where((s) => s.pinned), hasLength(1));
       expect(
         homeShortcutCatalog.firstWhere((s) => s.pinned).id,
@@ -70,14 +70,33 @@ void main() {
       );
     });
 
-    test('the three empty sections are flagged, not hidden', () {
+    test('the two empty sections are flagged, not hidden', () {
       final flagged =
           homeShortcutCatalog
               .where((shortcut) => shortcut.underDevelopment)
               .map((shortcut) => shortcut.sectionId)
               .toSet();
 
-      expect(flagged, {'sales', 'tailoring', 'stores'});
+      expect(flagged, {'sales', 'stores'});
+    });
+
+    test('the four tailoring operations are wired to real destinations', () {
+      final tailoring = {
+        for (final shortcut in homeShortcutCatalog)
+          if (shortcut.sectionId == 'tailoring') shortcut.id: shortcut,
+      };
+
+      expect(
+        tailoring.keys.toSet(),
+        {'tailoring.section', 'tailoring.bills', 'tailoring.add', 'tailoring.edit', 'tailoring.progress'},
+      );
+      // البطاقات الثلاث الجديدة ليست صورية: لكل واحدة صلاحيتها الحقيقية وهدفها
+      // The three new cards are not decorative: each carries its real grant and destination.
+      expect(tailoring['tailoring.bills']!.codes, [Perm.tailoringView]);
+      expect(tailoring['tailoring.add']!.codes, [Perm.tailoringCreate]);
+      expect(tailoring['tailoring.edit']!.codes, [Perm.tailoringUpdate]);
+      expect(tailoring['tailoring.progress']!.codes, [Perm.tailoringProgress]);
+      expect(tailoring['tailoring.section']!.underDevelopment, isFalse);
     });
 
     test('every permission code exists in the catalog mirror', () {

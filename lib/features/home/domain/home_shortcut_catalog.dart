@@ -17,6 +17,7 @@ import '../../admin/presentation/screens/security_settings_screen.dart'
 import '../../app_config/presentation/screens/app_config_screen.dart';
 import '../../customers/presentation/screens/add_customer_screen.dart';
 import '../../customers/presentation/screens/all_customers_screen.dart';
+import '../../tailoring/presentation/screens/cutting_bill_add_screen.dart';
 import '../../workers/presentation/screens/cutters_list_screen.dart';
 import '../../workers/presentation/screens/employees_list_screen.dart';
 import '../../workers/presentation/screens/tailors_list_screen.dart';
@@ -99,6 +100,8 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
 
   // ── التفصيل / tailoring ──────────────────────────────────
+  // القسم خرج من «قيد التطوير»: وجهته الآن لوحة تحكم فيها العمليات الأربع فعلياً.
+  // The section left "under development": it now lands on a dashboard holding the four operations.
   HomeShortcut(
     id: 'tailoring.section',
     title: 'التفصيل',
@@ -106,7 +109,39 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'tailoring',
     target: SectionTarget('tailoring'),
     codes: [Perm.tailoringView],
-    underDevelopment: true,
+  ),
+  HomeShortcut(
+    id: 'tailoring.bills',
+    title: 'استعراض فاتورة تفصيل',
+    icon: Icons.receipt_long_rounded,
+    sectionId: 'tailoring',
+    target: ScreenTarget(buildCuttingBillsListScreen),
+    codes: [Perm.tailoringView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'tailoring.add',
+    title: 'إضافة فاتورة تفصيل',
+    icon: Icons.add_circle_outline_rounded,
+    sectionId: 'tailoring',
+    target: ScreenTarget(CuttingBillAddScreen.new),
+    codes: [Perm.tailoringCreate],
+  ),
+  HomeShortcut(
+    id: 'tailoring.edit',
+    title: 'تعديل فاتورة تفصيل',
+    icon: Icons.edit_note_rounded,
+    sectionId: 'tailoring',
+    target: FlowTarget(openCuttingBillEdit),
+    codes: [Perm.tailoringUpdate],
+  ),
+  HomeShortcut(
+    id: 'tailoring.progress',
+    title: 'متابعة سير فاتورة',
+    icon: Icons.timeline_rounded,
+    sectionId: 'tailoring',
+    target: FlowTarget(openCuttingBillProgress),
+    codes: [Perm.tailoringProgress],
   ),
 
   // ── العملاء / customers ──────────────────────────────────

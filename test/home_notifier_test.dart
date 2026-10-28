@@ -82,7 +82,11 @@ void main() {
       expect(state.loading, isFalse);
       expect(state.layout.userId, 7);
       expect(state.layout.hidden, isEmpty);
-      expect(notifier.activeShortcuts, hasLength(15));
+      // 15 بطاقة defaultOn بعد إضافة «استعراض فاتورة تفصيل»، وزائدها البطاقة
+      // المثبّتة الظاهرة دائماً ⇒ 16 نشِطة في أول تشغيل.
+      // 15 defaultOn cards after adding "review a cutting bill", plus the always-shown
+      // pinned card ⇒ 16 active on first run.
+      expect(notifier.activeShortcuts, hasLength(16));
     });
 
     test('hiding and restoring a default card leaves no residue', () async {

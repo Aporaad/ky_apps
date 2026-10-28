@@ -2294,3 +2294,52 @@ SELECT SETTING_KEY, LENGTH(SETTING_VALUE), SORT_ORDER FROM ACCOUNTS.APP_SETTINGS
 - **لا DDL · DML: صف واحد · لا commit**.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-27 03:10 · **DDL: 0** · **DML: UPDATE واحد على صف `company_services`**.
+
+
+---
+
+## 2026-10-28 08:49 — أوامر التفصيل التشخيصية وأمر بذر الصلاحيات
+
+### 1) فحص بنية الـ VIEW والجداول المشاركة
+
+```sql
+-- صفوف الـ VIEW: صف واحد لكل قطعة / one row per piece
+SELECT COUNT(*) FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW;                       -- 45199
+
+-- الفواتير المميزة: المفتاح مركّب (BILL_NO, YEAR) / the identity is composite
+SELECT COUNT(*) FROM (SELECT DISTINCT BILL_NO, YEAR FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW);  -- 13667
+
+-- تسميات المقاسات الحقيقية / the real measurement labels
+SELECT L1, L2, L3, L4, L5, L6, L7, L8, L9, L10, L11, L12 FROM ACCOUNTS.GENERAL_LABELS_CODING;  -- 1 صف
+
+-- قاموس الحالات الذي يُغذّي خط السير / the workflow dictionary
+SELECT ORDSID FROM ACCOUNTS.ORDSTATE ORDER BY ORDSID;                        -- 16 صفاً (0..15)
+
+-- ربط الـ VIEW بالقصّاص والخيّاط داخلي ⇒ يُسقط ما بلا إسناد
+-- the inner joins drop any model with no cutter/tailor: ~20% coverage
+```
+
+### 2) بذر الصلاحيات الثلاث الجديدة (idempotent)
+
+```
+php artisan tinker database/oracle/02_ibac_seed.php
+```
+
+النتيجة المقيسة بعد البذر: `ACCOUNTS.APP_PERMISSIONS` = **144** صفاً، ومنها **10** لكودات التفصيل:
+
+```
+tailoring.*        tailoring.create   tailoring.delete   tailoring.deliver
+tailoring.export   tailoring.payments_view
+tailoring.print    tailoring.progress tailoring.update   tailoring.view
+```
+
+### 3) التحقق من الصفوف الجديدة
+
+```sql
+SELECT PERMISSION_CODE FROM ACCOUNTS.APP_PERMISSIONS
+ WHERE PERMISSION_CODE LIKE 'tailoring%' ORDER BY PERMISSION_CODE;   -- 10 صفوف
+
+SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;                        -- 144
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-10-28 08:49 · **DDL:** لا · **DML:** 3 صفوف `APP_PERMISSIONS`.
