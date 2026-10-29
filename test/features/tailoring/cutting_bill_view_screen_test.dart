@@ -30,6 +30,13 @@ AuthState _adminState() =>
       const PermissionSnapshot(userId: 1, isAdmin: true, permissions: <String>[]),
     );
 
+/// حالة محدودة المنح: تُستخدم لإثبات أن الأزرار تختفي بلا صلاحية
+/// A narrowly-granted state, used to prove a button disappears without its grant.
+AuthState _grantedState(List<String> grants) =>
+    const AuthState(isAuthenticated: true).withPermissions(
+      PermissionSnapshot(userId: 1, isAdmin: false, permissions: grants),
+    );
+
 /// مستودع وهمي يخدم الشاشة وحدها: التفصيل والحركة
 /// A fake repository serving this screen only: the detail and the movement log.
 class _FakeRepo extends TailoringRepository {
@@ -90,6 +97,7 @@ Future<void> _pumpScreen(
   WidgetTester tester,
   _FakeRepo repo, {
   Size size = const Size(1200, 900),
+  List<String>? grants,
 }) async {
   // سطح العرض افتراضياً عريض كالحاسب، والشاشة الضيقة تُمرَّر صراحةً لاختبار التجاوب
   // The surface is desktop-wide by default; a narrow screen is passed in for the responsive check.
@@ -101,8 +109,11 @@ Future<void> _pumpScreen(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        authNotifierProvider
-            .overrideWith(() => _StubAuthNotifier(_adminState())),
+        authNotifierProvider.overrideWith(
+          () => _StubAuthNotifier(
+            grants == null ? _adminState() : _grantedState(grants),
+          ),
+        ),
         tailoringRepositoryProvider.overrideWithValue(repo),
       ],
       child: const MaterialApp(
@@ -180,9 +191,10 @@ void main() {
       expect(find.text('المقاسات — موديل 1'), findsOneWidget);
       expect(find.text('المقاسات — موديل 2'), findsNothing);
 
-      // الضغط على كتلة الموديل الثاني يقود الأقسام من الرابع إلى الثامن
-      await tester.ensureVisible(find.text('موديل 2'));
-      await tester.tap(find.text('موديل 2'));
+      // الضغط على سطر الموديل الثاني (مستفيده) يقود الأقسام من الرابع إلى الثامن
+      // Tapping the second model's row (its beneficiary) drives sections four to eight.
+      await tester.ensureVisible(find.text('سالم'));
+      await tester.tap(find.text('سالم'));
       await tester.pumpAndSettle();
 
       expect(find.text('المقاسات — موديل 2'), findsOneWidget);
@@ -259,8 +271,7 @@ void main() {
       expect(find.textContaining('الأقمشة —'), findsNothing);
     });
 
-    testWidgets('the bill fields share horizontal rows on a wide screen',
-        (tester) async {
+    testWidgets('every section keeps its fields on one aligned row', (tester) async {
       await _pumpScreen(
         tester,
         _FakeRepo(detail: _detail()),
@@ -271,9 +282,107 @@ void main() {
       double topOf(String label) =>
           tester.getTopLeft(find.textContaining(label).first).dy;
 
-      // ثلاثة حقول في سطر واحد: إحداثي الرأس نفسه بفارق لا يُذكر
-      // Three fields on one row: the same top offset, within a negligible difference.
-      expect(topOf('السنة'), topOf('القطع'));                
+      // حقول الفاتورة: صفّان فقط — لا ثلاثة ولا واحد
+      // The bill fields: exactly two rows — never three, never one.
+      final billRowTops = {
+        for (final label in [
+          'مرجع الفاتورة',
+          'تاريخ التسليم',
+          'الاستحقاق',
+          'الحالة',
+          'الموديلات',
+          'القطع',
+        ])
+          topOf(label),
+      };
+      expect(billRowTops, hasLength(2));
+
+      // حقول العميل في سطر واحد
+      // The customer fields share one row.
+      expect(topOf('الهاتف'), closeTo(topOf('رقم الحساب'), 1.5));
+
+      // وحقول الدفع في سطر واحد
+      // And so do the payment figures.
+      expect(topOf('الإجمالي'), closeTo(topOf('رقم السند'), 1.5));
+
+      // الصفوف الثلاثة مختلفة رأسياً: كل قسم سطره
+      // The three rows are vertically distinct: each section owns its line.
+      expect((topOf('مرجع الفاتورة') - topOf('الهاتف')).abs(), greaterThan(10));
+      expect((topOf('الهاتف') - topOf('الإجمالي')).abs(), greaterThan(10));
+    });
+
+    testWidgets('print and export are hidden without their grants',
+        (tester) async {
+      // بلا صلاحية الطباعة/التصدير: الزرّان غير موجودين أصلاً
+      // Without the print/export grants neither button exists at all.
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        grants: const ['tailoring.view'],
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.widgetWithIcon(IconButton, Icons.print_rounded), findsNothing);
+      expect(
+        find.widgetWithIcon(IconButton, Icons.picture_as_pdf_rounded),
+        findsNothing,
+      );
+    });
+
+    testWidgets('print and export appear with their grants', (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        grants: const ['tailoring.view', 'tailoring.print', 'tailoring.export'],
+      );
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithIcon(IconButton, Icons.print_rounded),
+        findsOneWidget,
+      );
+      expect(
+        find.widgetWithIcon(IconButton, Icons.picture_as_pdf_rounded),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a model without a beneficiary shows no placeholder text',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        size: const Size(1280, 900),
+      );
+      await tester.pumpAndSettle();
+
+      // الموديل الثاني في العيّنة بلا مستفيد: لا كلمة «بلا مستفيد» ولا خانة فارغة
+      // The second model in the fixture has no beneficiary: no placeholder, no empty cell.
+      expect(find.textContaining('بلا مستفيد'), findsNothing);
+      // ونوع الموديل يُكتب في عمود «الموديل» تحت رأس واحد للقائمة
+      // The model type is written in the "model" column under the list's single header.
+      expect(find.text('قميص'), findsWidgets);
+      expect(find.text('المستفيد'), findsOneWidget);
+    });
+
+    testWidgets('the whole bill fits in one short column on a wide screen',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        size: const Size(1280, 900),
+      );
+      await tester.pumpAndSettle();
+
+      // المسافة من أول قسم إلى آخر قسم: ميزانية الارتفاع التي حقّقها الترتيب الجديد
+      // The distance from the first section to the last: the height budget the new layout met.
+      final top = tester.getTopLeft(find.text('بيانات الفاتورة والطلب')).dy;
+      final bottom =
+          tester.getBottomLeft(find.textContaining('سجل الحركة — موديل 1')).dy;
+
+      // 650 بكسل من أول قسم إلى آخر قسم: الشاشة العريضة تعرض الفاتورة كاملة تقريباً
+      // 650px from the first section to the last: a wide screen shows nearly the whole bill.
+      expect(bottom - top, lessThan(700));
     });
 
     testWidgets('a phone width stacks the sections without overflowing',
@@ -340,8 +449,8 @@ CuttingBillDetail _detail({bool withPayment = true, bool models = true}) {
               'measurements': {'L1': '58', 'L2': '42'},
               'neck_type': 'كلاسيك',
               'pieces': [
-                {'seq_no1': '5001', 'cloth_name': 'صوف', 'cutting_done': '1'},
-                {'seq_no1': '5002', 'cloth_name': 'قطن', 'cutting_done': '1'},
+                {'seq_no1': '5001', 'ohdid': '262133', 'cloth_name': 'صوف', 'cutting_done': '1'},
+                {'seq_no1': '5002', 'ohdid': '262134', 'cloth_name': 'قطن', 'cutting_done': '1'},
               ],
             },
             {
@@ -351,7 +460,7 @@ CuttingBillDetail _detail({bool withPayment = true, bool models = true}) {
               'shape_name': 'كلاسيكي',
               'measurements': {'L1': '61', 'L3': '60'},
               'pieces': [
-                {'seq_no1': '5003', 'cloth_name': 'كتان', 'cutting_done': '0'},
+                {'seq_no1': '5003', 'ohdid': '262135', 'cloth_name': 'كتان', 'cutting_done': '0'},
               ],
             },
           ],

@@ -2343,3 +2343,30 @@ SELECT COUNT(*) FROM ACCOUNTS.APP_PERMISSIONS;                        -- 144
 ```
 
 **النموذج:** Qoder · **الوقت:** 2026-10-28 08:49 · **DDL:** لا · **DML:** 3 صفوف `APP_PERMISSIONS`.
+
+
+---
+
+## 2026-10-29 01:40 — بذر الصلاحيات بعد إضافة صلاحيات مقاسات العملاء
+
+```
+php artisan tinker database/oracle/02_ibac_seed.php
+```
+
+النتيجة المقيسة:
+
+```
+PERMISSIONS  catalog=147 inserted=0 updated=147 total=147
+SETTINGS     seeded=23 inserted=0 updated=23 total=25
+```
+
+الصفوف الثلاثة الجديدة التي كانت في الكتالوج ولم تكن في القاعدة:
+
+```
+customers.measurements_view    عرض مقاسات العملاء
+customers.measurements_print   طباعة مقاسات العملاء
+customers.measurements_export  تصدير مقاسات العملاء
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-10-29 01:40 · **DDL:** لا · **DML:** تحديث 147 صفّ صلاحية
+(idempotent) وتسجيل 23 إعداداً.

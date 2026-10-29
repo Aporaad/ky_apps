@@ -126,8 +126,11 @@ class CuttingBillProgressScreen extends ConsumerWidget {
       for (final model in detail.models)
         for (final piece in model.pieces) (model, piece),
     ];
-    final seqNos = pieces
-        .map((row) => row.$2.seqNo1)
+    // سجل الحركة يُطلب بأرقام طلبات الأقمشة (OHDID) لا بأرقام الموديلات
+    // The movement log is requested by fabric order ids (OHDID), not model numbers.
+    final ohdIds = pieces
+        .map((row) => row.$2.ohdId)
+        .whereType<int>()
         .where((n) => n > 0)
         .toList();
 
@@ -170,8 +173,8 @@ class CuttingBillProgressScreen extends ConsumerWidget {
             model: null,
             billNo: billKey.billNo,
             year: billKey.year,
-            seqNos: seqNos,
-            title: 'سجل حركة قطع الفاتورة',
+            ohdIds: ohdIds,
+            title: 'سجل حركة أقمشة الفاتورة',
           ),
           const SizedBox(height: 12),
           _buildActionsCard(detail),

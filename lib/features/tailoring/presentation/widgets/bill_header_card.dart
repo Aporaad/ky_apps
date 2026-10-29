@@ -8,12 +8,12 @@ import 'tailoring_section_card.dart';
 /// القسم 1: بيانات الفاتورة والطلب — كلها من الـ VIEW + صف SALES_BILL الواحد
 /// Section 1: the invoice and order data — all from the view plus the single SALES_BILL row.
 ///
-/// الترتيب: شريط هوية واحد (رقم الفاتورة · اليدوي · التاريخ · عاجل) ثم حقول الطلب في شبكة
-/// بأعمدة متساوية تفصلها خطوط، ثم البيان في خانة تمتد على الصف. الحقول لم تُحذف — أُعيد
-/// ترتيبها في صفوف منظّمة بدل التوزيع المتفرّق.
-/// The order: one identity strip (bill number · manual · date · urgent), then the order fields
-/// in an equal-column grid separated by hairlines, then the note on a full-width cell. No field
-/// was dropped — the set was merely re-arranged into regular rows.
+/// شريط هوية واحد (رقم الفاتورة · اليدوي · التاريخ · عاجل) ثم حقول الطلب في **صفّين فقط**
+/// بأعمدة متساوية، ثم البيان في خانة تمتد على الصف. السنة والفرع والمجموعة حُذفت بطلب
+/// المستخدم لأنها لا تُحتاج في الاستعراض.
+/// One identity strip (bill number · manual · date · urgent), then the order fields in **exactly
+/// two rows** of equal columns, then the note on a full-width cell. The year, branch and group
+/// were removed at the user's request because the review does not need them.
 class BillHeaderCard extends StatelessWidget {
   final CuttingBillHeader header;
 
@@ -31,32 +31,27 @@ class BillHeaderCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── شريط الهوية: شارات في سطر واحد ──────────────────────────────────
-          // The identity strip: chips on a single line.
+          // ── شريط الهوية ─────────────────────────────────────────────────────
+          // The identity strip.
           Wrap(
             spacing: 6,
             runSpacing: 3,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _identity(header.referenceLabel, color: AppColors.primary, bold: true),
-              _identity(header.manualLabel, color: AppColors.textSecondary),
-              _identity(header.date ?? '—', color: AppColors.textSecondary),
+              _identity('يدوي ${header.manualLabel}', color: AppColors.textPrimary),
+              _identity(header.date ?? '—', color: AppColors.textPrimary),
               if (header.urgent)
                 _identity('عاجل', color: AppColors.error, bold: true),
             ],
           ),
           const SizedBox(height: 5),
 
-          // ── حقول الطلب في شبكة منضبطة ────────────────────────────────────────
-          // The order fields in a regular grid.
+          // ── حقول الطلب: صفّان فقط ───────────────────────────────────────────
+          // The order fields: two rows only.
           TailoringInfoGrid(
-            minCellWidth: 118,
+            rows: 2,
             children: [
-              TailoringInfoTile(
-                label: 'السنة',
-                value: '${header.year}',
-                icon: Icons.calendar_month_rounded,
-              ),
               TailoringInfoTile(
                 label: 'مرجع الفاتورة',
                 value: header.refNo,
@@ -125,7 +120,11 @@ class BillHeaderCard extends StatelessWidget {
                 if (header.lastUpdatedBy != null)
                   'آخر تعديل: ${header.lastUpdatedBy}',
               ]),
-              style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -135,20 +134,20 @@ class BillHeaderCard extends StatelessWidget {
     );
   }
 
-  /// شارة هوية صغيرة
-  /// A small identity chip.
+  /// شارة هوية صغيرة — نصّ بخط ثقيل لأنها تحمل رقم الفاتورة وتاريخها
+  /// A small identity chip — a heavy weight because it carries the bill number and date.
   Widget _identity(String text, {required Color color, bool bold = false}) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.09),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(5),
       ),
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: bold ? FontWeight.bold : FontWeight.w600,
+          fontSize: 12,
+          fontWeight: bold ? FontWeight.w800 : FontWeight.w700,
           color: color,
         ),
       ),

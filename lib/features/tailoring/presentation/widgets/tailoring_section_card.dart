@@ -135,9 +135,13 @@ class TailoringInfoTile extends StatelessWidget {
               Flexible(
                 child: Text(
                   label,
-                  style: const TextStyle(
-                    fontSize: 9.5,
-                    color: AppColors.textMuted,
+                  style: TextStyle(
+                    // تسمية أوضح: لون ثانوي أغمق وحجم أكبر قليلاً من السابق الباهت
+                    // A clearer label: a darker secondary tone and a slightly larger size
+                    // than the previous faded one.
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textSecondary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -149,7 +153,7 @@ class TailoringInfoTile extends StatelessWidget {
           Text(
             text,
             style: TextStyle(
-              fontSize: 11.5,
+              fontSize: 12.5,
               fontWeight: FontWeight.w700,
               color: valueColor ?? AppColors.textPrimary,
             ),
@@ -182,11 +186,16 @@ class TailoringInfoGrid extends StatelessWidget {
   /// Asks for a single row on wide screens (customer, payment…).
   final bool singleRow;
 
+  /// عدد صفوف مطلوب: يُحسب عدد الأعمدة منه (صفّان لبيانات الفاتورة مثلاً)
+  /// A required row count: the column count is derived from it (two rows for the bill data).
+  final int? rows;
+
   const TailoringInfoGrid({
     super.key,
     required this.children,
     this.minCellWidth = 112,
     this.singleRow = false,
+    this.rows,
   });
 
   @override
@@ -206,13 +215,20 @@ class TailoringInfoGrid extends StatelessWidget {
           if (fitsOneRow >= count) columns = count;
         }
 
-        final rows = <Widget>[];
+        // صفوف مطلوبة صراحةً: عدد الأعمدة هو ما يجعلها كذلك
+        // Explicitly required rows: the column count is what produces them.
+        final wantedRows = rows;
+        if (wantedRows != null && wantedRows > 0) {
+          columns = (count / wantedRows).ceil().clamp(1, count);
+        }
+
+        final rowWidgets = <Widget>[];
         for (var start = 0; start < count; start += columns) {
           final cells = children.sublist(
             start,
             (start + columns).clamp(0, count),
           );
-          rows.add(_row(cells, columns));
+          rowWidgets.add(_row(cells, columns));
         }
 
         return Container(
@@ -228,9 +244,9 @@ class TailoringInfoGrid extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              for (var i = 0; i < rows.length; i++) ...[
+              for (var i = 0; i < rowWidgets.length; i++) ...[
                 if (i > 0) _divider(horizontal: true),
-                rows[i],
+                rowWidgets[i],
               ],
             ],
           ),
@@ -305,8 +321,10 @@ class TailoringChip extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w600,
+          // شارة أوضح: حجم أكبر ووزن أثقل ليقاوم الخلفية الفاتحة
+          // A clearer chip: a larger size and a heavier weight against the light tint.
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
           color: color,
         ),
       ),

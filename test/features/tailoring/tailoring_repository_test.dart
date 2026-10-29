@@ -215,32 +215,37 @@ void main() {
   // سجل الحركة
   // ================================================================
   group('TailoringRepository.fetchMovements', () {
-    test('sends the piece numbers of the rows the client already holds',
-        () async {
+    test('sends the fabric order ids the client already holds', () async {
       final adapter = _CapturingAdapter({
         'success': true,
         'data': [
           {
             'tr_inv_d_id': 88,
+            'ohdid': 262133,
             'date': '12/03/2026',
             'ordsid': 4,
             'ords_name': 'تم القص',
             'qty': 2,
+            'executor': 'قسم الخياطة',
             'posted': 1,
           },
         ],
       });
 
-      final rows = await _repo(adapter).fetchMovements(12345, 2026, [5001, 5002]);
+      final rows = await _repo(adapter).fetchMovements(12345, 2026, [262133, 262134]);
 
       expect(adapter.captured!.path, '/tailoring/bills/12345/2026/movements');
-      expect(adapter.captured!.queryParameters['seq_nos'], '5001,5002');
+      // الحركة تُطلب برقم طلب القماش (OHDID) لا برقم الموديل
+      // The log is requested by the fabric order id (OHDID), not the model number.
+      expect(adapter.captured!.queryParameters['ohd_ids'], '262133,262134');
       expect(rows, hasLength(1));
       expect(rows.single.stageLabel, 'تم القص');
+      expect(rows.single.ohdId, 262133);
+      expect(rows.single.executorLabel, 'قسم الخياطة');
       expect(rows.single.postedLabel, 'مُرحَّل');
     });
 
-    test('no piece numbers means no request at all', () async {
+    test('no fabric ids means no request at all', () async {
       final adapter = _CapturingAdapter({'success': true, 'data': []});
 
       final rows = await _repo(adapter).fetchMovements(1, 2026, const []);

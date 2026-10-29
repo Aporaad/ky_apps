@@ -11,6 +11,7 @@ import 'edit_customer_screen.dart';
 import 'delete_customer_screen.dart';
 import 'all_customers_screen.dart';
 import 'customer_statement_screen.dart';
+import 'measurements_customers_screen.dart';
 
 /// واجهة قسم العملاء الرئيسية - بطاقات عمليات مرتبة بألوان وأحجام التطبيق الرسمية
 class CustomersDashboardScreen extends ConsumerWidget {
@@ -237,6 +238,25 @@ class CustomersDashboardScreen extends ConsumerWidget {
         onTap:
             () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const AllCustomersScreen()),
+            ),
+      ),
+      // مقاسات العملاء عملية مستقلة الصلاحية داخل القسم: رؤية سجل العميل ليست رؤية أرشيف
+      // مقاساته، فتُبنى البطاقة فقط مع المنح الصحيح ولا تُعطَّل إلى حالة بلا معنى.
+      // Customer measurements are a separately-granted operation inside the module: seeing the
+      // record is not seeing the measurement archive, so the card is built only with the right
+      // grant rather than disabled into a meaningless state.
+      if (auth.can(Perm.customersMeasurementsView))
+      _CustomerActionCard(
+        title: 'مقاسات العملاء',
+        subtitle: 'استعراض موديلات العميل السابقة ومقاساتها',
+        icon: Icons.straighten_rounded,
+        badge: 'مقاسات',
+        accent: AppColors.accent,
+        onTap:
+            () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => const MeasurementsCustomersScreen(),
+              ),
             ),
       ),
     ];

@@ -12,6 +12,10 @@ class CuttingPieceItem {
   /// The piece number inside the bill (SEQ_NO1) — used to request its movements.
   final int seqNo1;
 
+  /// رقم طلب القماش (OHDID) — مفتاح سجل حركة هذا القماش في النظام القديم
+  /// The fabric order id (OHDID) — the key of this fabric's movement log in the legacy system.
+  final int? ohdId;
+
   final int? sanfNo;
   final int? sanfDno;
 
@@ -52,6 +56,7 @@ class CuttingPieceItem {
 
   const CuttingPieceItem({
     required this.seqNo1,
+    this.ohdId,
     this.sanfNo,
     this.sanfDno,
     this.clothName,
@@ -82,6 +87,7 @@ class CuttingPieceItem {
   factory CuttingPieceItem.fromJson(Map<String, dynamic> json) {
     return CuttingPieceItem(
       seqNo1: tailoringInt(json, 'seq_no1') ?? 0,
+      ohdId: tailoringInt(json, 'ohdid'),
       sanfNo: tailoringInt(json, 'sanf_no'),
       sanfDno: tailoringInt(json, 'sanf_dno'),
       clothName: tailoringText(json, 'cloth_name'),

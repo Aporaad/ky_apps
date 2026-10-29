@@ -1,7 +1,7 @@
 /// أكواد الصلاحيات المعتمدة — نسخة طبق الأصل من كتالوج الخادم
 /// Canonical permission codes — an exact mirror of the server catalog.
 ///
-/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (144 كوداً في 24 قسماً)،
+/// المصدر الحقيقي هو `kyApp_API/app/Support/PermissionCatalog.php` (147 كوداً في 25 قسماً)،
 /// وهذه النسخة تُستخدم في الواجهة لتفادي استعلام الشبكة لكل قرار حجب. أي كود يُضاف في الخادم
 /// يجب أن يُضاف هنا في نفس الطلب، وإلا ظهر عنصر في الواجهة لا يمرّ على الخادم أو العكس.
 /// The server catalog is the source of truth; this mirror exists so gating decisions never need
@@ -50,6 +50,13 @@ class Perm {
   static const String customersPrint = 'customers.print';
   static const String customersExport = 'customers.export';
   static const String customersEditLimit = 'customers.edit_limit';
+  // مقاسات العملاء عملية مستقلة داخل القسم: رؤية سجل العميل ليست رؤية أرشيف مقاساته،
+  // وطباعة الأرشيف وتصديره منحان صريحان. الخادم يحجب المسارات الثلاثة بهذه الأكواد.
+  // Customer measurements are their own operation: the record is not the archive, and
+  // printing/exporting the archive are two explicit grants.
+  static const String customersMeasurementsView = 'customers.measurements_view';
+  static const String customersMeasurementsPrint = 'customers.measurements_print';
+  static const String customersMeasurementsExport = 'customers.measurements_export';
 
   // ── الموظفين / employees ─────────────────────────────────
   static const String employeesWildcard = 'employees.*';
@@ -257,6 +264,9 @@ const List<String> allPermissionCodes = [
   Perm.customersPrint,
   Perm.customersExport,
   Perm.customersEditLimit,
+  Perm.customersMeasurementsView,
+  Perm.customersMeasurementsPrint,
+  Perm.customersMeasurementsExport,
   Perm.employeesWildcard,
   Perm.employeesView,
   Perm.employeesCreate,
@@ -456,6 +466,9 @@ const Map<String, String> permActionLabels = {
   'payments_view': 'عرض الدفع',
   'progress': 'متابعة السير',
   'edit_limit': 'تعديل السقف',
+  'measurements_view': 'عرض المقاسات',
+  'measurements_print': 'طباعة المقاسات',
+  'measurements_export': 'تصدير المقاسات',
   'structure_manage': 'إدارة الهيكل',
   'prices_view': 'عرض الأسعار',
   'prices_manage': 'إدارة الأسعار',

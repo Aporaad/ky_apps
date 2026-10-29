@@ -134,23 +134,24 @@ class TailoringRepository {
     }
   }
 
-  /// سجل حركة قطع الموديل المختار
-  /// The movement log of the selected model's pieces.
+  /// سجل حركة أقمشة الموديل المختار — الحركة تخصّ القماش (OHDID) لا الموديل
+  /// The movement log of the selected model's fabrics — the log belongs to the fabric (OHDID),
+  /// not the model.
   ///
   /// الأرقام تأتي من صفوف الـ VIEW التي يحملها العميل فعلاً، فلا قراءة إضافية لمعرفتها.
   /// The numbers come from the view rows the client already holds, so no extra read is needed.
   Future<List<CuttingMovement>> fetchMovements(
     int billNo,
     int year,
-    List<int> seqNos, {
+    List<int> ohdIds, {
     CancelToken? cancelToken,
   }) async {
-    if (seqNos.isEmpty) return const [];
+    if (ohdIds.isEmpty) return const [];
 
     try {
       final resp = await client.dio.get(
         ApiConstants.tailoringMovements(billNo, year),
-        queryParameters: {'seq_nos': seqNos.join(',')},
+        queryParameters: {'ohd_ids': ohdIds.join(',')},
         cancelToken: cancelToken,
       );
 

@@ -261,22 +261,22 @@ final cuttingBillDetailProvider =
 // سجل حركة الموديل المختار
 // ================================================================
 
-/// مفتاح طلب سجل الحركة: الفاتورة + أرقام قطع الموديل المختار
-/// The movement request key: the bill plus the selected model's piece numbers.
+/// مفتاح طلب سجل الحركة: الفاتورة + أرقام طلبات أقمشة الموديل المختار
+/// The movement request key: the bill plus the selected model's fabric order ids.
 class CuttingMovementsKey {
   final int billNo;
   final int year;
-  final List<int> seqNos;
+  final List<int> ohdIds;
 
   const CuttingMovementsKey({
     required this.billNo,
     required this.year,
-    required this.seqNos,
+    required this.ohdIds,
   });
 
-  /// «رقم/سنة:قطع» — شكل ثابت يُستخدم لمقارنة المفاتيح
+  /// «رقم/سنة:طلب» — شكل ثابت يُستخدم لمقارنة المفاتيح
   /// A stable shape used to compare keys.
-  String get id => '$billNo/$year:${seqNos.join(",")}';
+  String get id => '$billNo/$year:${ohdIds.join(",")}';
 
   @override
   bool operator ==(Object other) => other is CuttingMovementsKey && other.id == id;
@@ -288,11 +288,11 @@ class CuttingMovementsKey {
   String toString() => id;
 }
 
-/// سجل حركة القطع المختارة — يُحمَّل فقط عند فتح قسم الحركة
-/// The selected pieces' movement log — loaded only when its section opens.
+/// سجل حركة أقمشة الموديل المختار — يُحمَّل فقط عند فتح قسم الحركة
+/// The selected model's fabric movement log — loaded only when its section opens.
 final cuttingMovementsProvider = FutureProvider.autoDispose
     .family<List<CuttingMovement>, CuttingMovementsKey>((ref, key) async {
-      if (key.seqNos.isEmpty) return const [];
+      if (key.ohdIds.isEmpty) return const [];
 
       final token = CancelToken();
       ref.onDispose(token.cancel);
@@ -302,7 +302,7 @@ final cuttingMovementsProvider = FutureProvider.autoDispose
           .fetchMovements(
             key.billNo,
             key.year,
-            key.seqNos,
+            key.ohdIds,
             cancelToken: token,
           );
     });

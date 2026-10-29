@@ -188,6 +188,12 @@ class CuttingModelItem {
   List<int> get movementSeqNos =>
       pieces.map((p) => p.seqNo1).where((n) => n > 0).toList();
 
+  /// أرقام طلبات الأقمشة (OHDID) — مفتاح سجل الحركة: الحركة للقماش لا للموديل
+  /// The fabric order ids (OHDID) — the movement key: the log belongs to the fabric, not
+  /// the model.
+  List<int> get movementOhdIds =>
+      pieces.map((p) => p.ohdId).whereType<int>().where((n) => n > 0).toList();
+
   /// أرقام القطع (SEQ_NO1) للعرض في رأس الموديل
   /// The piece numbers (SEQ_NO1) shown in the model header.
   String get piecesRangeLabel =>

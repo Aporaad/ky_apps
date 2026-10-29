@@ -320,7 +320,9 @@ void main() {
       final labels = model.specs.textChips.map((c) => c.$1).toList();
       final codes = model.specs.numericCodes.map((c) => c.$1).toList();
 
-      expect(labels, ['الرقبة']);
+      // المواصفات تُسمّى بوصفها خصائص قطعة: نوع الرقبة، نوع الأزرار…
+      // Specs are named as garment properties: neck type, button type…
+      expect(labels, ['نوع الرقبة']);
       expect(codes, ['نموذج الرقبة']);
       expect(model.specs.notes, 'ملاحظة');
       expect(model.specs.isEmpty, isFalse);

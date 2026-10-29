@@ -284,7 +284,7 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
             // العتبة 980: على الحاسب تُصفّ الأقسام في صفوف أفقية، وعلى الجوال عمود واحد
             // The 980 threshold: rows on desktop, a single column on a phone.
             final wide = constraints.maxWidth >= 980;
-            const gap = SizedBox(height: 8);
+            const gap = SizedBox(height: 6);
 
             if (!wide) {
               return Column(
@@ -318,21 +318,16 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
               );
             }
 
-            // العريض: كل قسمين متجاورين يشتركان صفاً، والأقسام العريضة (الدفع، الموديلات،
-            // الأقمشة بسطحها ذي الأعمدة الاثني عشر، والحركة) تأخذ عرض الصف كاملاً.
-            // On wide screens two neighbouring sections share a row, while the sections that
-            // need the full surface (payment, models, the twelve-column fabrics, movements) take it.
+            // العريض: الأقسام 1–4 بعرض الصف كاملاً فيصطفّ كل قسم في سطر واحد منضبط، ثم
+            // المقاسات والمواصفات جنباً إلى جنب، ثم الأقمشة والحركة (كلتاهما جدول بصفوف).
+            // On wide screens sections 1–4 take the full row so each fits one tidy line, then
+            // measurements and specs share a row, then the fabrics and movement tables.
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 6, child: headerCard),
-                    const SizedBox(width: 8),
-                    Expanded(flex: 4, child: customerCard),
-                  ],
-                ),
+                headerCard,
+                gap,
+                customerCard,
                 gap,
                 paymentCard,
                 gap,

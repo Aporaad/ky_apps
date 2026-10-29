@@ -15,6 +15,7 @@ import '../../admin/presentation/widgets/user_picker_screen.dart';
 import '../../customers/data/models/customer_model.dart';
 import '../../customers/presentation/screens/customer_statement_screen.dart';
 import '../../customers/presentation/screens/edit_customer_screen.dart';
+import '../../customers/presentation/screens/measurements_customers_screen.dart';
 import '../../customers/presentation/widgets/customer_picker_screen.dart';
 import '../../tailoring/data/models/cutting_bill_summary_model.dart';
 import '../../tailoring/presentation/screens/cutting_bill_edit_screen.dart';
@@ -78,6 +79,22 @@ Future<void> openCustomerEdit(BuildContext context) async {
 
   await Navigator.of(context).push(
     MaterialPageRoute(builder: (_) => EditCustomerScreen(customer: picked)),
+  );
+}
+
+/// مقاسات العملاء: قائمة العملاء أولًا، ثم موديلات العميل، ثم شاشة المقاسات
+/// Customer measurements: the customer list first, then his models, then the measurements.
+///
+/// البطاقة تفتح شاشة الدخول فقط — التدفق نفسه (عميل ← موديل ← مقاسات) يمشي فيه المستخدم كما
+/// يمشي من لوحة القسم، ومسار مختصر يقفز اختيار العميل سيكون مسارًا موازيًا لا نسخة منه.
+/// The card opens only the entry screen: the user walks the same flow (customer → model →
+/// measurements) as from the section dashboard, and a shortcut that skipped choosing a customer
+/// would be a parallel path rather than a copy of the real one.
+Future<void> openCustomerMeasurements(BuildContext context) async {
+  await Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => const MeasurementsCustomersScreen(),
+    ),
   );
 }
 

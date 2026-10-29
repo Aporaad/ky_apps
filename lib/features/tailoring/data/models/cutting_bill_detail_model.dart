@@ -115,12 +115,13 @@ class CuttingBillHeader {
   /// الرقم اليدوي أو شرطة / the manual number or a dash
   String get manualLabel => manualBillNo == null ? '—' : '$manualBillNo';
 
-  /// وصف الطلب: عاجل أو عادي / the order urgency
+  /// وصف الطلب: مستعجل أو عادي / the order urgency
   String get urgencyLabel => urgent ? 'مستعجل' : 'عادي';
 
   /// اسم الفرع مُقروءاً — يُترك الرقم عند غياب التسمية بدل اختراعها
-  /// The branch label, falling back to the number rather than inventing a name.  
-
+  /// The branch label, falling back to the number rather than inventing a name.
+  String get branchLabel => branchNo == null ? '—' : '$branchNo';
+  
   /// هل الفاتورة منتهية التسليم؟ / is the bill fully delivered?
   bool get delivered => handingDone;
 }

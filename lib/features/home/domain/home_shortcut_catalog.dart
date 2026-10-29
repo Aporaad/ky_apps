@@ -189,6 +189,20 @@ const List<HomeShortcut> homeShortcutCatalog = [
     target: FlowTarget(openCustomerEdit),
     codes: [Perm.customersUpdate],
   ),
+  // مقاسات العملاء بكود مستقل لا بـ `customers.view`: أرشيف المقاسات بيانات شخصية عن أجساد
+  // الناس، ومن يرى سجل العميل لا يرى بالضرورة ما فُصّل له.
+  // Customer measurements carry their own code rather than `customers.view`: the measurement
+  // archive is personal data about bodies, and seeing a customer record is not seeing what was
+  // tailored for him.
+  HomeShortcut(
+    id: 'customers.measurements',
+    title: 'مقاسات العملاء',
+    icon: Icons.straighten_rounded,
+    sectionId: 'customers',
+    target: FlowTarget(openCustomerMeasurements),
+    codes: [Perm.customersMeasurementsView],
+    defaultOn: true,
+  ),
 
   // ── جاري العاملين / workers ──────────────────────────────
   // «جاري العاملين» يغطي ثلاث سجلات، فظهوره يكفي فيه أي واحد ممنوح — نفس قاعدة السجل

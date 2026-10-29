@@ -56,6 +56,31 @@ class ApiConstants {
   static String tailoringActivity(int billNo, int year) =>
       '$tailoringBills/$billNo/$year/activity';
 
+  // مقاسات العملاء — داخل قسم العملاء، تُقرأ من واجهة فواتير التفصيل نفسها.
+  // Customer measurements — inside the customers section, read from the same cutting-bill view.
+  // المفتاح رباعي (عميل، فاتورة، سنة، موديل): رقم الفاتورة وحده غير فريد، والموديل يُعرَّف
+  // بـ SEQ_NO داخل الفاتورة، وعميل يطابق رقماً لا يملك الموديل يُرفض.
+  // The key is four-part (customer, bill, year, model): a bill number is not unique on its own,
+  // a model is SEQ_NO inside the bill, and a customer who does not own the model is refused.
+  static const String measurementCustomers = '/customers/measurements';
+
+  static String measurementModels(int custNo) =>
+      '$measurementCustomers/$custNo/models';
+
+  static String measurementModel(
+    int custNo,
+    int billNo,
+    int year,
+    int seqNo,
+  ) => '$measurementCustomers/$custNo/models/$billNo/$year/$seqNo';
+
+  static String measurementActivity(
+    int custNo,
+    int billNo,
+    int year,
+    int seqNo,
+  ) => '${measurementModel(custNo, billNo, year, seqNo)}/activity';
+
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

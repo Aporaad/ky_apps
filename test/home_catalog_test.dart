@@ -57,12 +57,12 @@ void main() {
       );
     });
 
-    test('fifteen shortcuts are on by default, and exactly one is pinned', () {
+    test('sixteen shortcuts are on by default, and exactly one is pinned', () {
       final defaults = homeShortcutCatalog.where(
         (shortcut) => shortcut.defaultOn,
       );
 
-      expect(defaults, hasLength(15));
+      expect(defaults, hasLength(16));
       expect(homeShortcutCatalog.where((s) => s.pinned), hasLength(1));
       expect(
         homeShortcutCatalog.firstWhere((s) => s.pinned).id,
@@ -209,7 +209,11 @@ void main() {
       final ids = allowedIds(granted: const {'customers.*'});
 
       expect(ids, containsAll(<String>['customers.add', 'customers.edit']));
-      expect(ids, hasLength(8));
+      // البطاقة التاسعة «مقاسات العملاء»: منحها من نفس الوحدة فيغطيها المنح الشامل
+      // The ninth card is "customer measurements": its grant sits in the same module, so the
+      // wildcard covers it too.
+      expect(ids, contains('customers.measurements'));
+      expect(ids, hasLength(9));
     });
 
     test('an unknown code grants nothing', () {

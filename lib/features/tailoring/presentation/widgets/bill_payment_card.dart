@@ -12,10 +12,12 @@ import 'tailoring_section_card.dart';
 /// The real block is server-side: without the grant `payment` arrives null and no figures
 /// are shown at all.
 ///
-/// كل الأرقام في صف واحد من خانات متساوية (`singleRow`)، فالعمود المالي يُقرأ أفقياً من
-/// الإجمالي إلى المتبقي كما تُقرأ قائمة حساب.
-/// Every figure sits on one row of equal cells (`singleRow`), so the money column reads
-/// horizontally from the total to the balance, the way an account line is read.
+/// الأرقام الأساسية فقط في صف واحد: الإجمالي · الخصم · الصافي · المدفوع · المتبقي · رقم
+/// السند (والمدفوعات الأخرى عند وجودها). حُذفت سعر العملة والاستحقاق وطريقة الدفع بطلب
+/// المستخدم.
+/// Only the core figures on one row: total · discount · net · paid · balance · voucher (plus
+/// other payments when present). The currency price, due date and payment method were removed
+/// at the user's request.
 class BillPaymentCard extends StatelessWidget {
   final CuttingBillPayment? payment;
 
@@ -90,22 +92,6 @@ class BillPaymentCard extends StatelessWidget {
                     ? AppColors.success
                     : (data.remaining == 0 ? AppColors.success : AppColors.error),
               ),
-              if (data.currencyPrice != null && data.currencyPrice != 0)
-                TailoringInfoTile(
-                  label: 'سعر العملة',
-                  value: tailoringNumber(data.currencyPrice, decimals: 2),
-                  icon: Icons.currency_exchange_rounded,
-                ),
-              TailoringInfoTile(
-                label: 'الاستحقاق',
-                value: data.givingDate,
-                icon: Icons.schedule_rounded,
-              ),
-              TailoringInfoTile(
-                label: 'طريقة الدفع',
-                value: data.paymentMethod,
-                icon: Icons.credit_card_rounded,
-              ),
               TailoringInfoTile(
                 label: 'رقم السند',
                 value: data.voucherNo,
@@ -119,7 +105,11 @@ class BillPaymentCard extends StatelessWidget {
             const SizedBox(height: 3),
             Text(
               'دفع العميل أكثر من الصافي بمقدار ${data.balanceValue} — رصيد مقدم لصالحه',
-              style: const TextStyle(fontSize: 10.5, color: AppColors.success),
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: AppColors.success,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
