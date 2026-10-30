@@ -11,6 +11,13 @@ import '../../data/models/measurement_model_ref.dart';
 /// These filters are presentational: nothing stored in the database changes. They hide what the
 /// reader does not need right now (an uninteresting section, other fabrics) and alter no data.
 class MeasurementFilters {
+  /// إظهار خانات المقاسات الفارغة — مخفية افتراضياً لأن الموديل قد يستخدم 4 من 12
+  /// Show empty measurement slots — hidden by default, since a model may fill only 4 of 12.
+  /// مصدر الحالة واحد: الشريط هنا، ولوحة المقاسات تقرأها كمعامل — لا مفتاحان لقرار واحد.
+  /// One source: this bar owns it and the measurements panel receives it as a parameter, so two
+  /// switches never disagree about one decision.
+  final bool showEmptyMeasurements;
+
   /// إظهار أقسام العرض — الثلاثة تُعرض وتُطبع حسب طلب الناظر
   /// Which sections are visible — measurements, specs and fabrics.
   final bool showMeasurements;
@@ -22,6 +29,7 @@ class MeasurementFilters {
   final String clothQuery;
 
   const MeasurementFilters({
+    this.showEmptyMeasurements = false,
     this.showMeasurements = true,
     this.showSpecs = true,
     this.showFabrics = true,
@@ -40,12 +48,15 @@ class MeasurementFilters {
   bool get isDirty => this != defaults;
 
   MeasurementFilters copyWith({
+    bool? showEmptyMeasurements,
     bool? showMeasurements,
     bool? showSpecs,
     bool? showFabrics,
     String? clothQuery,
   }) {
     return MeasurementFilters(
+      showEmptyMeasurements:
+          showEmptyMeasurements ?? this.showEmptyMeasurements,
       showMeasurements: showMeasurements ?? this.showMeasurements,
       showSpecs: showSpecs ?? this.showSpecs,
       showFabrics: showFabrics ?? this.showFabrics,
@@ -56,6 +67,7 @@ class MeasurementFilters {
   @override
   bool operator ==(Object other) =>
       other is MeasurementFilters &&
+      other.showEmptyMeasurements == showEmptyMeasurements &&
       other.showMeasurements == showMeasurements &&
       other.showSpecs == showSpecs &&
       other.showFabrics == showFabrics &&
@@ -63,6 +75,7 @@ class MeasurementFilters {
 
   @override
   int get hashCode => Object.hash(
+    showEmptyMeasurements,
     showMeasurements,
     showSpecs,
     showFabrics,
@@ -176,13 +189,22 @@ class _MeasurementFilterBarState extends State<MeasurementFilterBar> {
                 on: value.showFabrics,
                 onTap: () => widget.onChanged(value.copyWith(showFabrics: !value.showFabrics)),
               ),
+              // الخانات الفارغة: مصدر حالة واحد — الشريط يقرّر ولوحة المقاسات تنفّذ
+              // Blank slots: one source of truth — the bar decides, the panel obeys.
+              _toggle(
+                label: 'المقاسات الفارغة',
+                icon: value.showEmptyMeasurements
+                    ? Icons.visibility_rounded
+                    : Icons.visibility_off_rounded,
+                on: value.showEmptyMeasurements,
+                onTap: () => widget.onChanged(
+                  value.copyWith(
+                    showEmptyMeasurements: !value.showEmptyMeasurements,
+                  ),
+                ),
+              ),
             ],
           ),
-
-          // لا مفتاح «الخانات الفارغة» هنا: بطاقة المقاسات تحمل هذا المفتاح بنفسها في شريط
-          // عنوانها، ومصدران للحالة واحدة يعنيان حتماً شاشة تكذب على نفسها.
-          // No "blank slots" switch here: the measurements card carries that switch in its own title
-          // bar, and two sources for one piece of state means a screen that contradicts itself.
 
           // ── منتقي الموديل/المستفيد من نفس الفاتورة ─────────────────────────
           // لا منتقي بموديل واحد: شريط اختيار بخيار واحد يوحي بقرار غير موجود
@@ -208,7 +230,7 @@ class _MeasurementFilterBarState extends State<MeasurementFilterBar> {
                       selected: sibling.selected,
                       onSelected: (_) => widget.onSelectSibling!(sibling.seqNo),
                       visualDensity: VisualDensity.compact,
-                      labelStyle: const TextStyle(fontSize: 11),
+                      labelStyle: TextStyle(fontSize: 11),
                     ),
                     const SizedBox(width: 6),
                   ],
@@ -228,11 +250,11 @@ class _MeasurementFilterBarState extends State<MeasurementFilterBar> {
               _lastEmitted = text.trim();
               widget.onChanged(value.copyWith(clothQuery: text.trim()));
             },
-            style: const TextStyle(fontSize: 12),
+            style: TextStyle(fontSize: 12),
             decoration: InputDecoration(
               hintText: 'بحث في أسماء الأقمشة…',
-              hintStyle: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-              prefixIcon: const Icon(Icons.search_rounded, size: 16),
+              hintStyle: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              prefixIcon: Icon(Icons.search_rounded, size: 16),
               isDense: true,
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 8,
@@ -258,8 +280,8 @@ class _MeasurementFilterBarState extends State<MeasurementFilterBar> {
               alignment: AlignmentDirectional.centerEnd,
               child: TextButton.icon(
                 onPressed: () => widget.onChanged(MeasurementFilters.defaults),
-                icon: const Icon(Icons.restart_alt_rounded, size: 15),
-                label: const Text('إعادة الضبط'),
+                icon: Icon(Icons.restart_alt_rounded, size: 15),
+                label: Text('إعادة الضبط'),
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                   visualDensity: VisualDensity.compact,

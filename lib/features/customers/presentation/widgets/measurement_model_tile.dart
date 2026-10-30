@@ -2,14 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/measurement_model_ref.dart';
+import 'measurement_kit.dart';
 
-/// بطاقة موديل في قائمة موديلات العميل — الأحدث أولاً، بسطر واحد لكل موديل
-/// A model card in the customer's list — newest first, one row per model.
+/// بطاقة موديل في نافذة اختيار الموديلات
+/// A model card inside the model-picker sheet.
 ///
-/// العميل قد يملك آلاف الموديلات (أقصى قياس في القاعدة الحيّة: 2,169 موديلاً لعميل واحد)،
-/// فالبطاقة تُظهر ما يميّز الموديل فقط: المستفيد، النوع، التاريخ، الفاتورة، القطع والمرحلة.
-/// A customer can own thousands of models (the live maximum is 2,169 for one customer), so the
-/// card shows only what distinguishes a model: beneficiary, type, date, bill, pieces and stage.
+/// العميل قد يملك آلاف الموديلات (أقصى مقيس في القاعدة الحيّة 2,169 لعميل واحد)، فالسطر يحمل
+/// ما يميّز الموديل فقط: المستفيد، النوع، التاريخ، الفاتورة، القطع والمرحلة — بتباين عالٍ
+/// لأن القائمة الطويلة تُقرأ بالمسح البصري لا بالتدقيق.
+/// A customer can own thousands of models (the live maximum is 2,169), so the row carries only
+/// what distinguishes one: beneficiary, type, date, bill, pieces and stage — at high contrast,
+/// because a long list is scanned, not studied.
 class MeasurementModelTile extends StatelessWidget {
   final MeasurementModelRef model;
   final VoidCallback onTap;
@@ -22,121 +25,124 @@ class MeasurementModelTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final stageColor = _stageColor(model);
+    final tone = _stageColor(model);
 
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(11),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(11),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AppColors.border),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: stageColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(
-                  Icons.checkroom_rounded,
-                  size: 18,
-                  color: stageColor,
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // المستفيد أولًا: هو من تُقاس له الثياب، والنوع يليه
-                    // The beneficiary first — the person measured — then the garment type.
-                    Text(
-                      model.beneficiaryLabel,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '${model.displayName} · فاتورة ${model.billLabel} · '
-                      '${model.piecesCount} قطعة',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        color: AppColors.textMuted,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 6),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    model.date ?? '—',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Container(
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 4, color: tone),
+                Expanded(
+                  child: Padding(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 1.5,
+                      horizontal: 10,
+                      vertical: 9,
                     ),
-                    decoration: BoxDecoration(
-                      color: stageColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                    child: Text(
-                      model.stageLabel,
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: stageColor,
-                      ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: tone.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(color: tone.withValues(alpha: 0.32)),
+                          ),
+                          child: Icon(
+                            Icons.checkroom_rounded,
+                            size: 18,
+                            color: tone,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                model.beneficiaryLabel,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                '${model.displayName} · فاتورة ${model.billLabel} · '
+                                '${model.piecesCount} قطعة',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              model.date ?? '—',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            MeasurementBadge(
+                              label: model.stageLabel,
+                              color: tone,
+                              solid: model.isComplete,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(width: 5),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 13,
-                color: AppColors.textMuted.withValues(alpha: 0.7),
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// لون المرحلة — نفس دلالة ألوان المراحل في قسم التفصيل
-  /// The stage colour — the same meaning the tailoring section gives its stages.
+  /// لون المرحلة بلوحة التطبيق — نفس دلالة الألوان في جدول الأقمشة
+  /// The stage colour from the app palette, carrying the same meaning as in the fabrics panel.
   Color _stageColor(MeasurementModelRef model) {
     if (model.handingDone) return AppColors.success;
     if (model.tailorDone) return AppColors.info;
     if (model.cuttingDone) return AppColors.warning;
 
-    return AppColors.textMuted;
+    return AppColors.textSecondary;
   }
 }

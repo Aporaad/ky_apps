@@ -5,7 +5,8 @@ import '../../../../core/theme/app_colors.dart';
 import '../../data/models/measurement_customer_model.dart';
 import '../providers/customer_measurement_providers.dart';
 import '../widgets/measurement_customer_tile.dart';
-import 'customer_models_screen.dart';
+import '../widgets/measurement_model_picker_sheet.dart';
+import 'measurement_view_screen.dart';
 
 /// الشاشة الأولى في قسم «مقاسات العملاء»: قائمة العملاء والمستفيدين للاختيار
 /// The section's first screen: the list of customers and beneficiaries to choose from.
@@ -56,6 +57,12 @@ class _MeasurementsCustomersScreenState
       if (!mounted) return;
       final state = ref.read(measurementCustomersProvider);
       _searchCtrl.text = state.query;
+
+      // تحميل جارٍ من المزوّد نفسه ⇒ لا طلب ثانٍ: الضعف يُلغي الأول صمتاً ويضاعف العبء
+      // A load the provider already scheduled means no second one: the pair cancels the first
+      // silently and doubles the work.
+      if (state.isLoading) return;
+
       if (state.items.isEmpty) {
         ref.read(measurementCustomersProvider.notifier).load();
       } else {
@@ -418,15 +425,29 @@ class _MeasurementsCustomersScreenState
     );
   }
 
-  /// الخطوة التالية: موديلات هذا العميل، مرتّبة الأحدث أولاً
-  /// The next step: this customer's models, newest first.
-  void _openCustomer(MeasurementCustomer customer) {
-    Navigator.of(context).push(
+  /// الخطوة التالية: موديلات هذا العميل في نافذة منبثقة، ثم مقاسات الموديل المختار
+  /// The next step: this customer's models in a popup sheet, then the chosen model's measurements.
+  ///
+  /// القائمة وسيطة بين العميل والتقرير، فجعلُها شاشة كاملة كان يحوّل كل استعراض موديل إلى رحلة
+  /// «أمام ثم خلف»؛ النافذة تُبقي العميل ظاهرًا خلفها وتُغلق باختيار واحد.
+  /// The model list is intermediate between the customer and the report, so making it a full
+  /// screen turned every model looked at into a forward-and-back trip; the sheet keeps the
+  /// customer visible behind it and closes on a single choice.
+  Future<void> _openCustomer(MeasurementCustomer customer) async {
+    final picked = await MeasurementModelPickerSheet.show(
+      context,
+      custNo: customer.custNo,
+      custName: customer.displayName,
+      telNo1: customer.telNo1,
+    );
+
+    if (picked == null || !mounted) return;
+
+    await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => CustomerModelsScreen(
-          custNo: customer.custNo,
+        builder: (_) => MeasurementViewScreen(
+          modelKey: picked.keyOf(customer.custNo),
           custName: customer.displayName,
-          telNo1: customer.telNo1,
         ),
       ),
     );

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import '../../../../core/constants/app_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/biometric_service.dart';
 import '../../../../core/widgets/app_logo.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../app_info/presentation/screens/app_info_screen.dart';
+import '../../../app_info/presentation/utils/external_links.dart';
+import '../../../app_info/presentation/widgets/contact_icon_button.dart';
 import '../providers/auth_notifier.dart';
 import '../widgets/biometric_login_button.dart';
 import '../widgets/user_type_selector.dart';
@@ -142,6 +143,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Company name from config — reflects on the login screen immediately.
     final companyName =
         ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
+    // رقم الشركة من التهيئة — يقود أيقونتي التواصل أسفل البطاقة، وفارغه يُخفيهما
+    // The company phone from config — drives the two contact icons under the card; blank hides them.
+    final companyPhone =
+        ref.watch(appConfigNotifierProvider.select((s) => s.config.companyPhone));
+
+    // مقاسات مشتقة من ارتفاع النافذة: البطاقة كلها على شاشة واحدة بلا تمرير
+    // Metrics derived from the window height: the whole card on one screen, no scrolling.
+    final metrics = _LoginLayout.of(MediaQuery.sizeOf(context).height);
 
     // لو وصل الاسم المحفوظ بعد بناء الشاشة (إقلاع بطيء أو فتح مباشر لـ `/login`) يُعبّأ فور وصوله.
     // كانت القيمة تُقرأ مرة واحدة في `initState`، وهذا يترك الحقل فارغاً حين يسبق بناءُ الشاشة
@@ -179,8 +188,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          // dragStartBehavior:  DragStartBehavior.down,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          // التمرير يبقى شبكة أمان: لوحة المفاتيح أو تكبير الخط 1.25 قد يتجاوز أي حساب
+          // Scrolling stays as a safety net: the keyboard or a 1.25 text scale can outgrow any math.
+          padding: EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: metrics.gap(12),
+          ),
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
@@ -190,7 +203,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 // side: const BorderSide(color: AppColors.border),
               ),
               child: Padding(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(metrics.gap(10)),
                 child: Form(
                   key: _formKey,
                   child: Column(
@@ -204,12 +217,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           //   borderRadius: BorderRadius.circular(0),
                           // ),
                           child: AppLogo(
-                            width: 250,
-                            height: 170,
+                            width: metrics.logoWidth,
+                            height: metrics.logoHeight,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      SizedBox(height: metrics.gap(18)),
                       // اسم الشركة من التهيئة بدل النص المثبّت
                       // Company name from config instead of a hardcoded literal.
                       Text(
@@ -221,7 +234,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      SizedBox(height: metrics.gap(6)),
                       Text(
                         'تسجيل الدخول',
                         textAlign: TextAlign.center,
@@ -231,16 +244,21 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           color: AppColors.primary,
                         ),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        'أدخل بيانات حسابك للمتابعة إلى النظام',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
+                      // السطر التعريفي يُحذف على الشاشات القصيرة: وجوده يدفع زر الدخول خارج الإطار
+                      // The intro line is dropped on short screens: it pushes the sign-in button
+                      // off the frame.
+                      if (metrics.showSubtitle) ...[
+                        SizedBox(height: metrics.gap(6)),
+                        Text(
+                          'أدخل بيانات حسابك للمتابعة إلى النظام',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 24),
+                      ],
+                      SizedBox(height: metrics.gap(20)),
 
                       // محدد نوع المستخدم (موظف / عميل)
                       UserTypeSelector(
@@ -251,7 +269,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               .setUserType(type);
                         },
                       ),
-                      const SizedBox(height: 24),
+                      SizedBox(height: metrics.gap(18)),
 
                       // رسالة الخطأ عند فشل الدخول
                       if (authState.errorMessage != null) ...[
@@ -285,7 +303,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             ],
                           ),
                         ),
-                        const SizedBox(height: 16),
+                        SizedBox(height: metrics.gap(12)),
                       ],
 
                       // حقل اسم المستخدم
@@ -321,7 +339,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: metrics.gap(12)),
 
                       // حقل كلمة المرور
                       TextFormField(
@@ -362,7 +380,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                           return null;
                         },
                       ),
-                      const SizedBox(height: 28),
+                      SizedBox(height: metrics.gap(18)),
 
                       // زر تسجيل الدخول مع مؤشر التحميل
                       ElevatedButton(
@@ -381,18 +399,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                               )
                             : const Text('دخول'),
                       ),
-                      const SizedBox(height: 10),
+                      SizedBox(height: metrics.gap(8)),
 
-                      // لا زر عريض هنا: «معلومات البرنامج والدعم» صار أيقونة في الشريط العلوي
-                      // No wide button here: "app info & support" is now an app-bar icon.
-                      Text(
-                        'الإصدار v$kAppVersionBadge',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
+                      // أسفل البطاقة: أيقونتا اتصال وواتساب صغيرتان للتواصل مع الشركة، بدل سطر
+                      // «الإصدار» الذي انتقل إلى شاشة «معلومات البرنامج والدعم» وحدها.
+                      // Under the card: two small call and WhatsApp icons for contacting the company,
+                      // replacing the version line that now lives on the app-info screen alone.
+                      _CompanyContactBar(phone: companyPhone),
 
                       // // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز
                       // if (authState.isBiometricEnabled &&
@@ -434,6 +447,92 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// مقاسات شاشة الدخول مشتقة من ارتفاع النافذة — كي تُحمَّل البطاقة كاملة في شاشة واحدة
+/// The login screen's metrics derived from the window height, so the whole card fits one screen.
+class _LoginLayout {
+  const _LoginLayout({
+    required this.scale,
+    required this.logoWidth,
+    required this.logoHeight,
+    required this.showSubtitle,
+  });
+
+  /// اشتقاق المقاسات من ارتفاع النافذة الكامل (ومعه الشريط العلوي وشريط النظام)
+  /// Derive the metrics from the full window height (system chrome and app bar included).
+  ///
+  /// 140 بكسل تقديرٌ للشريطين اللذين لا تملكهما البطاقة، و700 هي المساحة التي صُمّمت عليها
+  /// الشاشة بارتياح؛ فلا تكبير فوق 1.0 (الأحجام الأصلية) ولا تصغير تحت 0.62 (حدّ يبقى مقروءاً).
+  /// 140 px stands for the two bars the card never owns, and 700 is the room the screen was
+  /// designed for: never above 1.0 (the original sizes) and never below 0.62 (a legible floor).
+  factory _LoginLayout.of(double windowHeight) {
+    final scale = ((windowHeight - 140) / 700).clamp(0.62, 1.0).toDouble();
+
+    return _LoginLayout(
+      scale: scale,
+      logoWidth: (250 * scale).clamp(130.0, 250.0).toDouble(),
+      logoHeight: (170 * scale).clamp(88.0, 170.0).toDouble(),
+      showSubtitle: windowHeight >= 660,
+    );
+  }
+
+  /// معامل التصغير الرأسي (0.62 .. 1.0)
+  /// The vertical shrinking factor (0.62 .. 1.0).
+  final double scale;
+
+  final double logoWidth;
+  final double logoHeight;
+
+  /// هل يظهر «أدخل بيانات حسابك للمتابعة إلى النظام»؟ — يُخفى على الشاشات القصيرة
+  /// Whether the intro line is shown — it is dropped on short screens.
+  final bool showSubtitle;
+
+  /// فراغ رأسي بنسبته من المقياس
+  /// A vertical gap scaled by the factor.
+  double gap(double natural) => natural * scale;
+}
+
+/// أيقونتا التواصل مع الشركة أسفل بطاقة الدخول — رقم الشركة يأتي من `APP_SETTINGS`
+/// The two company-contact icons under the login card — the number comes from `APP_SETTINGS`.
+///
+/// لماذا هنا؟ الزائر قبل الدخول لا يملك أي وسيلة للتواصل: لا شاشة استفسار مفتوحة ولا رقم ظاهر.
+/// الأيقونتان تفتحان الاتصال وواتساب مباشرة على رقم الشركة نفسه الذي تعرضه بطاقة معلوماتها.
+/// Why here? A visitor who has not signed in has no way to reach anyone: no open inquiry screen
+/// and no visible number. The two icons dial and open WhatsApp on the very number the company card
+/// displays.
+class _CompanyContactBar extends StatelessWidget {
+  const _CompanyContactBar({required this.phone});
+
+  /// رقم الشركة كما هو مخزَّن — يُطبَّع داخل `ExternalLinks` (محلي أو دولي)
+  /// The stored company number — normalised inside `ExternalLinks` (local or international).
+  final String phone;
+
+  @override
+  Widget build(BuildContext context) {
+    // بلا رقم مضبوط في القاعدة لا تُعرض أيقونتان عاطلتان توهمان بالنقر
+    // With no number set in the database, no dead icons are drawn pretending to be tappable.
+    if (phone.trim().isEmpty) return const SizedBox.shrink();
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        ContactIconButton(
+          icon: Icons.call_outlined,
+          tooltip: 'اتصال بالشركة',
+          color: AppColors.primary,
+          onPressed: () => ExternalLinks.openTel(context, phone),
+        ),
+        const SizedBox(width: 10),
+        ContactIconButton(
+          icon: Icons.chat_rounded,
+          tooltip: 'واتساب الشركة',
+          color: AppColors.whatsapp,
+          onPressed: () => ExternalLinks.openWhatsappTo(context, phone),
+        ),
+      ],
     );
   }
 }

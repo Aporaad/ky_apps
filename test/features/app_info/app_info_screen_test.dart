@@ -9,6 +9,7 @@ import 'package:ky_apps/features/admin/data/models/admin_result.dart';
 import 'package:ky_apps/features/app_config/data/models/app_config_model.dart';
 import 'package:ky_apps/features/app_config/presentation/providers/app_config_notifier.dart';
 import 'package:ky_apps/features/app_info/presentation/screens/app_info_screen.dart';
+import 'package:ky_apps/features/app_info/presentation/widgets/developer_info_section.dart';
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:ky_apps/features/auth/presentation/widgets/api_password_dialog.dart';
 import 'package:ky_apps/features/support/data/repositories/support_repository.dart';
@@ -146,11 +147,37 @@ void main() {
       // The Latin name comes from the database under the Arabic one — no duplicated Arabic line.
       expect(find.text("ALKABODI FOR MEN's TAILORING"), findsOneWidget);
 
-      // اسم المطور ورقمه وزر واتساب
-      // The developer's name, number, and WhatsApp button.
+      // اسم المطور وأيقونتا التواصل في سطره نفسه — الرقم صار تلميحاً لا نصاً ظاهراً
+      // The developer's name and the two contact icons on its own row — the number is now a
+      // tooltip, not visible text.
       expect(find.text(kDeveloperName), findsOneWidget);
-      expect(find.text(kDeveloperPhoneDisplay), findsOneWidget);
-      expect(find.text('واتساب'), findsWidgets);
+      expect(find.text(kDeveloperPhoneDisplay), findsNothing);
+      expect(find.byTooltip(kDeveloperPhoneDisplay), findsOneWidget);
+      expect(find.byTooltip('واتساب'), findsOneWidget);
+
+      // بلا نص ظاهر داخل بطاقة المطور: «واتساب» الظاهر في الشاشة يعود لقسم الاستفسار لا لهذه البطاقة
+      // No visible label inside the developer card — the “واتساب” text on screen belongs to the
+      // inquiry section, not to this card.
+      expect(
+        find.descendant(
+          of: find.byType(DeveloperInfoSection),
+          matching: find.text('واتساب'),
+        ),
+        findsNothing,
+      );
+
+      // الأيقونتان في سطر الاسم: مركزاهما على نفس ارتفاعه تقريباً، وأحدهما ليس سطراً منفصلاً
+      // The icons share the name's row: their centres sit on nearly the same height, proving they
+      // are not a row of their own (a separate row would be 40+ px away).
+      final nameCenter = tester.getCenter(find.text(kDeveloperName));
+      final callCenter = tester.getCenter(find.byTooltip(kDeveloperPhoneDisplay));
+      final whatsappCenter = tester.getCenter(find.byTooltip('واتساب'));
+      expect((callCenter.dy - nameCenter.dy).abs(), lessThan(16));
+      expect((whatsappCenter.dy - nameCenter.dy).abs(), lessThan(16));
+
+      // ومحاذاة الأيقونتين مع بعضهما تماماً — نفس السطر ونفس الارتفاع
+      // And the two icons align with each other exactly — one row, one height.
+      expect((whatsappCenter.dy - callCenter.dy).abs(), lessThan(1));
     });
 
     testWidgets('الحقول الفارغة لا ترسم بطاقات ولا فقرة خدمات', (tester) async {

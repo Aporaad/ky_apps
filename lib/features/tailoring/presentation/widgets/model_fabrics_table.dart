@@ -16,18 +16,7 @@ import 'tailoring_section_card.dart';
 class ModelFabricsTable extends StatelessWidget {
   final CuttingModelItem model;
 
-  /// خانة السعر اختيارية: شاشة بلا صلاحية مال تعرض عموداً فارغاً دائماً، وعمودٌ مفقود أصدق من
-  /// عمود مليان «—». الافتراضي إبقاء السعر كي لا يتغير سلوك شاشة فاتورة التفصيل.
-  /// The price column is optional: a screen without a money grant would show a column that is
-  /// always empty, and a missing column is more honest than a dash-filled one. The default keeps
-  /// the cutting-bill view exactly as it was.
-  final bool showPrice;
-
-  const ModelFabricsTable({
-    super.key,
-    required this.model,
-    this.showPrice = true,
-  });
+  const ModelFabricsTable({super.key, required this.model});
 
   @override
   Widget build(BuildContext context) {
@@ -68,52 +57,43 @@ class ModelFabricsTable extends StatelessWidget {
   }
 
   Widget _buildTable() {
-    // رؤوس الصفوف وخلاياها تُبنى من قائمة واحدة: إن حُذف السعر تحذف الأعمدة تلقائياً ولا
-    // ينزلق رأسٌ على خليةٍ خطأ.
-    // Headers and cells come from one list each: dropping the price drops the column, so a header
-    // can never slide over the wrong cell.
-    final headers = <String>[
-      '#',
-      'القماش',
-      'النوع',
-      'اللون',
-      'هنش',
-      'يارد',
-      'المصدر',
-      'الرف',
-      'القصّاص',
-      'الخيّاط',
-      if (showPrice) 'السعر',
-      'المرحلة',
-    ];
-
-    final last = headers.length - 1;
-    final columnWidths = <int, TableColumnWidth>{
-      0: const FixedColumnWidth(46),
-      1: const FlexColumnWidth(2.2),
-      2: const FlexColumnWidth(1.3),
-      3: const FlexColumnWidth(1.1),
-      4: const FixedColumnWidth(48),
-      5: const FixedColumnWidth(48),
-      6: const FlexColumnWidth(1.3),
-      7: const FixedColumnWidth(52),
-      8: const FlexColumnWidth(1.4),
-      9: const FlexColumnWidth(1.4),
-      if (showPrice) 10: const FixedColumnWidth(64),
-      last: const FixedColumnWidth(76),
-    };
-
     return Table(
       border: TableBorder.all(
         color: AppColors.border,
         width: 0.7,
         borderRadius: BorderRadius.circular(8),
       ),
-      columnWidths: columnWidths,
+      columnWidths: const {
+        0: FixedColumnWidth(46),
+        1: FlexColumnWidth(2.2),
+        2: FlexColumnWidth(1.3),
+        3: FlexColumnWidth(1.1),
+        4: FixedColumnWidth(48),
+        5: FixedColumnWidth(48),
+        6: FlexColumnWidth(1.3),
+        7: FixedColumnWidth(52),
+        8: FlexColumnWidth(1.4),
+        9: FlexColumnWidth(1.4),
+        10: FixedColumnWidth(64),
+        11: FixedColumnWidth(76),
+      },
       children: [
         TableRow(
           decoration: const BoxDecoration(color: AppColors.surfaceSubtle),
-          children: [for (final title in headers) _th(title)],
+          children: [
+            _th('#'),
+            _th('القماش'),
+            _th('النوع'),
+            _th('اللون'),
+            _th('هنش'),
+            _th('يارد'),
+            _th('المصدر'),
+            _th('الرف'),
+            _th('القصّاص'),
+            _th('الخيّاط'),
+            _th('السعر'),
+            _th('المرحلة'),
+          ],
         ),
         for (var i = 0; i < model.pieces.length; i++)
           TableRow(
@@ -135,7 +115,7 @@ class ModelFabricsTable extends StatelessWidget {
               // الخيّاط غير المسند يُكتب «غير مسند» بدل شرطة: الشرطة تُقرأ «لا بيانات»
               // An unassigned tailor reads "غير مسند" rather than a dash, which reads as "no data".
               _td(model.pieces[i].hasTailor ? model.pieces[i].tailorName! : 'غير مسند'),
-              if (showPrice) _td(tailoringNumber(model.pieces[i].price)),
+              _td(tailoringNumber(model.pieces[i].price)),
               _stageCell(model.pieces[i].stage),
             ],
           ),

@@ -12,14 +12,15 @@ import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../tailoring/data/models/cutting_model_item.dart';
-import '../../../tailoring/presentation/widgets/model_fabrics_table.dart';
-import '../../../tailoring/presentation/widgets/model_measurements_grid.dart';
-import '../../../tailoring/presentation/widgets/model_specs_panel.dart';
 import '../../data/models/measurement_model_ref.dart';
 import '../../data/repositories/customer_measurement_repository.dart';
 import '../providers/customer_measurement_providers.dart';
 import '../utils/customer_measurement_pdf_builder.dart';
+import '../widgets/measurement_fabrics_panel.dart';
 import '../widgets/measurement_filter_bar.dart';
+import '../widgets/measurement_kit.dart';
+import '../widgets/measurement_measurements_panel.dart';
+import '../widgets/measurement_specs_panel.dart';
 import '../widgets/measurement_subject_card.dart';
 
 /// شاشة عرض المقاسات — الهدف من القسم كله
@@ -115,12 +116,12 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
       scrolledUnderElevation: 2,
       surfaceTintColor: Colors.transparent,
       leading: IconButton(
-        icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+        icon: Icon(Icons.arrow_back_ios_new_rounded, size: 20),
         onPressed: () => Navigator.pop(context),
       ),
       title: Row(
         children: [
-          const Icon(
+          Icon(
             Icons.straighten_rounded,
             color: Color(0xFFD97706),
             size: 21,
@@ -142,7 +143,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
                 ),
                 Text(
                   _subtitle(header?.referenceLabel, model),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10.5,
                     color: AppColors.textMuted,
                   ),
@@ -162,7 +163,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
           icon: Badge(
             isLabelVisible: _filters.isDirty && !_showFilters,
             smallSize: 7,
-            label: const Text('1', style: TextStyle(fontSize: 7)),
+            label: Text('1', style: TextStyle(fontSize: 7)),
             child: Icon(
               _showFilters
                   ? Icons.filter_alt_rounded
@@ -176,7 +177,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
           code: Perm.customersMeasurementsPrint,
           child: IconButton(
             onPressed: subject == null || _busy ? null : () => _print(subject),
-            icon: const Icon(Icons.print_rounded, size: 21),
+            icon: Icon(Icons.print_rounded, size: 21),
             tooltip: 'طباعة',
           ),
         ),
@@ -184,14 +185,14 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
           code: Perm.customersMeasurementsExport,
           child: IconButton(
             onPressed: subject == null || _busy ? null : () => _export(subject),
-            icon: const Icon(Icons.picture_as_pdf_rounded, size: 21),
+            icon: Icon(Icons.picture_as_pdf_rounded, size: 21),
             tooltip: 'تصدير PDF',
           ),
         ),
         IconButton(
           onPressed: () =>
               ref.invalidate(customerMeasurementProvider(_activeKey)),
-          icon: const Icon(Icons.refresh_rounded, size: 21),
+          icon: Icon(Icons.refresh_rounded, size: 21),
           tooltip: 'تحديث',
         ),
       ],
@@ -200,10 +201,13 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
 
   String _subtitle(String? billLabel, CuttingModelItem? model) {
     final beneficiary = model?.beneficiary;
+
+    // رقم الموديل لا يُعرض: هو مفتاح داخلي، والمستفيد مع الفاتورة يعرفان السجل كاملاً
+    // The model number is not shown: it is an internal key, and beneficiary plus bill already
+    // identify the record.
     final parts = <String>[
       if (beneficiary != null) beneficiary,
       if (billLabel != null) 'فاتورة $billLabel',
-      if (model != null) 'موديل ${model.seqNo}',
     ];
 
     return parts.isEmpty ? 'مقاسات الموديل' : parts.join(' · ');
@@ -290,8 +294,8 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
             ElevatedButton.icon(
               onPressed: () =>
                   ref.invalidate(customerMeasurementProvider(_activeKey)),
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('إعادة المحاولة'),
+              icon: Icon(Icons.refresh_rounded),
+              label: Text('إعادة المحاولة'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -313,7 +317,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(
+              Icon(
                 Icons.straighten_rounded,
                 size: 56,
                 color: AppColors.textMuted,
@@ -345,19 +349,19 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
       header: subject.detail.header,
       model: model,
     );
-    final measurementsCard = ModelMeasurementsGrid(
+    final measurementsCard = MeasurementMeasurementsPanel(
       model: model,
       labels: subject.detail.measureLabels,
+      // الشريط هو مصدر الحالة، واللوحة تنفّذ فقط — لا مفتاحان لقرار واحد
+      // The filter bar owns this decision and the panel only obeys it: one switch per choice.
+      showEmptySlots: _filters.showEmptyMeasurements,
     );
-    final specsCard = ModelSpecsPanel(model: model);
-    final fabricsCard = ModelFabricsTable(
+    final specsCard = MeasurementSpecsPanel(model: model);
+    final fabricsCard = MeasurementFabricsPanel(
       // بحث الأقمشة مرشّح عرض محلي: نسخة من الموديل بقطع مطابقة لا طلب شبكة جديد
       // The fabric search is a local view filter: a copy of the model with matching pieces, not
       // a new network request.
       model: _filterFabrics(model),
-      // السعر ليس من هذا القسم: عمود فارغ دائماً في مطبوع المقاسات أسطرُ ضائعة
-      // Prices are not part of this section: an always-empty column is wasted lines.
-      showPrice: false,
     );
 
     return ReportZoomView(
@@ -368,7 +372,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
             // العتبة 980 كبقية التقارير: صفوف على الحاسب وعمود واحد على الجوال
             // The 980 threshold, as in the other reports: rows on desktop, one column on mobile.
             final wide = constraints.maxWidth >= 980;
-            const gap = SizedBox(height: 8);
+            const gap = SizedBox(height: MeasurementKit.sectionGap);
 
             final tail = <Widget>[
               if (_filters.showMeasurements) ...[

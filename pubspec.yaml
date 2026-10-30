@@ -83,6 +83,11 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
      - assets/
+     # خط Cairo المضمّن محلياً لتقارير PDF — يزيل اعتماد التنزيل من الإنترنت وقت التشغيل
+     # (fonts.gstatic.com) الذي كان يفشل على شبكة LAN بلا إنترنت فتظهر العربية رموزاً.
+     # Bundled Cairo TTF for PDF reports — removes the runtime Google-Fonts download that
+     # failed on an offline LAN and made every Arabic string render as symbols.
+     - assets/fonts/
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

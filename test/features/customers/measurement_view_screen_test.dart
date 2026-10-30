@@ -120,13 +120,40 @@ MeasurementSubject _subject({List<MeasurementSibling>? siblings}) {
           'measurements': {'L1': 58, 'L2': 17, 'L5': 19},
           'specs': {'neck_type': 'مربع'},
           'pieces': [
-            {'seq_no1': 1, 'cloth_name': 'قماش صيفي'},
-            {'seq_no1': 2, 'cloth_name': 'قماش شتوي'},
-            {'seq_no1': 3, 'cloth_name': 'قماش قطني'},
+            {
+              'seq_no1': 1,
+              'ohdid': 9001,
+              'cloth_name': 'قماش صيفي',
+              'cloth_type': 'عرضية',
+              'color_text': 'أبيض',
+              'hinsh': 108,
+              'yards': 3,
+              'price': 2.28,
+              'cutter_name': 'أحمد نصران',
+              'tailor_done': 1,
+            },
+            {
+              'seq_no1': 2,
+              'ohdid': 9002,
+              'cloth_name': 'قماش شتوي',
+              'cloth_type': 'ضيقه',
+              'color_text': 'كحلي',
+              'hinsh': 120,
+              'yards': 4,
+              'price': 3.5,
+              'cutter_name': 'أحمد نصران',
+              'tailor_name': 'سالم',
+            },
+            {
+              'seq_no1': 3,
+              'ohdid': 9003,
+              'cloth_name': 'قماش قطني',
+              'tailor_done': 0,
+            },
           ],
         },
       ],
-      'measure_labels': {'L1': 'الطول', 'L2': 'الكتف', 'L5': 'العرض'},
+      'measure_labels': {'L1': 'الطول', 'L2': 'الكتف', 'L5': 'عرض'},
     }),
     siblings:
         siblings ??
@@ -174,9 +201,9 @@ void main() {
     await _pump(tester, _FakeRepo(subject: _subject()));
 
     expect(find.text('بيانات العميل والمستفيد'), findsOneWidget);
-    expect(find.textContaining('المقاسات — موديل 48'), findsOneWidget);
-    expect(find.textContaining('المواصفات'), findsWidgets);
-    expect(find.textContaining('الأقمشة'), findsWidgets);
+    expect(find.text('تفاصيل المقاسات'), findsOneWidget);
+    expect(find.text('مواصفات الموديل'), findsOneWidget);
+    expect(find.text('الأقمشة الخاصة بالموديل'), findsOneWidget);
 
     // التسميات من GENERAL_LABELS_CODING لا من الشاشة: «الطول» لا L1
     // Labels come from the database dictionary: "الطول", never the raw L1.
@@ -186,6 +213,41 @@ void main() {
     // التكبير بالإصبع والأزرار: الغلاف الموحّد موجود بلا نسبة مخفية
     // Pinch and button zoom: the shared shell is present with its live percentage.
     expect(find.text('100%'), findsOneWidget);
+  });
+
+  testWidgets('the fabrics show the requested columns in two lines, and nothing else', (
+    tester,
+  ) async {
+    await _pump(tester, _FakeRepo(subject: _subject()));
+
+    // السطر الأول: رقم الطلب · القماش · العرض · اللون · هنش · ياردة · السعر
+    // Line one: order id, cloth, width, colour, hinsh, yards, price.
+    for (final label in ['رقم الطلب', 'القماش', 'العرض', 'اللون', 'هنش', 'ياردة', 'السعر']) {
+      expect(find.text(label), findsWidgets, reason: 'عمود مفقود: $label');
+    }
+
+    // السطر الثاني: القصّاص · الخيّاط · المرحلة
+    // Line two: cutter, tailor and stage.
+    expect(find.text('القصّاص'), findsWidgets);
+    expect(find.text('الخيّاط'), findsWidgets);
+    expect(find.text('المرحلة'), findsWidgets);
+    expect(find.text('9001'), findsWidgets);
+    // الخيّاط غير المسند يُسمّى، ولا يُترك شرطة تُقرأ «لا بيانات»
+    // An unassigned tailor is named, never left as a dash that reads as "no data".
+    expect(find.text('غير مسند'), findsWidgets);
+
+    // الرف والمصدر محذوفان بطلب صريح
+    // Shelf and source are removed on request.
+    expect(find.text('الرف'), findsNothing);
+    expect(find.text('المصدر'), findsNothing);
+  });
+
+  testWidgets('the deleted identity fields never appear', (tester) async {
+    await _pump(tester, _FakeRepo(subject: _subject()));
+
+    for (final label in ['العنوان', 'مجموعة الحساب', 'شكل الموديل', 'رقم الموديل', 'الفرع']) {
+      expect(find.text(label), findsNothing, reason: 'حقل كان يجب حذفه: $label');
+    }
   });
 
   testWidgets('the filter button shows and hides the filter bar', (
@@ -259,7 +321,10 @@ void main() {
     await tester.tap(find.byIcon(Icons.filter_alt_off_rounded));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('سالم'));
+    // الشريحة تُلتقط بنوعها: «سالم» يظهر أيضاً كخياط في الأقمشة، والعامّ يطابق اثنين
+    // The chip is picked by type: "سالم" is also a tailor name in the fabrics, so a bare text
+    // finder would match two widgets.
+    await tester.tap(find.widgetWithText(ChoiceChip, 'سالم'));
     await tester.pumpAndSettle();
 
     // المفتاح الجديد يحتفظ بالعميل والفاتورة ويغيّر رقم الموديل فقط

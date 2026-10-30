@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/measurement_customer_model.dart';
+import 'measurement_kit.dart';
 
-/// بطاقة عميل في قائمة «مقاسات العملاء» — اسم وهاتف وعدّادات وآخر نشاط
-/// A customer card in the measurements list — name, phone, counters and the last activity.
+/// بطاقة عميل في قائمة «مقاسات العملاء»
+/// A customer row in the measurements list.
 ///
-/// الصف مضغوط عمداً: القائمة قد تحمل آلاف العملاء، فكل سطر إضافي يعني آلاف الأسطر قبل أن يصل
-/// المستخدم إلى اسمه.
-/// The row is deliberately tight: this list can hold thousands of customers, so every extra line
-/// is thousands of lines before the user reaches the name they came for.
+/// السطر مضغوط لكنه متباين: الاسم أسود عريض، والسطر الثانوي رمادي غامق نصف عريض لا باهت،
+/// وشريط لوني على الحافة يقول «هذه بطاقة قابلة للضغط» بدل فراغ يُخمن معه.
+/// Tight but high-contrast: the name is bold near-black, the second line is a dark semi-bold grey
+/// rather than a faded one, and an accent stripe on the edge says "tappable" instead of leaving
+/// that to guesswork.
 class MeasurementCustomerTile extends StatelessWidget {
   final MeasurementCustomer customer;
   final VoidCallback onTap;
@@ -24,142 +26,147 @@ class MeasurementCustomerTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(11),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(11),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AppColors.border),
           ),
-          child: Row(
-            children: [
-              // رقم العميل في دائرة: بديل ثابت عن الأفاتار بلا أي صورة
-              // The customer number in a disc: a stable avatar-free stand-in.
-              Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withValues(alpha: 0.1),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    '${customer.custNo}',
-                    style: TextStyle(
-                      fontSize: 11.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.primary,
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // شريط لوني يميز البطاقة ويوحي بالجهة التي تفتح
+                // An accent rail marks the card and points at where it opens.
+                Container(width: 4, color: AppColors.primary),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 9,
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      customer.displayName,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
+                    child: Row(
                       children: [
-                        if (customer.telNo1 != null) ...[
-                          const Icon(
-                            Icons.phone_rounded,
-                            size: 11,
-                            color: AppColors.textMuted,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            customer.telNo1!,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.textMuted,
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(9),
+                            border: Border.all(
+                              color: AppColors.primary.withValues(alpha: 0.3),
                             ),
                           ),
-                          const SizedBox(width: 7),
-                        ],
-                        Text(
-                          customer.lastDate ?? '—',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textMuted,
+                          child: Center(
+                            child: Text(
+                              '${customer.custNo}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primary,
+                              ),
+                            ),
                           ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                customer.displayName,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              Row(
+                                children: [
+                                  if (customer.telNo1 != null) ...[
+                                    Icon(
+                                      Icons.phone_rounded,
+                                      size: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      customer.telNo1!,
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  Icon(
+                                    Icons.event_rounded,
+                                    size: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Flexible(
+                                    child: Text(
+                                      customer.lastDate ?? 'بلا تاريخ',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            MeasurementBadge(
+                              label: '${customer.modelsCount} موديل',
+                              color: AppColors.info,
+                            ),
+                            if (customer.billsCount > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '${customer.billsCount} فاتورة',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(width: 6),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: AppColors.textSecondary,
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
-              // عدّ الموديلات هو الدلالة العملية: كم مرة فُصّل لهذا العميل
-              // The model count is the meaningful figure: how often this customer was tailored for.
-              _CountBadge(
-                label: '${customer.modelsCount}',
-                caption: 'موديل',
-                color: AppColors.info,
-              ),
-              const SizedBox(width: 6),
-              Icon(
-                Icons.arrow_forward_ios_rounded,
-                size: 13,
-                color: AppColors.textMuted.withValues(alpha: 0.7),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// شارة عدد + تسمية صغيرة / a count with a tiny caption
-class _CountBadge extends StatelessWidget {
-  final String label;
-  final String caption;
-  final Color color;
-
-  const _CountBadge({
-    required this.label,
-    required this.caption,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.bold,
-              color: color,
+              ],
             ),
           ),
-          Text(
-            caption,
-            style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w600, color: color),
-          ),
-        ],
+        ),
       ),
     );
   }

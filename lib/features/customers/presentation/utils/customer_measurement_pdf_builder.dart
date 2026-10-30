@@ -27,9 +27,12 @@ import '../../data/models/measurement_model_ref.dart';
 /// aid (hiding a section, narrowing the fabrics), and printing an incomplete record because a
 /// filter was left on would put the mistake on paper rather than on screen.
 ///
-/// لا خانة مالية في هذا الملف إطلاقاً — لا سعر ولا إجمالي: المطبوع مقاسات ومواصفات وأقمشة.
-/// No money column appears anywhere — no price, no total: this prints measurements, specs and
-/// fabrics.
+/// المال الوحيد المطبوع سعرُ القطعة (`SANF_PRICE`) لأنه عمود طلبه المستخدم صراحة؛ أما
+/// إجمالي الفاتورة وخصمها وصافيها ومدفوعها فلا تُطبع ولا تُرسل أصلاً: المطبوع مقاسات
+/// ومواصفات وأقمشة، لا كشف حساب.
+/// The only money printed is the piece price (SANF_PRICE), a column the user asked for by name.
+/// The bill total, its discount, net and paid amounts are neither printed nor even sent: this is
+/// a measurements sheet, not an account statement.
 Future<Uint8List> buildCustomerMeasurementPdf({
   required ReportLetterheadInfo letterhead,
   required MeasurementSubject subject,
@@ -156,6 +159,11 @@ pw.Widget _sectionTitle(String label, int seqNo) {
 
 /// كتلة العميل والمستفيد: من قيس له، ومن الفاتورة باسمه، وما الموديل
 /// The customer/beneficiary block: who was measured, who owns the bill, and which model.
+///
+/// المطبوع يكرّر رأس الشاشة: العنوان والفرع ومجموعة الحساب وشكل الموديل ورقمه تُسقط هنا أيضاً،
+/// فتسمية «المقاسات» لا تحتاج ما لا يقرؤه خيّاط.
+/// The printout mirrors the screen: address, branch, account group, model shape and model number
+/// are dropped there too — a measurements sheet never needs what no tailor reads.
 pw.Widget _subjectBlock(MeasurementSubject subject) {
   final header = subject.detail.header;
   final model = subject.model;
@@ -185,21 +193,26 @@ pw.Widget _subjectBlock(MeasurementSubject subject) {
           'المستفيد',
           model?.beneficiary ?? 'بلا مستفيد محدّد',
           'نوع الموديل',
-          model?.displayName ?? '—',
+          model?.typeName ?? '—',
         ),
-        _kvRow(
-          'شكل الموديل',
-          model?.shapeName ?? '—',
-          'عدد القطع',
-          '${model?.piecesCount ?? 0}',
-        ),
-        if (header.address != null) _kvRow('العنوان', header.address!, '', ''),
         _kvRow(
           'تاريخ الفاتورة',
           header.date ?? '—',
+          'عدد القطع',
+          '${model?.piecesCount ?? 0}',
+        ),
+        _kvRow(
+          'فاتورة رقم',
+          header.referenceLabel,
+          'الرقم اليدوي',
+          header.manualLabel,
+        ),
+        _kvRow(
           'الحالة',
           header.ordsName ??
               (header.handingDone ? 'تم التسليم' : 'قيد التنفيذ'),
+          '',
+          '',
         ),
       ],
     ),
@@ -387,8 +400,13 @@ pw.Widget _specsBlock(CuttingModelItem model) {
   );
 }
 
-/// جدول الأقمشة: صف لكل قطعة في الموديل — بلا أي عمود سعر
-/// The fabrics table: one row per piece of the model — with no price column at all.
+/// جدول الأقمشة: رقم الطلب · القماش · العرض · اللون · هنش · يارد · السعر · القصّاص · الخيّاط · المرحلة
+/// The fabrics table: order id, cloth, width, colour, hinsh, yards, price, cutter, tailor, stage.
+///
+/// «العرض» هو `CLOTH_TYPE`: قيمته في القاعدة «عرضية/عادية» لا نوع قماش، وتسميته «النوع» كانت
+/// تضلّل من يقرأ الورقة. الرف والمصدر حُذفا بطلب صريح.
+/// "Width" is CLOTH_TYPE — its live values are عرضية/عادية, so calling that column "type" misled
+/// the reader. Shelf and source were removed on request.
 pw.Widget _fabricsTable(CuttingModelItem model) {
   if (model.pieces.isEmpty) {
     return pw.Text(
@@ -405,13 +423,13 @@ pw.Widget _fabricsTable(CuttingModelItem model) {
     pw.TableRow(
       decoration: const pw.BoxDecoration(color: ReportPdfColors.headerBg),
       children: reversedCells([
-        pdfTh('القطعة'),
+        pdfTh('رقم الطلب'),
         pdfTh('القماش'),
-        pdfTh('النوع'),
+        pdfTh('العرض'),
         pdfTh('اللون'),
         pdfTh('هنش'),
-        pdfTh('يارد'),
-        pdfTh('الرف'),
+        pdfTh('ياردة'),
+        pdfTh('السعر'),
         pdfTh('القصّاص'),
         pdfTh('الخيّاط'),
         pdfTh('المرحلة'),
@@ -423,13 +441,13 @@ pw.Widget _fabricsTable(CuttingModelItem model) {
     rows.add(
       pw.TableRow(
         children: reversedCells([
-          pdfTd('${piece.seqNo1}'),
+          pdfTd('${piece.ohdId ?? piece.seqNo1}', bold: true),
           pdfTd(piece.clothName ?? '—'),
           pdfTd(piece.clothType ?? '—'),
           pdfTd(piece.colorText ?? '—'),
           pdfTd(tailoringNumber(piece.hinsh)),
           pdfTd(tailoringNumber(piece.yards)),
-          pdfTd(piece.shelfNo ?? '—'),
+          pdfTd(tailoringNumber(piece.price, decimals: 2)),
           pdfTd(piece.cutterName ?? '—'),
           // «غير مسند» بدل «لا يوجد» الحرفية القادمة من النظام القديم
           // "غير مسند" instead of the legacy literal "لا يوجد".
@@ -443,13 +461,13 @@ pw.Widget _fabricsTable(CuttingModelItem model) {
   return pw.Table(
     border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
     columnWidths: const {
-      0: pw.FlexColumnWidth(0.8),
+      0: pw.FlexColumnWidth(1.3),
       1: pw.FlexColumnWidth(2.4),
-      2: pw.FlexColumnWidth(1.5),
-      3: pw.FlexColumnWidth(1.3),
+      2: pw.FlexColumnWidth(1.2),
+      3: pw.FlexColumnWidth(1.2),
       4: pw.FlexColumnWidth(0.8),
-      5: pw.FlexColumnWidth(0.8),
-      6: pw.FlexColumnWidth(1.2),
+      5: pw.FlexColumnWidth(0.9),
+      6: pw.FlexColumnWidth(1.1),
       7: pw.FlexColumnWidth(1.5),
       8: pw.FlexColumnWidth(1.5),
       9: pw.FlexColumnWidth(1.3),

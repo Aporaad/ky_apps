@@ -43,4 +43,15 @@ void main() {
       expect(ExternalLinks.buildTelUri('لا رقم هنا'), isNull);
     });
   });
+
+  group('ExternalLinks.internationalDigits', () {
+    test('أرقام واتساب بلا + ولا مسافات — هو رابط wa.me نفسه', () {
+      // `wa.me/<الأرقام>` لا يقبل `+`: ما يعيده هذا المساعد هو ما يُلصق في الرابط
+      // `wa.me/<digits>` accepts no `+`: this helper's output is exactly what the link carries.
+      expect(ExternalLinks.internationalDigits('780154000'), '967780154000');
+      expect(ExternalLinks.internationalDigits('+967 776 422 777'), '967776422777');
+      expect(ExternalLinks.internationalDigits('01234567'), '9671234567');
+      expect(ExternalLinks.internationalDigits('  '), isNull);
+    });
+  });
 }

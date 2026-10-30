@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:ky_apps/core/constants/app_info.dart';
 import 'package:ky_apps/core/network/dio_client.dart';
 import 'package:ky_apps/core/storage/secure_storage_service.dart';
+import 'package:ky_apps/core/widgets/app_logo.dart';
 import 'package:ky_apps/features/app_config/data/models/app_config_model.dart';
 import 'package:ky_apps/features/app_config/presentation/providers/app_config_notifier.dart';
 import 'package:ky_apps/features/auth/data/models/auth_response.dart';
@@ -44,12 +45,18 @@ class _StubAuth extends AuthNotifier {
   AuthState build() => _initial;
 }
 
-/// تهيئة خاملة: لا كاش ولا خادم — تكفي شاشة الدخول باسم شركة افتراضي
-/// Idle app config: no cache, no server — the login screen only needs a default company name.
+/// تهيئة خاملة: لا كاش ولا خادم — تكفي شاشة الدخول باسم شركة افتراضي ورقم تواصل
+/// Idle app config: no cache, no server — the login screen needs a company name and contact number.
 class _StubAppConfig extends AppConfigNotifier {
+  _StubAppConfig({this.companyPhone = ''});
+
+  /// رقم الشركة الذي تستعمله أيقونتا التواصل أسفل البطاقة (فارغ = لا أيقونات)
+  /// The company number behind the two contact icons under the card (blank = no icons).
+  final String companyPhone;
+
   @override
   AppConfigState build() => AppConfigState(
-    config: AppConfigModel.defaults(),
+    config: AppConfigModel.defaults().copyWith(companyPhone: companyPhone),
     loading: false,
   );
 }
@@ -289,6 +296,7 @@ void main() {
     Future<void> pumpLogin(
       WidgetTester tester, {
       String? lastUsername,
+      String companyPhone = '',
     }) async {
       await tester.pumpWidget(
         ProviderScope(
@@ -297,7 +305,9 @@ void main() {
             authNotifierProvider.overrideWith(
               () => _StubAuth(AuthState(lastUsername: lastUsername)),
             ),
-            appConfigNotifierProvider.overrideWith(_StubAppConfig.new),
+            appConfigNotifierProvider.overrideWith(
+              () => _StubAppConfig(companyPhone: companyPhone),
+            ),
           ],
           child: const MaterialApp(home: LoginScreen()),
         ),
@@ -382,9 +392,65 @@ void main() {
       expect(find.byIcon(Icons.settings_outlined), findsNothing);
       expect(find.byTooltip('إعدادات خادم الـ API'), findsNothing);
 
-      // سطر النسخة بقي كما هو أسفل زر الدخول
-      // The version line stays where it was, under the sign-in button.
-      expect(find.text('الإصدار v$kAppVersionBadge'), findsOneWidget);
+      // سطر الإصدار أُزيل من هنا: معلومات النسخة في شاشة «معلومات البرنامج والدعم»
+      // The version line is gone from here: version info lives on the app-info screen.
+      expect(find.text('الإصدار v$kAppVersionBadge'), findsNothing);
+    });
+
+    testWidgets('أيقونتا اتصال وواتساب أسفل البطاقة حين يُضبط رقم الشركة', (
+      tester,
+    ) async {
+      await pumpLogin(tester, companyPhone: '780154000');
+
+      // أيقونتان صغيرتان فقط، بلا نص ظاهر — لكل واحدة تلميح يعلن وظيفتها
+      // Two small icons only, no visible text — each carries a tooltip announcing its job.
+      expect(find.byIcon(Icons.call_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.chat_rounded), findsOneWidget);
+      expect(find.byTooltip('اتصال بالشركة'), findsOneWidget);
+      expect(find.byTooltip('واتساب الشركة'), findsOneWidget);
+      expect(find.text('اتصال بالشركة'), findsNothing);
+
+      // مكان سطر الإصدار القديم: الأيقونتان تحت زر «دخول» مباشرة
+      // The old version line's place: the icons sit right under the sign-in button.
+      final buttonBottom = tester.getBottomLeft(find.text('دخول')).dy;
+      final callCenter = tester.getCenter(find.byTooltip('اتصال بالشركة')).dy;
+      expect(callCenter, greaterThan(buttonBottom));
+    });
+
+    testWidgets('بلا رقم شركة مضبوط لا تُعرض أيقونات تواصل', (tester) async {
+      await pumpLogin(tester);
+
+      // حقل فارغ في القاعدة = لا أيقونتان عاطلتان توهمان بالنقر
+      // A blank database field means no dead icons pretending to be tappable.
+      expect(find.byTooltip('اتصال بالشركة'), findsNothing);
+      expect(find.byTooltip('واتساب الشركة'), findsNothing);
+    });
+
+    testWidgets('بطاقة الدخول تظهر كاملة على شاشة هاتف بلا تمرير', (tester) async {
+      // مقاس هاتف شائع: 360×640 — الطول الذي كانت البطاقة تتجاوزه قبل التصغير
+      // A common phone size, 360×640 — the height the card used to overflow before scaling.
+      tester.view.physicalSize = const Size(360, 640);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      await pumpLogin(tester, companyPhone: '780154000');
+
+      expect(tester.takeException(), isNull);
+
+      // البطاقة كلها داخل النافذة: كل عنصر — من الشعار إلى أيقونتي التواصل — بلا تمرير
+      // The whole card is inside the window: every element, from the logo to the contact icons,
+      // with no scrolling.
+      final screenHeight =
+          tester.view.physicalSize.height / tester.view.devicePixelRatio;
+      expect(
+        tester.getRect(find.byType(Card)).bottom,
+        lessThanOrEqualTo(screenHeight),
+      );
+      expect(find.byType(AppLogo), findsOneWidget);
+      expect(find.text('دخول'), findsOneWidget);
+      expect(find.byTooltip('اتصال بالشركة'), findsOneWidget);
+      expect(find.byTooltip('واتساب الشركة'), findsOneWidget);
     });
   });
 }

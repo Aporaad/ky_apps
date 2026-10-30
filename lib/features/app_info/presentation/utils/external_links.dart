@@ -46,10 +46,34 @@ class ExternalLinks {
   /// يعيد `null` حين لا يبقى أي رقم بعد التنقية — لا نفتح طالباً فارغاً.
   /// Returns null when no digits survive, so no empty dialer is opened.
   static Uri? buildTelUri(String? phone) {
+    final digits = internationalDigits(phone);
+    if (digits == null) return null;
+
+    return Uri(scheme: 'tel', path: '+$digits');
+  }
+
+  /// أرقام الرقم بصيغته الدولية بلا `+` — أساس `tel:` و`wa.me` معاً
+  /// The number's digits in international form without `+` — the base for both `tel:` and `wa.me`.
+  ///
+  /// دالة نقية عامة كي تُختبر وحدها وكي يستعملها مسار واتساب بنفس القواعد بلا تكرار.
+  /// A public pure function so it can be tested alone and reused by the WhatsApp path verbatim.
+  static String? internationalDigits(String? phone) {
     final digits = _digitsOf(phone);
     if (digits == null) return null;
 
-    return Uri(scheme: 'tel', path: '+${_withCountryCode(digits)}');
+    return _withCountryCode(digits);
+  }
+
+  /// فتح محادثة واتساب مع رقم هاتف (رقم الشركة في قاعدة البيانات مثلاً)
+  /// Open a WhatsApp chat with a phone number (the company number from the database, say).
+  ///
+  /// `wa.me` لا يقبل `+` ولا مسافات: الرابط يُبنى من الأرقام الدولية وحدها.
+  /// `wa.me` accepts neither `+` nor spaces, so the link is built from the international digits.
+  static Future<void> openWhatsappTo(BuildContext context, String? phone) async {
+    final digits = internationalDigits(phone);
+    if (digits == null) return;
+
+    await _launch(context, Uri.parse('https://wa.me/$digits'));
   }
 
   /// إكمال مفتاح الدولة للرقم المحلي (967 — اليمن)
