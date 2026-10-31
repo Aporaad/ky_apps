@@ -8,17 +8,19 @@ import '../../data/repositories/tailoring_repository.dart';
 import '../providers/tailoring_providers.dart';
 import 'tailoring_section_card.dart';
 
-/// القسم 8: سجل حركة أقمشة الموديل المختار — يُحمَّل عند فتح القسم فقط
-/// Section 8: the selected model's fabric movement log — loaded only when the section opens.
+/// القسم 8: سجل حركة **القماش المحدد** (OHDID) — لا الموديل
+/// Section 8: the movement log of the **selected fabric** (OHDID) — not the model.
 ///
-/// **السجل يخصّ القماش (OHDID) لا الموديل**: لذلك يُطلب بأرقام طلبات أقمشة الموديل، وكل حركة
-/// صف واحد بأعمدة ظاهرة: الحالة · التاريخ · العدد · المنفذ · ملاحظة.
-/// **The log belongs to the fabric (OHDID), not the model**: it is requested with the model's
-/// fabric order ids, and every movement is a single row with visible columns: state · date ·
-/// quantity · executor · note.
+/// السجل يُطلب برقم طلب القماش المختار من قائمة الأقمشة، ويتغيّر بتغيّر الاختيار. والأعمدة
+/// خمسة فقط: الحالة · التاريخ · العدد · المنفذ · ملاحظة، وكل حركة في صف واحد ظاهرة الأعمدة،
+/// بأعمدة مرنة ونصوص تلتفّ فلا حاجة لتمرير أفقي.
+/// The log is requested with the order id of the fabric selected in the fabrics list and changes
+/// with that selection. Only five columns: state · date · quantity · executor · note; each
+/// movement is one row with every column visible, using flex columns and wrapping text so no
+/// horizontal scroll is needed.
 class ModelMovementsTable extends ConsumerWidget {
-  /// الموديل المختار — تُستخرج منه أرقام طلبات أقمشته
-  /// The selected model — its fabric order ids are derived from it.
+  /// الموديل المختار — تُستخرج منه أقمشته عند غياب `ohdId`
+  /// The selected model — its fabrics are derived from it when `ohdId` is absent.
   final CuttingModelItem? model;
 
   /// رقم الفاتورة وسنتها — مفتاح الطلب
@@ -26,9 +28,17 @@ class ModelMovementsTable extends ConsumerWidget {
   final int billNo;
   final int year;
 
-  /// أرقام طلبات صريحة — تتجاوز أرقام الموديل عند العرض على مستوى الفاتورة
-  /// Explicit order ids — they override the model's own when rendering bill-wide.
+  /// القماش المحدد (OHDID) — مصدر السجل وحيد
+  /// The selected fabric (OHDID) — the single source of the log.
+  final int? ohdId;
+
+  /// أرقام طلبات صريحة — تتجاوز الاختيار عند العرض على مستوى الفاتورة
+  /// Explicit order ids — they override the selection when rendering bill-wide.
   final List<int>? ohdIds;
+
+  /// اسم القماش المحدد — يُعرض في العنوان ليعرف المستخدم سجل أي قماش يرى
+  /// The selected fabric's name — shown in the title so the user knows whose log this is.
+  final String? fabricName;
 
   /// عنوان القسم؛ يعود إلى تسمية الموديل عند غيابه
   /// The section title; falls back to the model's label when absent.
@@ -39,33 +49,35 @@ class ModelMovementsTable extends ConsumerWidget {
     required this.model,
     required this.billNo,
     required this.year,
+    this.ohdId,
     this.ohdIds,
+    this.fabricName,
     this.title,
   });
 
-  /// أرقام الطلبات المطلوبة: الصريحة ثم أقمشة الموديل
-  /// The requested order ids: the explicit ones first, then the model's fabrics.
-  List<int> get _orderIds => ohdIds ?? model?.movementOhdIds ?? const <int>[];
-
-  /// عنوان القسم: الصريح ثم الموديل ثم اسم عام
-  /// The section title: explicit, then the model's, then a generic one.
-  String get _title {
-    if (title != null) return title!;
-    final model = this.model;
-    return model == null ? 'سجل الحركة' : 'سجل الحركة — موديل ${model.seqNo}';
+  /// أرقام الطلبات المطلوبة: الصريحة، ثم القماش المحدد، ثم كل أقمشة الموديل
+  /// The requested order ids: the explicit ones, then the selected fabric, then the model's.
+  List<int> get _orderIds {
+    if (ohdIds != null) return ohdIds!;
+    final single = ohdId;
+    if (single != null && single > 0) return [single];
+    return model?.movementOhdIds ?? const <int>[];
   }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final orderIds = _orderIds;
 
+    final sectionTitle = title ??
+        (fabricName == null ? 'سجل الحركة' : 'سجل الحركة — $fabricName');
+
     if (orderIds.isEmpty) {
       return TailoringSectionCard(
-        title: _title,
+        title: sectionTitle,
         icon: Icons.history_rounded,
         accent: AppColors.primaryLight,
         child: Text(
-          'لا توجد أقمشة تحمل رقم طلب لهذا الموديل',
+          'اختر قماشاً من قسم الأقمشة لعرض سجل حركته',
           style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
@@ -82,7 +94,7 @@ class ModelMovementsTable extends ConsumerWidget {
     );
 
     return TailoringSectionCard(
-      title: _title,
+      title: sectionTitle,
       icon: Icons.history_rounded,
       accent: AppColors.primaryLight,
       trailing: async.maybeWhen(
@@ -94,7 +106,7 @@ class ModelMovementsTable extends ConsumerWidget {
       ),
       child: async.when(
         loading: () => const Padding(
-          padding: EdgeInsets.symmetric(vertical: 14),
+          padding: EdgeInsets.symmetric(vertical: 12),
           child: Center(
             child: SizedBox(
               width: 20,
@@ -103,40 +115,26 @@ class ModelMovementsTable extends ConsumerWidget {
             ),
           ),
         ),
-        error: (error, _) => _buildError(context, ref, error),
+        error: (error, _) => _buildError(ref, error),
         data: (rows) => rows.isEmpty
             ? Text(
-                'لا توجد حركات مسجّلة على أقمشة هذا الموديل',
+                'لا توجد حركات مسجّلة على هذا القماش',
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
                   color: AppColors.textSecondary,
                 ),
               )
-            : LayoutBuilder(
-                builder: (ctx, constraints) {
-                  // صف واحد لكل حركة في كل الأحجام — تُقرأ الحركة أفقياً كما يُقرأ كشف حساب
-                  // One row per movement at every size — read horizontally like a ledger line.
-                  const minWidth = 700.0;
-                  final width = constraints.maxWidth < minWidth
-                      ? minWidth
-                      : constraints.maxWidth;
-
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(width: width, child: _buildTable(rows)),
-                  );
-                },
-              ),
+            : _buildRows(rows),
       ),
     );
   }
 
   /// الخطأ لا يترك القسم فارغاً صامتاً — له نصّ وإعادة محاولة
   /// An error never leaves the section silently blank — it gets text and a retry.
-  Widget _buildError(BuildContext context, WidgetRef ref, Object error) {
+  Widget _buildError(WidgetRef ref, Object error) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 6),
       child: Column(
         children: [
           Text(
@@ -150,7 +148,7 @@ class ModelMovementsTable extends ConsumerWidget {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           TextButton.icon(
             onPressed: () => ref.invalidate(
               cuttingMovementsProvider(
@@ -169,81 +167,80 @@ class ModelMovementsTable extends ConsumerWidget {
     );
   }
 
-  /// خمسة أعمدة فقط: الحالة · التاريخ · العدد · المنفذ · ملاحظة
-  /// Five columns only: state · date · quantity · executor · note.
-  Widget _buildTable(List<CuttingMovement> rows) {
-    return Table(
-      border: TableBorder.all(
-        color: AppColors.border,
-        width: 0.7,
-        borderRadius: BorderRadius.circular(8),
+  /// رأس الأعمدة مرة واحدة + صف لكل حركة، بأعمدة مرنة ونصوص كاملة
+  /// One header plus a row per movement, with flex columns and untruncated text.
+  Widget _buildRows(List<CuttingMovement> rows) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.border, width: 0.7),
+        borderRadius: BorderRadius.circular(6),
       ),
-      columnWidths: const {
-        0: FlexColumnWidth(1.6),
-        1: FixedColumnWidth(90),
-        2: FixedColumnWidth(62),
-        3: FlexColumnWidth(1.4),
-        4: FlexColumnWidth(2.4),
-      },
-      children: [
-        TableRow(
-          decoration: const BoxDecoration(color: AppColors.surfaceSubtle),
-          children: [
-            _th('الحالة'),
-            _th('التاريخ'),
-            _th('العدد'),
-            _th('المنفذ'),
-            _th('ملاحظة'),
-          ],
-        ),
-        for (var i = 0; i < rows.length; i++)
-          TableRow(
-            decoration: BoxDecoration(
-              color: i.isEven ? Colors.white : const Color(0xFFFAFBFC),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            color: AppColors.surfaceSubtle,
+            child: _row(
+              cells: const ['الحالة', 'التاريخ', 'العدد', 'المنفذ', 'ملاحظة'],
+              header: true,
             ),
-            children: [
-              _td(rows[i].stageLabel, strong: true),
-              _td(rows[i].dateLabel),
-              _td(rows[i].qtyLabel),
-              _td(rows[i].executorLabel),
-              _td(rows[i].noteLabel),
-            ],
+          ),
+          for (var i = 0; i < rows.length; i++) ...[
+            Container(
+              height: 0.7,
+              color: AppColors.border.withValues(alpha: 0.9),
+            ),
+            Container(
+              color: i.isEven ? AppColors.surface : const Color(0xFFF7F9FB),
+              child: _row(
+                cells: [
+                  rows[i].stageLabel,
+                  rows[i].dateLabel,
+                  rows[i].qtyLabel,
+                  rows[i].executorLabel,
+                  rows[i].noteLabel,
+                ],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// صف بأعمدة مرنة: كل خلية تلتفّ على سطرين عند الحاجة بدل القصّ
+  /// A flex-column row: each cell wraps to two lines when needed instead of being cut.
+  Widget _row({required List<String> cells, bool header = false}) {
+    const flexes = [1.6, 1.2, 0.7, 1.4, 2.6];
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var i = 0; i < cells.length; i++)
+          Expanded(
+            flex: (flexes[i] * 10).round(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Text(
+                cells[i],
+                textAlign: TextAlign.center,
+                softWrap: true,
+                style: header
+                    ? TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textSecondary,
+                      )
+                    : TextStyle(
+                        fontSize: 11,
+                        fontWeight: i == 0 ? FontWeight.w800 : FontWeight.w600,
+                        color: AppColors.textPrimary,
+                      ),
+              ),
+            ),
           ),
       ],
-    );
-  }
-
-  Widget _th(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textSecondary,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
-  }
-
-  Widget _td(String text, {bool strong = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 11.5,
-          fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-          color: AppColors.textPrimary,
-        ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-      ),
     );
   }
 }

@@ -1699,3 +1699,19 @@ L8 الخصرة · L9 طول الجبزور · L10 طول الكبك · **L11 و
 بـ `SHAPE_STYLE_NO` لا يُضاعف الصفوف.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 02:12 · **لا DDL** · **لا DML** (قراءة فقط عبر oracledb MCP) · اتصال التطبيق المحلي ما زال `ORA-12514`.
+
+
+---
+
+## 2026-10-31 06:12 — مفتاح سجل حركة الأقمشة: `OHDID` في الـ VIEW و`CUTING_TRANSD`
+
+- `ACCOUNTS.CUTTING_SALES_BILL_VIEW` تحمل `OHDID` و`OHID` إلى جانب `SEQ_NO` و`SEQ_NO1`؛
+  صف نموذجي: `bill_no=6, year=2026, seq_no=60373, seq_no1=92456, ohdid=262133`.
+- `ACCOUNTS.CUTING_TRANSD` مفتاحها التشغيلي `OHDID`، وأعمدتها: `DDATE, ORDSID, DEPTID,
+  DETAILE, QTY, PQTY, SQTY, POST, CANCEL, CREATED_BY_NAME, OHDID, SEQ_NO`.
+- قياس: القطعة `ohdid=262133` لها **9** صفوف حركة، و`CREATED_BY_NAME` فيها `null` مع `DEPTID`
+  (12/21/22) — لذلك «المنفذ» يُقرأ من اسم القسم ثم رقمه.
+- الأثر: مسار الحركة يقبل `ohd_ids` ويرشّح `ct.OHDID IN (...)` بدل `ct.SEQ_NO`، والتفصيل
+  يعيد `ohdid` مع كل قطعة ليكون مفتاح السجل في العميل.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 06:12 · **لا DDL** · **لا DML** (قراءة فقط).

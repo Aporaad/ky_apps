@@ -57,6 +57,10 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
   /// The selected model — zero means the first.
   int _selectedModel = 0;
 
+  /// القماش المختار (OHDID) — سجل الحركة يخصّ القماش لا الموديل
+  /// The selected fabric (OHDID) — the movement log belongs to the fabric, not the model.
+  int? _selectedFabricOhd;
+
   /// منع الضغط المزدوج على أزرار الطباعة أثناء بناء الملف
   /// Guards against a double press on the print buttons while the file is built.
   bool _busy = false;
@@ -248,6 +252,16 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
         : _selectedModel.clamp(0, detail.models.length - 1);
     final model = detail.models.isEmpty ? null : detail.models[modelIndex];
 
+    // القماش المختار: يبقى ما دام ضمن الموديل، وإلا يُعرض أول قماش بدل سجل فارغ
+    // The selected fabric: kept while it belongs to the model, otherwise the first fabric is
+    // shown instead of an empty log.
+    final selectedFabric = model == null || model.pieces.isEmpty
+        ? null
+        : model.pieces.firstWhere(
+            (p) => p.ohdId != null && p.ohdId == _selectedFabricOhd,
+            orElse: () => model.pieces.first,
+          );
+
     // ── الأقسام كما تُعرض، ثم تُرتَّب حسب العرض المتاح ───────────────────────
     // The sections as they are rendered, then laid out according to the width on offer.
 
@@ -272,9 +286,38 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
       child: ModelSelectorStrip(
         models: detail.models,
         selectedIndex: modelIndex,
-        onSelected: (i) => setState(() => _selectedModel = i),
+        // تغيير الموديل يعيد اختيار القماش إلى أوله
+        // Switching the model resets the fabric choice to its first fabric.
+        onSelected: (i) => setState(() {
+          _selectedModel = i;
+          _selectedFabricOhd = null;
+        }),
       ),
     );
+
+    // 7 · الأقمشة — قائمة قابلة للتحديد (الاختيار يقود سجل الحركة)
+    // The fabrics — a selectable list (the choice drives the movement log).
+    final fabricsCard = model == null
+        ? null
+        : ModelFabricsTable(
+            model: model,
+            selectedOhdId: selectedFabric?.ohdId,
+            onSelected: (id) => setState(() => _selectedFabricOhd = id),
+          );
+
+    // 8 · سجل حركة القماش المختار فقط
+    // The selected fabric's movement log only.
+    final movementsCard = model == null
+        ? null
+        : ModelMovementsTable(
+            model: model,
+            billNo: detail.header.billNo,
+            year: detail.header.year,
+            ohdId: selectedFabric?.ohdId,
+            fabricName: selectedFabric == null
+                ? null
+                : '${selectedFabric.clothName ?? 'قماش'} · ${selectedFabric.ohdId ?? '—'}',
+          );
 
     return ReportZoomView(
       child: SingleChildScrollView(
@@ -306,13 +349,9 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
                     gap,
                     ModelSpecsPanel(model: model),
                     gap,
-                    ModelFabricsTable(model: model),
+                    fabricsCard!,
                     gap,
-                    ModelMovementsTable(
-                      model: model,
-                      billNo: detail.header.billNo,
-                      year: detail.header.year,
-                    ),
+                    movementsCard!,
                   ],
                 ],
               );
@@ -349,13 +388,9 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
                     ],
                   ),
                   gap,
-                  ModelFabricsTable(model: model),
+                  fabricsCard!,
                   gap,
-                  ModelMovementsTable(
-                    model: model,
-                    billNo: detail.header.billNo,
-                    year: detail.header.year,
-                  ),
+                  movementsCard!,
                 ],
               ],
             );

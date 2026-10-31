@@ -16,6 +16,10 @@ class CuttingPieceItem {
   /// The fabric order id (OHDID) — the key of this fabric's movement log in the legacy system.
   final int? ohdId;
 
+  /// عرض القماش بالأرقام (58 / 45 / 38) — يُقرأ من `MULTI_CLOTHS` لا من `CLOTH_TYPE`
+  /// The numeric cloth width (58 / 45 / 38) — read from MULTI_CLOTHS, not from CLOTH_TYPE.
+  final String? clothWidth;
+
   final int? sanfNo;
   final int? sanfDno;
 
@@ -57,6 +61,7 @@ class CuttingPieceItem {
   const CuttingPieceItem({
     required this.seqNo1,
     this.ohdId,
+    this.clothWidth,
     this.sanfNo,
     this.sanfDno,
     this.clothName,
@@ -88,6 +93,7 @@ class CuttingPieceItem {
     return CuttingPieceItem(
       seqNo1: tailoringInt(json, 'seq_no1') ?? 0,
       ohdId: tailoringInt(json, 'ohdid'),
+      clothWidth: tailoringPlainText(json, 'cloth_width'),
       sanfNo: tailoringInt(json, 'sanf_no'),
       sanfDno: tailoringInt(json, 'sanf_dno'),
       clothName: tailoringText(json, 'cloth_name'),

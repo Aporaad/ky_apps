@@ -2452,3 +2452,63 @@ SELECT * FROM (
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 02:12 · **DDL:** لا · **DML:** لا (قراءة فقط) ·
 **الأداة:** موصل `oracledb` MCP.
+
+
+---
+
+## 2026-10-31 06:12 — استعلامات تشخيص OHDID (قراءة فقط)
+
+```sql
+-- أعمدة الـ VIEW التي تخصّ الطلب/التسلسل
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='CUTTING_SALES_BILL_VIEW'
+   AND (COLUMN_NAME LIKE '%OH%' OR COLUMN_NAME LIKE '%SEQ%');
+-- OHID, OHDID, SEQ_NO, SEQ_NO1, ORDSDID
+
+-- أعمدة سجل الحركة
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='CUTING_TRANSD';
+-- يتضمن OHDID وOHID وSEQ_NO وDEPTID وCREATED_BY_NAME
+
+-- قطعة نموذجية ورقم طلبها
+SELECT BILL_NO, YEAR, SEQ_NO, SEQ_NO1, OHDID
+  FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW WHERE ROWNUM <= 1;
+-- ohdid = 262133
+
+-- عدد حركات ذلك القماش
+SELECT COUNT(*) FROM ACCOUNTS.CUTING_TRANSD WHERE OHDID = 262133;   -- 9
+
+-- أعمدة الأقسام (لقراءة «المنفذ»)
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='DEPTS';
+-- DEPTID, DEPTNAME, DEPTTYPE, ACTIVE, PARANT
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 06:12 · **DDL:** لا · **DML:** لا.
+
+
+---
+
+## 2026-10-31 09:38 — اكتشاف عمود عرض القماش في `MULTI_CLOTHS` (قراءة فقط)
+
+```sql
+-- يُنفَّذ مرة واحدة لكل طلب ويُخزَّن ناتجه (static) داخل المتحكم
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = 'MULTI_CLOTHS';
+-- يُختار أول اسم موجود من: CLOTH_WIDTH, WIDTH, CLOTH_W, W, CLOTH_SIZE
+```
+
+```sql
+-- الربط الذي يُضاف إلى استعلام التفصيل عند وجود العمود
+... LEFT JOIN ACCOUNTS.MULTI_CLOTHS m
+           ON m.BILL_NO  = v.BILL_NO
+          AND m.YEAR     = v.YEAR
+          AND m.SEQ_NO   = v.SEQ_NO
+          AND m.SEQ_NO1  = v.SEQ_NO1
+-- ويُقرأ: m.<COLUMN> AS CLOTH_WIDTH، أو CAST(NULL AS VARCHAR2(20)) عند غياب العمود
+```
+
+**ملاحظة:** خدمة Oracle كانت غير متاحة أثناء هذه الجولة (`ORA-12514` عند
+`localhost:1521/ORCLRD`)، فلم يُنفَّذ الاستعلام حياً هنا؛ يعمل تلقائياً عند عودة الخدمة.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 09:38 · **DDL:** لا · **DML:** لا.

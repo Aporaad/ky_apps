@@ -130,9 +130,10 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
                   ),
                   Text(
                     widget.mode.subtitle,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textMuted,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textSecondary,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -171,10 +172,14 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
             controller: _searchCtrl,
             onChanged: (q) =>
                 ref.read(cuttingBillsListProvider.notifier).search(q),
-            style: const TextStyle(fontSize: 14),
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
             decoration: InputDecoration(
               hintText: 'رقم الفاتورة / الرقم اليدوي / العميل / الهاتف / المستفيد',
-              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+              hintStyle: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
               prefixIcon: const Icon(Icons.search_rounded, size: 20),
               suffixIcon: _searchCtrl.text.isEmpty
                   ? null
@@ -209,7 +214,7 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
               OutlinedButton.icon(
                 onPressed: _openRangeSheet,
                 icon: const Icon(Icons.date_range_rounded, size: 16),
-                label: const Text('فلترة بالتاريخ', style: TextStyle(fontSize: 11.5)),
+                label: Text('فلترة بالتاريخ', style: TextStyle(fontSize: 11.5)),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: state.hasRange
                       ? AppColors.primary
@@ -234,13 +239,19 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
                 ),
               ] else
                 const Spacer(),
+              // عدّاد النتائج في سطر الفلترة نفسه: لا سطر إضافي يستهلك ارتفاعاً
+              // The result count lives on the filter line itself: no extra row eating height.
               if (!state.isLoading && state.error == null)
                 Text(
                   '${state.total} فاتورة',
-                  style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textSecondary,
+                  ),
                 ),
             ],
-          ),          
+          ),
         ],
       ),
     );
@@ -319,7 +330,7 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
               ElevatedButton.icon(
                 onPressed: () => ref.read(cuttingBillsListProvider.notifier).refresh(),
                 icon: const Icon(Icons.refresh_rounded),
-                label: const Text('إعادة المحاولة'),
+                label: Text('إعادة المحاولة'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
@@ -337,9 +348,11 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
       onRefresh: () => ref.read(cuttingBillsListProvider.notifier).refresh(),
       child: ListView.separated(
         controller: _scrollCtrl,
-        padding: const EdgeInsets.all(16),
+        // بطاقات مفصولة بمساحة: القائمة تتنفّس كما في قائمة عملاء المقاسات
+        // Cards separated by spacing: the list breathes exactly like the measurements customers list.
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 16),
         itemCount: state.items.length + (state.hasMore ? 1 : 0),
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
         itemBuilder: (_, index) {
           if (index >= state.items.length) return _buildLoadMoreRow(state);
           final bill = state.items[index];
@@ -362,7 +375,7 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
             : TextButton(
                 onPressed: () =>
                     ref.read(cuttingBillsListProvider.notifier).loadMore(),
-                child: const Text('تحميل المزيد', style: TextStyle(fontSize: 12)),
+                child: Text('تحميل المزيد', style: TextStyle(fontSize: 12)),
               ),
       ),
     );
@@ -420,7 +433,7 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
                   ref.read(cuttingBillsListProvider.notifier).clearFilters();
                 },
                 icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
-                label: const Text('مسح البحث والفلتر'),
+                label: Text('مسح البحث والفلتر'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   side: const BorderSide(color: AppColors.border),
@@ -556,7 +569,7 @@ class _RangeSheetState extends State<_RangeSheet> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).pop(null),
-                  child: const Text('إلغاء'),
+                  child: Text('إلغاء'),
                 ),
               ),
               const SizedBox(width: 10),
@@ -577,7 +590,7 @@ class _RangeSheetState extends State<_RangeSheet> {
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
                   ),
-                  child: const Text('تطبيق'),
+                  child: Text('تطبيق'),
                 ),
               ),
             ],

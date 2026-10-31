@@ -3854,3 +3854,179 @@ signal 3 (SIGQUIT) → tombstoned
 - `php -l app/Support/AppConfig.php` نظيف · `pint --dirty` = **passed**.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 05:17 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-31 06:12 — التفصيل: إعادة تنسيق قائمة الفواتير وتقوية التباين وتفكيك التمرير الأفقي
+
+### العميل (Flutter)
+
+- `widgets/bill_list_tile.dart` — أُعيد بناؤه: سطر هوية (شارة «رقم / سنة» بوزن 800 · اسم
+  العميل 14/800 · شارة الحالة)، فاصل 0.9 بكسل، ثم `TailoringInfoGrid(singleRow: true)` بخانات
+  (التاريخ · الهاتف · الرقم اليدوي · الموديلات · القطع · الصافي). أُزيلت العبارات الملتصقة
+  مثل «يدوي 778» و«2 موديل · 3 قطعة».
+- `screens/cutting_bills_list_screen.dart` — سطر نطاق جديد فوق البحث (أيقونة معلومات + نصّ
+  الحدّ + شارة عدد النتائج)، وتلميحات وعناوين بتباين أعلى (11.5–12 بوزن 600)، وحشو القائمة
+  12 ومسافة 8 بين البطاقات، وإزالة عدّاد مكرّر من سطر الفلترة.
+- `widgets/tailoring_section_card.dart` — خيار `titleTrailing` (عنصر ملتصق بالعنوان)، والعنوان
+  داخل `Expanded(Row(Flexible(title), Flexible(titleTrailing)))` فلا تجاوز على أي عرض؛
+  والقيمة 13/800 والتسمية 10.5/700، وإطار الشبكة والفواصل 0.9 بلون الحدّ الكامل.
+- `widgets/bill_customer_card.dart` — الاسم عبر `titleTrailing` بجانب عنوان القسم مباشرةً.
+- `widgets/bill_header_card.dart` — الحقول في صفّين عبر `rows: 2`.
+- `widgets/model_fabrics_table.dart` — أُعيد بناؤه: عشرة أعمدة مرنة تناسب العرض المتاح (بلا
+  `SingleChildScrollView` أفقي)، عمود «رقم الطلب» = `ohdid`، حذف «#» والرف والمصدر، وسطران
+  لكل قماش (بيانات القياس في الأول، القصّاص/الخيّاط/المرحلة في الثاني).
+- `widgets/model_movements_table.dart` — أُزيل التمرير الأفقي وضُبطت أعمدة مرنة، وجدول
+  بخمسة أعمدة (الحالة · التاريخ · العدد · المنفذ · ملاحظة).
+
+### الاختبارات المحدَّثة
+
+- `cutting_bills_list_screen_test.dart`: العدّادات خانتان («الموديلات» و«القطع»)، والرقم اليدوي
+  تسمية + قيمة.
+- `cutting_bill_view_screen_test.dart`: أربع خانات لبيانات الفاتورة في صفّين (قياس ارتفاع أقل
+  من 860 بكسل)، وعمود المستفيد برأس واحد.
+
+### النتيجة
+
+54 اختبار تفصيل ناجح · 470 في الحزمة الكاملة (10 متجاوزة) · `flutter analyze lib` بلا ملاحظات ·
+Pest `Tailoring` 11/229 · pint PASS.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 06:12 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-31 06:43 — التفصيل: قائمة صفوف مدمجة، أقمشة قابلة للتحديد، وسجل لكل قماش
+
+### ما رُفض وأُعيد بناؤه
+
+رفض المستخدم بطاقات القائمة السابقة (سطر هوية + شبكة حقول) لأنها بدت جدولاً وتستهلك ارتفاعاً،
+ورفض جدول الأقمشة/الحركة ذا التمرير. فأُعيد البناء كالتالي:
+
+- `widgets/bill_list_tile.dart` — صف قائمة واحد: شارة «رقم / سنة» · اسم العميل (مرن) ·
+  التاريخ · الصافي (عرض 74) · نقطة حالة + نصّها. بلا إطار ولا بطاقة.
+- `screens/cutting_bills_list_screen.dart` — `ListView.separated` بحشو صفر وفاصل 0.7،
+  وحذف `_scopeLine`، وإعادة عدّاد النتائج إلى سطر الفلترة.
+- `widgets/model_fabrics_table.dart` — قائمة كتل قابلة للتحديد: سطر عنوان + سطرَي حقول
+  (`Wrap` من «تسمية: قيمة») بلا `Table` وبلا `SingleChildScrollView`؛ تُبلّغ عن الاختيار
+  عبر `onSelected(ohdId)` وتُبرز المختار.
+- `widgets/model_movements_table.dart` — `ohdId` واحد للقماش المختار (أو `ohdIds` لعرض على
+  مستوى الفاتورة)، توصيف خمسة أعمدة في صفوف `Row` مرنة ونصوص ملتفّة، ورسالة «اختر قماشاً…»
+  عند غياب الاختيار، وعنوان يذكر اسم القماش ورقمه.
+- `screens/cutting_bill_view_screen.dart` — حالة جديدة `_selectedFabricOhd` تُصفَّر عند تغيير
+  الموديل وتُغذّي بطاقتَي الأقمشة والحركة، والافتراضي أول قماش في الموديل.
+
+### الاختبارات
+
+- جديد: «choosing a fabric switches the movement log to that fabric» — السجل يبدأ بصوف ثم
+  يتحوّل إلى قطن عند اختيار القماش الثاني.
+- محدَّث: قائمة الفواتير تُتحقَّق من الحقول الجديدة (التاريخ/الصافي/الحالة) بدل العدّادات،
+  وعنوان سجل الحركة صار يُطابق بـ`textContaining('سجل الحركة —')`.
+- النتيجة: 55 اختبار تفصيل · 471 في الحزمة الكاملة · `flutter analyze lib` بلا ملاحظات.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 06:43 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-31 07:15 — التفصيل: محاكاة شكل شاشات المقاسات في القائمة والأقمشة والمقاسات
+
+### لماذا
+
+رُفض التصميمان السابقان (صفوف قائمة مضغوطة، وجدول أقمشة عشرة أعمدة) لأنهما بدَوا جدولاً ضيقاً
+بلا معلومات. المرجع المطلوب صار شاشات «مقاسات العملاء» الموجودة في المشروع.
+
+### ما نُفِّذ
+
+- `widgets/bill_list_tile.dart` — أُعيد بناؤه على هيئة `MeasurementCustomerTile`: `Material` +
+  `InkWell` + حدود 11 + شريط لوني 4px + مربّع رقم/سنة + اسم العميل + سطر بيانات
+  (تاريخ/هاتف/يدوي) + عمود شارات (`N موديل`, `N قطعة`) + الصافي + نقطة حالة + سهم.
+- `screens/cutting_bills_list_screen.dart` — `ListView.separated` بحشو `12/10/12/16` وفاصل 8
+  بدل الصفوف الممتدة الحواف.
+- `presentation/widgets/tailoring_cells.dart` (جديد) — `TailoringCell` (تسمية 9.5/700 وقيمة
+  13/900 مع `FittedBox`)، `TailoringCellRow` بأوزان وخطوط، `TailoringCellGrid` بأعمدة متساوية
+  وصفوف مفصولة، و`tailoringGridRule` كقاعدة الطقم.
+- `widgets/model_fabrics_table.dart` — بطاقة لكل قماش كـ`MeasurementFabricsPanel`: سطر أول
+  بأوزان `[2.4, 2.2, 1.3, 1.3, 0.9, 1.0, 1.3]` وخلفية ملوّنة، خط 1.2، ثم سطر
+  (القصّاص · الخيّاط · المرحلة) بأوزان `[2.4, 2.4, 1.6]`؛ التحديد يلوّن البطاقة ويُبرزها.
+- `widgets/model_measurements_grid.dart` — عنوان «تفاصيل المقاسات — موديل N» وشبكة
+  `TailoringCellGrid(minCellWidth: 88)` بخانات رقمية، مع مفتاح «إظهار الكل».
+- اختبارات: عنوان المقاسات صار «تفاصيل المقاسات — …»، واختيار القماش يتم بالنقر على اسمه
+  («قطن») في بطاقته، وبطاقة الفاتورة تُتحقَّق من الرقم والعدّادين.
+
+### النتيجة
+
+55 اختبار تفصيل · 471 في الحزمة الكاملة (10 متجاوزة) · `flutter analyze lib` بلا ملاحظات.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 07:15 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-10-31 09:38 — التفصيل: عرض القماش من `MULTI_CLOTHS` بدل كلمة النوع
+
+- كان `العرض` يُملأ من `CLOTH_TYPE` (عرضية/عادية) لأن الواجهة لا تحمل رقماً، والمطلوب رقم
+  القماش الحقيقي (58/45/38).
+- `TailoringController`: ثابتان جديدان (`TABLE_MULTI_CLOTHS`, `CLOTH_WIDTH_CANDIDATES`)،
+  ودالة `clothWidthColumn()` تكتشف العمود مرة واحدة من `ALL_TAB_COLUMNS` بـ`try/catch`،
+  و`detailSql()` تبني `LEFT JOIN` و`SELECT … AS CLOTH_WIDTH` شرطياً، و`pieceRow` تُضيف
+  `cloth_width`.
+- `cutting_piece_item.dart`: حقل `clothWidth` يُقرأ بـ`tailoringPlainText(json,'cloth_width')`.
+- `model_fabrics_table.dart`: خلية «العرض» تستخدم `piece.clothWidth` (رقم) وتترك `—` عند غيابه.
+- الاختبارات: عنوان قسم الأقمشة صار يُطابَق بـ`textContaining('الأقمشة —')` لأن المستخدم أضاف
+  اسم النوع إلى العنوان.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 09:38 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 00:20 — iOS: أول تهيئة للمنصة — معرّف الحزمة، ATS، الأذونات، الأيقونة، وبناء سحابي غير موقَّع
+
+- **المشكلة الجذرية:** بناء iOS وتوقيعه يتطلبان macOS + Xcode، وجهاز التطوير Windows ولا يملك
+  Mac ولا حساب Apple Developer. الحل المُعتمد: فصل البناء عن التوقيع — بناء سحابي على
+  **Codemagic** (خطة مجانية: 500 دقيقة Mac mini M2 شهرياً) يُنتج **IPA غير موقَّع**، ثم توقيع
+  وتثبيت محليان على ويندوز عبر **Sideloadly** بحساب **Apple ID مجاني** (شهادة تطوير + profile
+  صالح **7 أيام**، 3 تطبيقات كحد أقصى، بلا TestFlight).
+- **`ios/Runner/Info.plist`:** أُضيفت ثلاث كتل — `NSAppTransportSecurity`
+  (`NSAllowsArbitraryLoads` + `NSAllowsLocalNetworking`) لأن `ApiConstants.defaultBaseUrl`
+  يبدأ بـ`http://` ويُعدَّل وقت التشغيل، وATS يحجب كل طلب بصمت؛ `NSPhotoLibraryUsageDescription`
+  لأن `app_config_repository.pickAndSaveLogo()` يستدعي `ImagePicker.pickImage(source: gallery)`
+  وiOS يُنهي التطبيق بلا هذا المفتاح؛ `NSLocalNetworkUsageDescription` لطلب إذن iOS 14+
+  عند الاتصال بعنوان خاص. وتغيّر `CFBundleDisplayName` من `Ky Apps` إلى `الكبودي`
+  لمطابقة `android:label`.
+- **`ios/Runner.xcodeproj/project.pbxproj`:** `PRODUCT_BUNDLE_IDENTIFIER` من
+  `com.example.kyApps` (قالب Flutter) إلى **`com.alkaboudy.app`** في الإعدادات الثلاث
+  Debug/Profile/Release، ومثله لهدف `RunnerTests` → `com.alkaboudy.app.RunnerTests`.
+  و`IPHONEOS_DEPLOYMENT_TARGET` من 12.0 إلى **13.0** في المواضع الثلاثة (تحقّق من podspec
+  كل الحزم: أعلى حد أدنى مطلوب هو 12.0، فـ13.0 لا يكسر شيئاً ويمنع رفض Xcode الحديث).
+- **`ios/Podfile` (جديد):** لم يكن موجوداً أصلاً (يُولَّده Flutter عند أول build على macOS).
+  حُفظ في git بـ`platform :ios, '13.0'` و`use_frameworks!` + `use_modular_headers!` وبلوك
+  `post_install` يفرض `IPHONEOS_DEPLOYMENT_TARGET = 13.0` على كل Pod، ليكون البناء السحابي
+  حتمياً بدل الاعتماد على قالب متغير.
+- **الأيقونة:** كانت `AppIcon.appiconset/Icon-App-1024x1024@1x.png` شعار **Flutter** الأزرق
+  (تأكيد بصري). أُنشئ `tools/ios_icons.py` (Pillow) الذي يقصّ الشفافية المحيطة بـ
+  `assets/logo1.png` (3000×3000 RGBA)، ويوسّط الشعار على خلفية بيضاء بحشوة 8%، ويُصدّر
+  **15** مقاساً بنمط **RGB** (بلا قناة alpha — شرط iOS)، بأسماء وقياسات مطابقة تماماً لـ
+  `Contents.json` القائم (لم يُعدَّل).
+- **`codemagic.yaml` (جديد):** workflow `ios-unsigned` على `mac_mini_m2`، مثبّت بـ
+  `flutter: 3.29.3` و`xcode: "16.2"` (مطابقة الأدوات المحلية)، و`clone: submodules: false`
+  (بناء iOS لا يحتاج `kyApp_API/` فيُوفَّر وقت ويُجتنَب فشل `node_modules/vendor`).
+  الخطوات: `pub get` → `flutter analyze` → `pod install` →
+  `flutter build ios --release --no-codesign` → تغليف يدوي
+  (`Payload/Runner.app` ثم `zip -qry` للحفاظ على symlinks داخل Frameworks).
+  Artifacts: الـIPA + `Runner.app.dSYM` + سجلات xcodebuild. **لا publishing ولا secrets.**
+  ملاحظة: لم يُشغَّل `flutter test` داخل CI عن قصد لأن بعض الاختبارات تعتمد على عنوان API
+  على الشبكة المحلية وتفشل في بيئة معزولة؛ البوابة تبقى محلية قبل الدفع.
+- **`ios_release_guide.md` (جديد، 9 أجزاء):** نظير دليل أندرويد — مقارنة المنصتين، شرح
+  الشهادة والـprofile والـUDID، حدود الحساب المجاني، خطوات الإصدار والتثبيت، شرط الشبكة
+  وتفسير ATS، قائمة تجربة من 13 بنداً، جدول تشخيص (iTunes المخزني، Developer Mode، الثقة،
+  3 تطبيقات، 10 App IDs، توافق Xcode)، وخطة الترقية إلى حساب 99$ مع الحفاظ على نفس Bundle ID.
+- **لم يُمسّ:** `lib/` و`android/` و`kyApp_API/` و`pubspec.yaml` (الإصدار يبقى `1.1.0+2`
+  لأول بناء iOS — لا تعارض بين المنصتين ولا حاجة لزيادة رقم البناء).
+- **التحقق:** `flutter analyze` = No issues found! · فحص YAML يمرّ ويُظهر 5 خطوات و3 artifacts ·
+  الأيقونات الـ15 كلها مربّعة وRGB.
+- **غير متحقَّق حتى الآن:** أول بناء فعلي على Codemagic يحتاج ربط المستودع بحساب Codemagic
+  ودفع `main` — ثم تُسجَّل الزمن والأخطاء الحقيقية في إدخال لاحق.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 00:20 · **لا commit** (لم يُطلب).

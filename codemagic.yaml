@@ -1,0 +1,87 @@
+# بناء IPA لـ iOS بلا توقيع — يُنفَّذ على Codemagic (macOS سحابي، 500 دقيقة مجانية شهرياً)
+# Unsigned iOS IPA build for Codemagic (cloud macOS, 500 free minutes per month).
+#
+# لماذا بلا توقيع؟ لأن التوقيع والتثبيت يجريان محلياً على ويندوز عبر Sideloadly بحساب
+# Apple ID مجاني (7 أيام لكل توقيع). النتيجة: لا شهادة ولا كلمة سر Apple تُرفع لهذه
+# الخدمة السحابية إطلاقاً. التفاصيل الكاملة في ios_release_guide.md.
+#
+# Why unsigned? Signing and installation happen locally on Windows through Sideloadly
+# with a free Apple ID (7-day profile). Result: no certificate and no Apple password is
+# ever uploaded to this cloud service. Full details in ios_release_guide.md.
+#
+# الاستعمال: اربط مستودع GitHub في Codemagic ثم Start new build ← workflow: ios-unsigned
+# Usage: connect the GitHub repo in Codemagic, then Start new build -> ios-unsigned.
+
+workflows:
+  ios-unsigned:
+    name: iOS unsigned IPA (Sideloadly-ready)
+    instance_type: mac_mini_m2
+    max_build_duration: 60
+
+    # لا نجلِب المستودع الفرعي kyApp_API: بناء iOS لا يحتاجه، وتخطّيه يوفّر دقائق
+    # ويجنّب فشلاً بسبب node_modules/vendor.
+    # Skip the kyApp_API submodule: the iOS build never needs it, and skipping saves
+    # minutes plus a possible failure caused by node_modules/vendor.
+    clone:
+      submodules: false
+
+    environment:
+      # إصدارات مثبّتة صراحةً لمطابقة أدوات التطوير المحلية (Flutter 3.29.3 / Dart 3.7.2).
+      # إن رفضت الخدمة توفر Xcode 16.2 فاستبدل القيمة بأحدث إصدار متاح في
+      # Codemagic ← Settings، أو ارفع Flutter إلى أحدث stable (ios_release_guide.md §7).
+      # Pinned explicitly to match the local toolchain. If Xcode 16.2 is not offered,
+      # pick the newest available version, or upgrade Flutter (ios_release_guide.md §7).
+      flutter: 3.29.3
+      xcode: "16.2"
+      cocoapods: default
+      vars:
+        BUNDLE_ID: com.alkaboudy.app
+
+    cache:
+      cache_paths:
+        - $HOME/Library/Caches/CocoaPods
+        - $HOME/.pub-cache
+
+    scripts:
+      - name: Get packages (تحميل الحزم)
+        script: flutter pub get
+
+      - name: Analyze (بوابة الجودة)
+        # الاختبارات الكاملة تُشغَّل محلياً قبل الدفع (بعضها يعتمد على عنوان API على
+        # الشبكة المحلية ولا يصلح داخل بيئة سحابية معزولة).
+        # The full test suite runs locally before pushing (some tests depend on the LAN
+        # API address and cannot pass inside an isolated cloud environment).
+        script: flutter analyze
+
+      - name: CocoaPods install
+        script: |
+          cd ios
+          pod install
+
+      - name: Build device app without signing (بناء بلا توقيع)
+        script: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA (تغليف الملف)
+        script: |
+          set -e
+          VERSION=$(grep -E '^version:' pubspec.yaml | cut -d' ' -f2)
+          cd build/ios/iphoneos
+          # Payload/*.ipa هو الشكل الوحيد الذي يقبله Sideloadly.
+          # Payload/*.ipa is the only layout Sideloadly accepts.
+          rm -rf Payload
+          mkdir -p Payload
+          cp -R Runner.app Payload/Runner.app
+          # الخيار -qry يحفظ الروابط الرمزية داخل Frameworks — بدونها يرفض الموقّع الملف.
+          # -qry preserves symlinks inside Frameworks — signing fails without it.
+          zip -qry "ky-apps-${VERSION}-unsigned.ipa" Payload
+          ls -lh "ky-apps-${VERSION}-unsigned.ipa"
+
+    artifacts:
+      # ملف التثبيت + رموز التفكيك (لازمة لقراءة أي crash على الجهاز).
+      # The installable file plus dSYMs (required to symbolicate any on-device crash).
+      - build/ios/iphoneos/*.ipa
+      - build/ios/iphoneos/Runner.app.dSYM
+      - /tmp/xcodebuild_logs/*.log
+
+    # لا خطوة publishing: التوزيع يدوي عبر Sideloadly من جهاز ويندوز.
+    # No publishing step: distribution is manual through Sideloadly on Windows.

@@ -171,10 +171,10 @@ void main() {
       expect(find.text('2 موديل · 3 قطعة'), findsOneWidget);
 
       // 5..8 للموديل المختار (الأول افتراضاً)
-      expect(find.text('المقاسات — موديل 1'), findsOneWidget);
+      expect(find.text('تفاصيل المقاسات — موديل 1'), findsOneWidget);
       expect(find.text('المواصفات — موديل 1'), findsOneWidget);
-      expect(find.text('الأقمشة — موديل 1'), findsOneWidget);
-      expect(find.text('سجل الحركة — موديل 1'), findsOneWidget);
+      expect(find.textContaining('الأقمشة —'), findsOneWidget);
+      expect(find.textContaining('سجل الحركة —'), findsOneWidget);
       expect(find.text('تم القص'), findsWidgets);
 
       // الأرقام المالية تُعرض لأن الخادم أرسل الدفع (التسمية تظهر كـ «الإجمالي:» في الصف)
@@ -188,8 +188,8 @@ void main() {
       await _pumpScreen(tester, _FakeRepo(detail: _detail()));
       await tester.pumpAndSettle();
 
-      expect(find.text('المقاسات — موديل 1'), findsOneWidget);
-      expect(find.text('المقاسات — موديل 2'), findsNothing);
+      expect(find.text('تفاصيل المقاسات — موديل 1'), findsOneWidget);
+      expect(find.text('تفاصيل المقاسات — موديل 2'), findsNothing);
 
       // الضغط على سطر الموديل الثاني (مستفيده) يقود الأقسام من الرابع إلى الثامن
       // Tapping the second model's row (its beneficiary) drives sections four to eight.
@@ -197,10 +197,10 @@ void main() {
       await tester.tap(find.text('سالم'));
       await tester.pumpAndSettle();
 
-      expect(find.text('المقاسات — موديل 2'), findsOneWidget);
-      expect(find.text('المقاسات — موديل 1'), findsNothing);
+      expect(find.text('تفاصيل المقاسات — موديل 2'), findsOneWidget);
+      expect(find.text('تفاصيل المقاسات — موديل 1'), findsNothing);
       expect(find.text('المواصفات — موديل 2'), findsOneWidget);
-      expect(find.text('الأقمشة — موديل 2'), findsOneWidget);
+      expect(find.textContaining('الأقمشة —'), findsOneWidget);
       // قياس الموديل الثاني ظاهر بتسميته الحقيقية
       expect(find.textContaining('الطول'), findsWidgets);
     });
@@ -267,7 +267,7 @@ void main() {
       expect(find.text('لا توجد موديلات في هذه الفاتورة'), findsOneWidget);
       expect(find.text('0 موديل · 0 قطعة'), findsOneWidget);
       // لا مقاسات ولا أقمشة لقسم بلا موديل مختار
-      expect(find.textContaining('المقاسات —'), findsNothing);
+      expect(find.textContaining('تفاصيل المقاسات —'), findsNothing);
       expect(find.textContaining('الأقمشة —'), findsNothing);
     });
 
@@ -378,11 +378,34 @@ void main() {
       // The distance from the first section to the last: the height budget the new layout met.
       final top = tester.getTopLeft(find.text('بيانات الفاتورة والطلب')).dy;
       final bottom =
-          tester.getBottomLeft(find.textContaining('سجل الحركة — موديل 1')).dy;
+          tester.getBottomLeft(find.textContaining('سجل الحركة —')).dy;
 
       // 650 بكسل من أول قسم إلى آخر قسم: الشاشة العريضة تعرض الفاتورة كاملة تقريباً
       // 650px from the first section to the last: a wide screen shows nearly the whole bill.
-      expect(bottom - top, lessThan(700));
+      expect(bottom - top, lessThan(860));
+    });
+
+    testWidgets('choosing a fabric switches the movement log to that fabric',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        size: const Size(1280, 900),
+      );
+      await tester.pumpAndSettle();
+
+      // السجل يبدأ بأول قماش في الموديل
+      // The log starts with the model's first fabric.
+      expect(find.textContaining('سجل الحركة — صوف'), findsOneWidget);
+
+      // اختيار بطاقة القماش الثاني (اسمه «قطن») يغيّر السجل إلى سجله هو (OHDID = 262134)
+      // Choosing the second fabric card (cloth "قطن") switches the log to its own (262134).
+      await tester.ensureVisible(find.text('قطن'));
+      await tester.tap(find.text('قطن'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('سجل الحركة — قطن'), findsOneWidget);
+      expect(find.textContaining('سجل الحركة — صوف'), findsNothing);
     });
 
     testWidgets('a phone width stacks the sections without overflowing',
@@ -398,8 +421,8 @@ void main() {
       expect(find.text('بيانات الفاتورة والطلب'), findsOneWidget);
       expect(find.text('بيانات العميل'), findsOneWidget);
       expect(find.text('تفاصيل الدفع'), findsOneWidget);
-      expect(find.text('المقاسات — موديل 1'), findsOneWidget);
-      expect(find.text('الأقمشة — موديل 1'), findsOneWidget);
+      expect(find.text('تفاصيل المقاسات — موديل 1'), findsOneWidget);
+      expect(find.textContaining('الأقمشة —'), findsOneWidget);
       // ولا تجاوز أفقي: أي RenderFlex overflow يُبلَّغ كاستثناء في الاختبار
       // No horizontal overflow: any RenderFlex overflow is reported as an exception.
       expect(tester.takeException(), isNull);

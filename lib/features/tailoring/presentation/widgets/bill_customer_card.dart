@@ -25,21 +25,17 @@ class BillCustomerCard extends StatelessWidget {
       title: 'بيانات العميل',
       icon: Icons.person_rounded,
       accent: AppColors.accent,
-      // الاسم بجانب العنوان: خط ثقيل ولون أساسي ليُقرأ قبل أي رقم
-      // The name beside the title: a heavy weight and the primary colour so it reads first.
-      trailing: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 260),
-        child: Text(
-          name,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.left,
+      // الاسم ملتصق بالعنوان مباشرةً: يُقرأ «بيانات العميل — محمد الأهدل»
+      // The name is glued to the title: it reads "customer data — Mohammed".
+      titleTrailing: Text(
+        name,
+        style: TextStyle(
+          fontSize: 12.5,
+          fontWeight: FontWeight.w800,
+          color: AppColors.textPrimary,
         ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
       ),
       child: TailoringInfoGrid(
         singleRow: true,

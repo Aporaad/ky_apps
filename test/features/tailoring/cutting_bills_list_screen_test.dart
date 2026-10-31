@@ -130,17 +130,17 @@ void main() {
 
       // الهوية المركّبة كاملة (رقم + سنة) لا الرقم وحده
       // The full composite identity (number + year), never the bare number.
-      expect(find.text('12345 / 2026'), findsOneWidget);
-      expect(find.text('12000 / 2026'), findsOneWidget);
+      expect(find.text('12345'), findsOneWidget);
+      expect(find.text('12000'), findsOneWidget);
 
-      // بطاقة الفاتورة: العميل، العدّ، الرقم اليدوي، والصافي
-      // The bill card: customer, counts, manual number and the net total.
+      // الصف المدمج: العميل · التاريخ · الصافي · حالة التسليم (بلا عدّادات نصّية)
+      // The dense row: customer · date · net · delivery state (no textual counters).
       expect(find.text('محمد الأهدل'), findsOneWidget);
-      // الفاتورتان بنفس العدد في العيّنة، فالنصّ يتكرّر
-      // Both sample bills share the counts, so the text repeats.
-      expect(find.text('2 موديل · 3 قطعة'), findsNWidgets(2));
-      expect(find.text('يدوي 778'), findsOneWidget);
+      expect(find.text('11/03/2026'), findsWidgets);
       expect(find.text('1,500'), findsOneWidget);
+      expect(find.textContaining('قيد التنفيذ'), findsWidgets);
+      expect(find.text('2 موديل'), findsNWidgets(2));
+      expect(find.text('3 قطعة'), findsNWidgets(2));
     });
 
     testWidgets('the search is debounced, not fired per keystroke',

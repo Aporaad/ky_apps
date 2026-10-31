@@ -6,8 +6,31 @@
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>يستخدم التطبيق Face ID لتسجيل الدخول بشكل آمن وسريع</string>
+	<!-- إذن قراءة معرض الصور — يطلبه زر «اختيار الشعار» في إعدادات الهوية (image_picker).
+		 Photo-library permission — requested by the logo picker in the identity settings (image_picker).
+		 غيابه يُنهي التطبيق فوراً عند النقر على الزر على iOS؛ لا يُحذف أبداً.
+		 Without it iOS terminates the app the moment the button is tapped; never remove it. -->
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يُستخدم للوصول إلى معرض الصور لاختيار شعار الشركة في إعدادات الهوية</string>
+	<!-- إيصال إفصاح الشبكة المحلية — iOS 14+ يسأل قبل أي اتصال بعنوان خاص (192.168.x.x).
+		 Local-network privacy disclosure — iOS 14+ prompts before reaching a private address. -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>يتصل التطبيق بخادم الشركة على الشبكة المحلية لجلب البيانات</string>
+	<!-- استثناء ATS: عنوان الـ API يُضبط وقت التشغيل ويمكن أن يكون http على IP محلي، وهو ما
+		 يمنعه App Transport Security افتراضياً فيفشل كل اتصال بصمت. يُضيَّق أو يُزال عند
+		 نشر الخادم على HTTPS (راجع ios_release_guide.md §6).
+		 ATS exception: the API base URL is set at runtime and may be plain http on a LAN IP, which
+		 ATS blocks by default (every request then fails silently). Narrow or remove once the server
+		 serves HTTPS (see ios_release_guide.md §6). -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>CFBundleDisplayName</key>
-	<string>Ky Apps</string>
+	<string>الكبودي</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>

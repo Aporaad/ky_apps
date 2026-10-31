@@ -4,13 +4,17 @@ import '../../../../core/theme/app_colors.dart';
 import '../../data/models/cutting_bill_summary_model.dart';
 import '../../data/models/tailoring_parse.dart';
 
-/// بطاقة فاتورة تفصيل واحدة في القائمة
-/// One cutting-bill card in the list.
+/// بطاقة فاتورة في قائمة الاختيار — بنفس شكل بطاقة العميل في شاشة «مقاسات العملاء»
+/// A bill card in the selection list — the same shape as the customer card in the measurements
+/// screen.
 ///
-/// تُظهر ما تحمله الواجهة فقط: الرقم والسنة والرقم اليدوي والتاريخ والعميل والهاتف
-/// وعدد الموديلات والقطع والصافي وحالة التسليم — كلها من صفوف الـ VIEW.
-/// It shows only what the view carries: number, year, manual number, date, customer, phone,
-/// model/piece counts, net and delivery state — all from the view rows.
+/// شريط لوني على الحافة اليمنى، مربّع رقم الفاتورة، اسم العميل بسطر عريض، سطر ثانوي
+/// (التاريخ · الهاتف · اليدوي)، ثم عمود يمين بالعدّادات والصافي وسهم الفتح. كل التفاصيل
+/// السابقة عادت ظاهرة، والبطاقة مفصولة عن أختها بمسافة لا بجدول.
+/// An accent rail on the right edge, the bill number in a square, the customer's name in a bold
+/// line, a secondary line (date · phone · manual), then a right column with the counters, the net
+/// and an opening chevron. Every earlier detail is back and the cards are separated by spacing,
+/// not by a table.
 class BillListTile extends StatelessWidget {
   final CuttingBillSummary bill;
   final VoidCallback onTap;
@@ -33,134 +37,122 @@ class BillListTile extends StatelessWidget {
 
     return Material(
       color: AppColors.surface,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(11),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(11),
         child: Container(
-          padding: const EdgeInsets.all(13),
           decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: AppColors.border.withValues(alpha: 0.8)),
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AppColors.border),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _numberBadge(),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      bill.custName.isEmpty ? 'عميل غير مسمّى' : bill.custName,
-                      style:  TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textPrimary,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+          clipBehavior: Clip.antiAlias,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // شريط لوني يقول «هذه بطاقة تُفتح» بدل فراغ يُخمَّن
+                // An accent rail says "this card opens" instead of leaving it to guesswork.
+                Container(width: 4, color: AppColors.primary),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    child: Row(
+                      children: [
+                        _numberSquare(),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                bill.custName.isEmpty ? 'عميل غير مسمّى' : bill.custName,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 3),
+                              _metaLine(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _counters(statusColor),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
                     ),
-                  ),
-                  const SizedBox(width: 6),
-                  _chip(
-                    bill.isDelivered ? 'تم التسليم' : 'قيد التنفيذ',
-                    statusColor,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 9),
-              Wrap(
-                spacing: 12,
-                runSpacing: 5,
-                children: [
-                  if (bill.date != null) _meta(Icons.event_rounded, bill.date!),
-                  if (bill.telNo1 != null)
-                    _meta(Icons.phone_rounded, bill.telNo1!),
-                  _meta(
-                    Icons.checkroom_rounded,
-                    '${bill.modelsCount} موديل · ${bill.piecesCount} قطعة',
-                  ),
-                  if (bill.manualBillNo != null)
-                    _meta(Icons.tag_rounded, 'يدوي ${bill.manualBillNo}'),
-                ],
-              ),
-              if (showMoney && bill.net != null) ...[
-                const SizedBox(height: 9),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceSubtle,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'الصافي',
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textMuted,
-                        ),
-                      ),
-                      Text(
-                        tailoringNumber(bill.net),
-                        style:  TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.primary,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  /// شارة رقم الفاتورة مع السنة — الهوية المركّبة كاملة
-  /// The bill-number badge with its year — the full composite identity.
-  Widget _numberBadge() {
+  /// مربّع رقم الفاتورة: الرقم كبير والرقم اليدوي تحته مباشرةً
+  /// The bill-number square: the number large with the manual number right beneath it.
+  Widget _numberSquare() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      width: 62,
+      padding: const EdgeInsets.symmetric(vertical: 5, horizontal: 4),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(8),
+        color: AppColors.primary.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
       ),
-      child: Text(
-        bill.referenceLabel,
-        style:  TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: AppColors.primary,
-        ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              '${bill.billNo}',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w900,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          Text(
+            'سنة ${bill.year}',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _chip(String text, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 9.5,
-          fontWeight: FontWeight.bold,
-          color: color,
-        ),
-      ),
+  /// السطر الثانوي: التاريخ · الهاتف · الرقم اليدوي — كلها ظاهرة كما كانت
+  /// The secondary line: date · phone · manual number — all visible as before.
+  Widget _metaLine() {
+    return Wrap(
+      spacing: 10,
+      runSpacing: 2,
+      children: [
+        if (bill.date != null)
+          _meta(Icons.event_rounded, bill.date!),
+        if (bill.telNo1 != null)
+          _meta(Icons.phone_rounded, bill.telNo1!),
+        if (bill.manualBillNo != null)
+          _meta(Icons.tag_rounded, 'يدوي ${bill.manualBillNo}'),
+      ],
     );
   }
 
@@ -168,13 +160,81 @@ class BillListTile extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: AppColors.textMuted),
+        Icon(icon, size: 11, color: AppColors.textSecondary),
         const SizedBox(width: 3),
         Text(
           text,
-          style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textSecondary,
+          ),
         ),
       ],
+    );
+  }
+
+  /// عمود العدّادات: موديلات · قطع · صافي · حالة
+  /// The counters column: models · pieces · net · state.
+  Widget _counters(Color statusColor) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _badge('${bill.modelsCount} موديل', AppColors.info),
+            const SizedBox(width: 4),
+            _badge('${bill.piecesCount} قطعة', AppColors.secondary),
+          ],
+        ),
+        const SizedBox(height: 3),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (showMoney && bill.net != null) ...[
+              Text(
+                tailoringNumber(bill.net),
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.primary,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(color: statusColor, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 3),
+            Text(
+              bill.isDelivered ? 'مُسلَّمة' : 'قيد التنفيذ',
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: statusColor,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(5),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: color),
+      ),
     );
   }
 }

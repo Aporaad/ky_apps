@@ -1,0 +1,65 @@
+# ملف CocoaPods الخاص بتطبيق الكبودي — محفوظ في git حتى يكون البناء السحابي حتمياً
+# ولا يعتمد على قالب يولّده Flutter في كل مرة.
+# CocoaPods manifest for the Al-Kaboodi app — committed so that cloud builds are
+# deterministic instead of depending on a template Flutter regenerates each time.
+#
+# مرجع: ios_release_guide.md §3 (البناء السحابي) و§4 (التثبيت على الآيفون).
+
+# الحد الأدنى لنظام iOS: رفعناه من 12.0 إلى 13.0 مع رفع IPHONEOS_DEPLOYMENT_TARGET في
+# project.pbxproj. جميع الحزم المستعملة تعلن 12.0 كحد أدنى، فـ13.0 آمن ويُسلّم من تحذيرات
+# Xcode الحديثة على أجهزة البناء السحابية.
+# Minimum iOS bumped from 12.0 to 13.0 alongside IPHONEOS_DEPLOYMENT_TARGET in
+# project.pbxproj. Every dependency declares 12.0 as its floor, so 13.0 is safe and
+# silences modern-Xcode warnings on cloud build machines.
+platform :ios, '13.0'
+
+# الخطاف العام لـ Flutter — يربط كل Pods المسجّلة عبر pubspec.yaml.
+# The global Flutter hook — wires every pod registered through pubspec.yaml.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+
+    target.build_configurations.each do |config|
+      # توحيد الحد الأدنى لكل Pod على 13.0 — يمنع فشل البناء حين يعيد Xcode الحديث
+      # رفض هدف إصداره أقل من الحد الذي يدعمه.
+      # Normalise every pod's deployment target to 13.0 — prevents modern Xcode from
+      # refusing an older target during the build.
+      config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+    end
+  end
+end

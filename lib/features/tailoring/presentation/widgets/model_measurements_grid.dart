@@ -3,25 +3,26 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/cutting_model_item.dart';
 import '../../data/models/tailoring_parse.dart';
+import 'tailoring_cells.dart';
 import 'tailoring_section_card.dart';
 
-/// القسم 5: مقاسات الموديل المختار — L1..L12 بتسمياتها الحقيقية
-/// Section 5: the selected model's measurements — L1..L12 with their real labels.
+/// القسم 5: تفاصيل مقاسات الموديل المختار — بنفس شكل قسم «تفاصيل المقاسات» في شاشة
+/// «مقاسات العملاء»، لكن بخطوط أكبر وأثقل
+/// Section 5: the selected model's measurement details — the same shape as the "measurement
+/// details" section of the customer-measurements screen, but with larger, heavier type.
 ///
-/// التسميات تأتي من `GENERAL_LABELS_CODING` عبر الخادم، لا من الشاشة، فإضافة تسمية جديدة
-/// في القاعدة تظهر هنا بلا تعديل كود.
-/// The labels come from `GENERAL_LABELS_CODING` through the server, not from the screen, so a
-/// label added in the database appears here without a code change.
+/// التسميات تأتي من `GENERAL_LABELS_CODING` عبر الخادم لا من ثوابت في الشاشة. والخانات
+/// شبكةٌ بأعمدة متساوية وفواصل رأسية وأفقية ظاهرة، والقيمة بوزن 900 وحجم 13 مع تصغير تلقائي
+/// بدل القصّ، فتبقى كل التسميات والأرقام مقروءة على أي عرض.
+/// Labels come from GENERAL_LABELS_CODING through the server, never from screen constants. The
+/// cells form a grid of equal columns with visible vertical and horizontal rules; the value is
+/// w900 at 13 with automatic scale-down instead of truncation, so every label and figure stays
+/// readable at any width.
 ///
 /// الفراغ مخفي افتراضياً لأن المقاسات غير المستخدمة تضخّم الجدول بلا فائدة، ومفتاح
 /// «إظهار الكل» يعيدها لمن يريد رؤية كل الخانات.
 /// Blanks are hidden by default because unused measurements bloat the grid for nothing; the
-/// "show all" switch brings them back for whoever wants every slot.
-///
-/// الاثنا عشر مقاساً تُعرض في صف واحد على الشاشات العريضة، كلٌّ في خانة مسوّرة بعرض متساوٍ،
-/// فتُقارَن القيم رأسياً بسهولة بدل قراءتها في صناديق متفرّقة.
-/// The twelve measurements share one row on wide screens, each in an equal bordered cell, so
-/// values compare vertically at a glance instead of being read in scattered boxes.
+/// "show all" switch brings them back.
 class ModelMeasurementsGrid extends StatefulWidget {
   final CuttingModelItem model;
 
@@ -57,12 +58,11 @@ class _ModelMeasurementsGridState extends State<ModelMeasurementsGrid> {
       for (var i = 1; i <= 12; i++) 'L$i',
     ];
 
-    final visibleKeys = _showAll
-        ? keys
-        : keys.where((k) => model.measurements[k] != null).toList();
+    final visibleKeys =
+        _showAll ? keys : keys.where((k) => model.measurements[k] != null).toList();
 
     return TailoringSectionCard(
-      title: 'المقاسات — موديل ${model.seqNo}',
+      title: 'تفاصيل المقاسات — موديل ${model.seqNo}',
       icon: Icons.straighten_rounded,
       accent: AppColors.info,
       trailing: Row(
@@ -92,7 +92,7 @@ class _ModelMeasurementsGridState extends State<ModelMeasurementsGrid> {
                     _showAll ? 'إخفاء الفراغ' : 'إظهار الكل',
                     style: const TextStyle(
                       fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w800,
                       color: AppColors.info,
                     ),
                   ),
@@ -103,31 +103,35 @@ class _ModelMeasurementsGridState extends State<ModelMeasurementsGrid> {
         ],
       ),
       child: visibleKeys.isEmpty
-          ? const Text(
+          ? Text(
               'لا توجد مقاسات مسجّلة لهذا الموديل',
-              style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textSecondary,
+              ),
             )
-          : TailoringInfoGrid(
-              singleRow: true,
-              minCellWidth: 74,
-              children: [
+          : TailoringCellGrid(
+              // خانات أصغر عرضاً: المقاس رقم قصير، فالسبع في الصف تُبقي الاثني عشر في سطرين
+              // Narrow cells: a measurement is a short number, so seven per row keep twelve in
+              // two lines.
+              minCellWidth: 88,
+              cells: [
                 for (final key in visibleKeys)
-                  TailoringInfoTile(
+                  TailoringCell(
                     label: _labelFor(key),
                     value: model.measurements[key] == null
-                        ? '—'
-                        : tailoringNumber(model.measurements[key]),
-                    valueColor: model.measurements[key] == null
-                        ? AppColors.textMuted
-                        : AppColors.textPrimary,
+                        ? null
+                        : tailoringNumber(model.measurements[key]!, decimals: 2),
+                    numeric: true,
                   ),
               ],
             ),
     );
   }
 
-  /// تسمية المقياس مع الرجوع إلى مفتاحه عند غياب التسمية في القاعدة
-  /// The measurement's label, falling back to its key when the database has none.
+  /// التسمية الحقيقية، والمفتاح حرفياً عند غيابها — لا اختراع لاسم مقاس
+  /// The real label, or the raw key when the dictionary has none: a name is never invented.
   String _labelFor(String key) {
     final label = widget.labels[key];
     return (label == null || label.trim().isEmpty) ? key : label;

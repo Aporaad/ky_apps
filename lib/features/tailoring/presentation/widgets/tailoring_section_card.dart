@@ -16,6 +16,10 @@ class TailoringSectionCard extends StatelessWidget {
   /// An extra item in the title bar (a count chip, a small button…).
   final Widget? trailing;
 
+  /// عنصر يلتصق بالعنوان مباشرةً (اسم العميل بجانب «بيانات العميل»)
+  /// An item glued to the title itself (the customer's name beside "بيانات العميل").
+  final Widget? titleTrailing;
+
   /// لون التمييز — يتغيّر ليدل على نوع القسم (مال، مواصفات، حركة…)
   /// The accent colour, signalling the section's nature (money, specs, movement…).
   ///
@@ -30,6 +34,7 @@ class TailoringSectionCard extends StatelessWidget {
     required this.icon,
     required this.child,
     this.trailing,
+    this.titleTrailing,
     this.accent,
   });
 
@@ -62,19 +67,35 @@ class TailoringSectionCard extends StatelessWidget {
               children: [
                 Icon(icon, size: 14, color: accent),
                 const SizedBox(width: 6),
+                // العنوان وما يلتصق به داخل مساحة مرنة واحدة: لا تجاوز على أي عرض
+                // The title and whatever is glued to it live in one flexible space, so no
+                // width can overflow.
                 Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: accent,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: accent,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (titleTrailing != null) ...[
+                        const SizedBox(width: 8),
+                        Flexible(child: titleTrailing!),
+                      ],
+                    ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                if (trailing != null) ...[
+                  const SizedBox(width: 6),
+                  trailing!,
+                ],
               ],
             ),
           ),
@@ -121,7 +142,7 @@ class TailoringInfoTile extends StatelessWidget {
     final text = (value == null || value!.trim().isEmpty) ? '—' : value!.trim();
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -129,18 +150,18 @@ class TailoringInfoTile extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 10.5, color: AppColors.textMuted),
+                Icon(icon, size: 11, color: AppColors.textSecondary),
                 const SizedBox(width: 3),
               ],
               Flexible(
                 child: Text(
                   label,
                   style: TextStyle(
-                    // تسمية أوضح: لون ثانوي أغمق وحجم أكبر قليلاً من السابق الباهت
-                    // A clearer label: a darker secondary tone and a slightly larger size
-                    // than the previous faded one.
+                    // تسمية واضحة: ثانوي غامق + وزن ثقيل يكسر بهتان السابق
+                    // A clear label: a dark secondary tone with a heavy weight instead of
+                    // the previous faded look.
                     fontSize: 10.5,
-                    fontWeight: FontWeight.w600,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
                   ),
                   maxLines: 1,
@@ -149,12 +170,12 @@ class TailoringInfoTile extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 1),
+          const SizedBox(height: 2),
           Text(
             text,
             style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
               color: valueColor ?? AppColors.textPrimary,
             ),
             maxLines: 1,
@@ -235,10 +256,9 @@ class TailoringInfoGrid extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(7),
-            border: Border.all(
-              color: AppColors.border.withValues(alpha: 0.9),
-              width: 0.7,
-            ),
+            // إطار وفواصل أوضح: حدّ 0.9 بشفافية كاملة ليفصل الحقول بصرياً
+            // A clearer frame and dividers: 0.9px at full opacity to separate the fields.
+            border: Border.all(color: AppColors.border, width: 0.9),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -268,7 +288,7 @@ class TailoringInfoGrid extends StatelessWidget {
     // الخانات الناقصة في الصف الأخير تُملأ بفراغ كي لا تتمدد الخانات السابقة
     // The short last row is padded so its cells do not stretch.
     for (var i = cells.length; i < columns; i++) {
-      widgets.add(const Expanded(child: SizedBox()));
+      widgets.add(Expanded(child: SizedBox()));
     }
 
     return IntrinsicHeight(
@@ -280,10 +300,12 @@ class TailoringInfoGrid extends StatelessWidget {
   }
 
   Widget _divider({required bool horizontal}) {
-    final color = AppColors.border.withValues(alpha: 0.9);
+    // فاصل واضح بلون الحدّ الكامل بدل خطّ شبه شفاف لا يُرى
+    // A visible divider in the full border colour instead of an almost invisible line.
+    final color = AppColors.border;
     return horizontal
-        ? Container(height: 0.7, color: color)
-        : Container(width: 0.7, color: color);
+        ? Container(height: 0.9, color: color)
+        : Container(width: 0.9, color: color);
   }
 }
 

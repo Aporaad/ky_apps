@@ -190,7 +190,7 @@ class _ModelRow extends StatelessWidget {
   Widget _cell(
     String text, {
     Color? color,
-    FontWeight weight = FontWeight.w600,
+    FontWeight weight = FontWeight.w700,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -199,7 +199,7 @@ class _ModelRow extends StatelessWidget {
         child: Text(
           text,
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: 12,
             fontWeight: weight,
             color: color ?? AppColors.textPrimary,
           ),
