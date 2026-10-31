@@ -4125,3 +4125,69 @@ Pest `Tailoring` 11/229 · pint PASS.
 - **لم يُمسّ:** `lib/` · `android/` · `pubspec.yaml` (الإصدار `1.1.0+2`).
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 01:25 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:55 — فشل `flutter build ios` على Codemagic: `.gitignore` بترميز cp1256
+
+- **الخطأ كما ورد في السجل:**
+  `Oops; flutter has exited unexpectedly: "FileSystemException: Failed to decode data using
+  encoding 'utf-8', path = '/Users/builder/clone/.gitignore'"`، والأثر يشير إلى
+  `SwiftPackageManagerGitignoreMigration.migrate (swift_package_manager_gitignore_migration.dart:45)`
+  من `buildXcodeProject (src/ios/mac.dart:174)` — أي أنه يقع **قبل** أن تبدأ ترجمة Xcode.
+- **التشخيص:** فُحصت بايتات كل ملف تقرأه أدوات البناء؛ النتيجة: `.gitignore` في الجذر بترميز
+  **cp1256**، والسبب سطر تعليق عربي واحد:
+  `# ملفات مخرجات الإصدارات الموقعة (APK) - كبيرة الحجم ولا تحكم` (بايتاته `\xe3\xe1\xdd\xc7\xca` = «ملفات»).
+  أداة Flutter تستدعي `readAsStringSync()` بدون تحديد ترميز، فيفترض UTF-8 ويرمي استثناءً.
+  ملفان آخران بنفس الترميز (`flutter_test_out.txt` و`php_test_full.txt`) لكنهما سجلان لا يقرأهما أي أداة،
+  فتُركا كما هما احتراماً لقاعدة عدم تغيير البيانات السابقة.
+- **الإصلاح:** تحويل `.gitignore` إلى UTF-8 بلا BOM وتوحيد نهايات الأسطر على LF. **التحقق:** المحتوى
+  مطابقاً حرفاً بحرف لما كان قبل التحويل (51 سطراً، 32 نمطاً، مقارنة آلية) و`git diff` = سطر واحد.
+- **منع التكرار (أداتان جديدتان):**
+  - `tools/check_encoding.py`: بوابة ترميز. تفحص الملفات الحرجة (`.gitignore`، `ios/.gitignore`،
+    `android/.gitignore`، `pubspec.yaml`) وتُوسّع التحذير إلى 500 ملف نصي متتبع، وتصلح بـ`--fix`،
+    وتُرجع رمز خروج 1 عند بقاء ملف حرج معطوب — فنكتشف السبب محلياً بدل جولة بناء.
+  - `tools/ios_audit.py`: تحويل الـ16 فحصاً اليدوي إلى أمر واحد قابل للتكرار قبل كل إصدار.
+- **توثيق:** `ios_release_guide.md` — §4.2 صار يحوي الأمرين، وقسم جديد §4.2.1 يشرح هذا الفشل
+  بعينه ونص رسالته وطريقة إصلاحه، وصف تشخيصي في جدول §7.
+- **ما تأكّد من السجل (يزيل مخاطر سبق توثيقها):** الآلة وفّرت Xcode **16.2**
+  (`/Applications/Xcode-16.2.app`، Build 16C5032a) وCocoaPods **1.16.2**، ونجحت خطوات
+  `flutter pub get` و`flutter analyze` و`pod install` قبل خطوة البناء. فخطر "Xcode المطلوب غير متوفر"
+  الذي حذرنا منه في §7 لم يقع، وFlutter 3.29.3 عمل على Xcode 16.2 كما هو المتوقع.
+- **التحقق النهائي:** `tools/ios_audit.py` = ALL 16 CHECKS PASSED (رمز خروج 0) ·
+  `tools/check_encoding.py` = RESULT: OK (4 حرجة + 500 نصي).
+- **لم يُمسّ:** `lib/` · `android/` · `ios/**` · `pubspec.yaml` — الإصلاح ملف واحد في الجذر + أداتان.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:55 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 02:10 — بوابتان جديدتان في codemagic.yaml: ترميز قبل البناء، وتحقق من الـIPA بعده
+
+- **الدافع:** جولة البناء السابقة سقطت في ثانية على ملف بترميز خاطئ بعد أن استهلكت دقائق في التجهيز،
+  والأسوأ أن رسالة الفشل لم تذكر الترميز. وأيضاً: نجاح `flutter build ios` لا يُثبت أن الحزمة
+  تحمل فعلاً إعداداتها (وهي أعطال لا تظهر إلا على الجهاز بعد التثبيت).
+- **الخطوة الثانية (جديدة) — `Encoding gate`:**
+  `for f in .gitignore ios/.gitignore android/.gitignore pubspec.yaml; do iconv -f UTF-8 -t UTF-8 "$f"; done`
+  مع `set -e`؛ تفشل في الثانية الأولى وترشد إلى `python tools/check_encoding.py --fix`.
+- **الخطوة الثامنة (جديدة) — `Verify unsigned IPA`:** بعد التغليف مباشرة تقرأ
+  `Payload/Runner.app/Info.plist` بـ`plutil -extract ... raw` (مدمج في macOS، فلا اعتمادية على
+  Python) وتشترط: `CFBundleIdentifier = com.alkaboudy.app` · `NSAllowsArbitraryLoads = true` ·
+  `NSAllowsLocalNetworking = true` · وجود وصف إذن الصور · وجود `Frameworks/App.framework`
+  و`Frameworks/Flutter.framework`. وتطبع أيضاً الإصدار ورقم البناء والاسم للمطابقة البصرية.
+- **التحقق قبل الدفع (ثلاث طبقات):**
+  1. مطابقة مفاتيح المخطط الرسمي (workflow/environment/script) — لا مفاتيح زائدة.
+  2. `bash -n` على نصوص الخطوات الثماني — بلا أخطاء نحوية.
+  3. **اختبار سلوكي** لبوابة الترميز: نُفّذت داخل المستودع → exit 0؛ ثم في مجلد مؤقت فيه
+     `.gitignore` مُرمّز cp1256 → exit ≠0 مع طباعة "is not valid UTF-8" وسطر الإصلاح.
+     هذا يمنع أن تكون البوابة "سليمة نحوياً ولا تفعل شيئاً".
+- **أثر على الأدوات/الوثائق:** `tools/ios_audit.py` صار يشترط 8 خطوات ووجود البوابتين بالأسم،
+  **ويُجري `bash -n` على نص كل خطوة** (17 فحصاً إجمالاً — وقد أثبت جدواه فوراً: كشف سطراً
+  نحوياً خاطئاً تسلل أثناء التعديل وأُزيل قبل الدفع)؛ و`ios_release_guide.md` اكتسب جدولاً
+  جديداً §3.2.1 يشرح الخطوات الثماني وسبب كل واحدة.
+- **ما لم يتغير:** لا مساس بـ`ios/**` ولا `lib/` ولا `android/` ولا `pubspec.yaml` — التغيير في ملف
+  البناء والوثائق والتوثيق فقط.
+- **النتيجة الحالية:** `tools/ios_audit.py` = ALL 17 CHECKS PASSED ·
+  `tools/check_encoding.py` = RESULT: OK · العمل لم يُدفع بعد.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 02:10 · **لا commit** (لم يُطلب).

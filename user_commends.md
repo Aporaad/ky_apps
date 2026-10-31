@@ -2382,3 +2382,20 @@ exhausted 256M for size class 7120» — بعد 1.39GB محجوزة و6.65 مل�
 خاص بها في §7.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 00:57.
+
+---
+
+## 2026-11-01 01:55 — فشل البناء على Codemagic (نصّ الأمر كما ورد)
+
+> 'pasted-text.txt' البناء يفشل
+> — ومعُه سجل Codemagic، وفيه:
+> `Oops; flutter has exited unexpectedly: "FileSystemException: Failed to decode data using`
+> `encoding 'utf-8', path = '/Users/builder/clone/.gitignore'"`
+
+**ما نُفّذ:** السبب ملف `.gitignore` بترميز Windows-1256 (سطر تعليق عربي واحد) وأداة Flutter
+تقرأه بـ UTF-8 إلزاماً فتنهار قبل بدء البناء. حُوّل الملف إلى UTF-8 مع التأكد أن محتواه مطابق
+حرفاً بحرف (51 سطراً/32 نمطاً، و`git diff` = سطر واحد)، وأُضيفت أداة وقائية
+`tools/check_encoding.py` وأداة تدقيق `tools/ios_audit.py` ووثّقتا في `ios_release_guide.md` §4.2
+و§4.2.1 و§7. وتأكّد من السجل أن Xcode 16.2 وCocoaPods 1.16.2 متاحان على الآلة.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:55.

@@ -2245,3 +2245,60 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
 - [ ] **متبقٍ خارج قدرة ويندوز:** البناء على Codemagic ← التثبيت بـSideloadly ← قائمة التجربة §5.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 01:25 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:55 — إصلاح فشل البناء: `.gitignore` كان بترميز Windows-1256
+
+- [x] **الخطأ من سجل Codemagic:** `flutter has exited unexpectedly: FileSystemException:
+      Failed to decode data using encoding 'utf-8', path = '/Users/builder/clone/.gitignore'`
+      مع أثر مكدّس يشير إلى `SwiftPackageManagerGitignoreMigration.migrate`.
+- [x] **السبب الجذري:** ملف `.gitignore` في الجذر كان محفوظاً بترميز **cp1256** بسبب سطر تعليق
+      عربي واحد، وأداة Flutter تقرأ هذا الملف **بترميز UTF-8 إلزاماً** في كل `flutter build ios`
+      فتنهار قبل بدء البناء. لا علاقة للخطأ بأي إعداد iOS.
+- [x] **الإصلاح:** حُوّل `.gitignore` إلى UTF-8 بلا BOM مع توحيد نهايات الأسطر على LF.
+      **تحقق:** المحتوى مطابق حرفاً بحرف لما كان (51 سطراً · 32 نمطاً)، و`git diff` سطر واحد فقط.
+- [x] **منع التكرار:** أداة جديدة `tools/check_encoding.py` (بوابة): تفصح عن الملفات غير UTF-8
+      محلياً في ثانية، وتصلحها بـ`--fix`، وتُرجع رمز خروج ≠0 عند وجود ملف حرج معطوب.
+      نطاقها الحرج: `.gitignore` · `ios/.gitignore` · `android/.gitignore` · `pubspec.yaml`،
+      وتُبلغ عن بقية الملفات النصية للاستزادة (500 ملف).
+- [x] **أداة جديدة ثانية:** `tools/ios_audit.py` — تُنفّذ الـ16 فحصاً الآلي التي كنّا ننفذها يدوياً
+      (ATS/الأذونات/اللغة/المعرّف/إصدار النظام/ربط Keychain/الأيقونات/ملف البناء/الدليل).
+- [x] **توثيق:** `ios_release_guide.md` — بوابة جديدة §4.2.1 للترميز مع نص الخطأ وطريقة إصلاحه،
+      وإضافة الأمرين إلى قائمة §4.2، وصف تشخيصي في §7.
+- [x] **أخبار مفرحة من السجل:** الآلة وفّرت **Xcode 16.2** (`/Applications/Xcode-16.2.app`) وCocoaPods
+      1.16.2، و`flutter pub get` و`flutter analyze` و`pod install` نجحت — أي أن الخطر الأكبر
+      (عدم توفر Xcode المطلوب) لم يقع.
+- [x] **التحقق الآن:** `tools/ios_audit.py` = **ALL 16 CHECKS PASSED** ·
+      `tools/check_encoding.py` = **RESULT: OK** (4 ملفات حرجة + 500 نصي).
+- [ ] **الخطوة التالية للمستخدم:** commit + push ‏(‎`.gitignore` + `tools/` + الدليل) ثم إعادة
+      `Start new build → ios-unsigned`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:55 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 02:10 — تحصين خط أنابيب البناء: بوابة ترميز داخل CI + تحقق من محتوى الـIPA
+
+- [x] **الخطوة 2 جديدة في `codemagic.yaml` — `Encoding gate`:** تستخدم `iconv -f UTF-8 -t UTF-8`
+      على `.gitignore` و`ios/.gitignore` و`android/.gitignore` و`pubspec.yaml`، وتُفشل البناء في
+      ثانية برسالة صريحة تشير إلى `python tools/check_encoding.py --fix`. الهدف: نفس عطل الـcp1256
+      لا يستهلك مجدداً 15–25 دقيقة صحيحة.
+- [x] **الخطوة 8 جديدة — `Verify unsigned IPA`:** تقرأ `Info.plist` **من داخل** `Payload/Runner.app`
+      بـ`plutil` (مدمج في macOS بلا اعتماديات) وتفشل إن غاب: معرّف `com.alkaboudy.app` ·
+      `NSAllowsArbitraryLoads` · `NSAllowsLocalNetworking` · `NSPhotoLibraryUsageDescription` ·
+      `App.framework` · `Flutter.framework`. مبدأها: «البناء نجح» ليس دليلاً على ملف صالح للتثبيت.
+- [x] **تحقق من الخطوتين قبل الدفع (مهم):**
+      - مطابقة مفاتيح المخطط الرسمي لـworkflow وenvironment وكل خطوة → سليمة.
+      - `bash -n` (تحقق صرف) على الأوامر الثمانية → كلها سليمة.
+      - **اختبار سلوكي فعلي لبوابة الترميز:** نجحت داخل المستودع (exit 0)، ورفضت مجلداً مؤقتاً
+      فيه `.gitignore` بـcp1256 (exit ≠0) مع طباعة السبب وطريقة الإصلاح.
+- [x] **توثيق:** `ios_release_guide.md` — جدول جديد §3.2.1 بخطوات الـworkflow الثماني وسبب كل واحدة،
+      مع تنبيه أن الخطوة 8 هي مقياس النجاح الحقيقي.
+- [x] `tools/ios_audit.py` صار يتحقق من 8 خطوات ومن وجود البوابتين بالاسم، **وصحة أوامرها**
+      عبر `bash -n` (17 فحصاً إجمالاً) — فيكشف خطأً نحوياً في خطوة CI قبل الدفع.
+- [x] **الحالة:** `ios_audit` = ALL 17 CHECKS PASSED · `check_encoding` = RESULT: OK ·
+      تعديلات لم تُدفع بعد (6 ملفات معدّلة + أداتان جديدتان).
+- [ ] **الخطوة التالية للمستخدم:** commit + push ثم `Start new build → ios-unsigned`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 02:10 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).

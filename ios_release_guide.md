@@ -122,6 +122,22 @@ ky_apps/
 > **The entitlements are not optional:** `SecItemAdd` needs the App ID's keychain access group.
 > Check them first when diagnosing "logs out on its own" or "biometrics ask to enrol every time".
 
+### 3.2.1 خطوات الـworkflow الثمانية (كلٌّ لها سبب)
+
+| # | الخطوة | لماذا |
+|---|---|---|
+| 1 | `List available Xcode versions` | يكشف غياب الإصدار المطلوب في الثانية الأولى |
+| 2 | `Encoding gate` | يرفض أي ملف حرج بترميز غير UTF-8 برسالة صريحة (بدل انهيار Flutter الغامض) |
+| 3 | `flutter pub get` | تنزيل الحزم |
+| 4 | `flutter analyze` | بوابة الجودة (الاختبارات محلية لأن بعضها يحتاج عنوان LAN) |
+| 5 | `pod install` | إظهار فشل الاعتماديات في خطوة مستقلة واضحة |
+| 6 | `flutter build ios --release --no-codesign` | البناء الفعلي بلا توقيع |
+| 7 | `Package unsigned IPA` | `Payload/Runner.app` + `zip -qry` (حفظ symlinks) |
+| 8 | `Verify unsigned IPA` | يقرأ `Info.plist` **من داخل الحزمة** ويُفشل البناء إن غاب المعرّف أو ATS أو إذن الصور، ويؤكد وجود `App.framework` و`Flutter.framework` |
+
+الخطوة 8 هي مقياس النجاح الحقيقي: "البناء نجح" لا يُثبت أن الملف صالح للتثبيت؛ فقد
+تضيع منه قيمة إعداد فيُكتشف العطل على الجهاز بعد كل المصاريف. الآن يُكتشف قبل التنزيل.
+
 ### 3.3 إعداد Codemagic أول مرة (خطوات لمرة واحدة)
 
 1. أنشئ حساباً على `codemagic.io` بحساب GitHub (الخطة المجانية: **500 دقيقة/شهر** على Mac mini M2).
@@ -177,9 +193,32 @@ ky_apps/
 cd c:\Users\Mujeeb\Desktop\arslan\ky_apps
 flutter analyze
 flutter test
+python tools\check_encoding.py   # بوابة الترميز — انظر §4.2.1
+python tools\ios_audit.py        # تدقيق آلي لإعدادات iOS — يجب أن ينتهي بـ ALL … CHECKS PASSED
 git add -A; git commit -m "iOS: release 1.1.0+2"; git push origin main
 # ثم من Codemagic: Start new build → ios-unsigned
 ```
+
+### 4.2.1 بوابة الترميز — لا تتخطّاها
+
+`tools/check_encoding.py` يمنع فشلاً حقيقياً شهدناه: ملف `.gitignore` كان بترميز
+Windows-1256، وأداة Flutter `SwiftPackageManagerGitignoreMigration` تقرأه بـ UTF-8 إلزاماً
+فسقط البناء على macOS برسالة لا تذكر الترميز إطلاقاً:
+
+```
+Oops; flutter has exited unexpectedly: "FileSystemException: Failed to decode data
+ using encoding 'utf-8', path = '/Users/builder/clone/.gitignore'"
+```
+
+الفحص يستغرق أقل من ثانية: فإن أرجع `RESULT: FAILED` نفّذ `--fix` ثم أعد المحاولة:
+
+```powershell
+python tools\check_encoding.py --fix
+python tools\check_encoding.py      # يجب: RESULT: OK
+```
+
+**الاعتياد الوقائي:** أي تحرير لـ`.gitignore` أو أي ملف بنص عربي يجب أن يُحفط بـ**UTF-8**.
+محررات ويندوز القديمة تكتب ANSI/Windows-1256 بصمت وتُنتج هذا العطل نفسه.
 
 ### 4.3 التثبيت على الآيفون من ويندوز
 
@@ -245,6 +284,26 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 - [ ] **الخط:** ملاحظة معروفة — `google_fonts` يحمّل Cairo من الإنترنت أول مرة؛
       على شبكة معزولة عن الإنترنت يظهر خط احتياطي (لا يؤثر على الوظائف).
 
+### 5.2 ملاحظات سلوك خاصة بـiOS (لا تظهر في أندرويد)
+
+رُصدت من مراجعة الكود وحزم iOS نفسها — تُوفّر وقتاً في التشخيص أثناء التجربة:
+
+1. **معرّف الجهاز البيومتري يتغيّر إذا حُذف التطبيق:**
+   `DeviceIdHelper` يبني `device_token` من `identifierForVendor` على iOS، وهذا المعرّف يتبدّل
+   حين تُزال كل تطبيقات المطوّر نفسه من الجهاز. لذلك **أعد التوقيع بالتثبيت فوق القديم**
+   (كما في §4.3) ولا تحذف التطبيق لتجربة نسخة جديدة، إلا إذا كنت مستعداً لإعادة تسجيل البصمة.
+2. **اسم الجهاز في شاشة الجلسات سيبدو «iPhone» فقط:**
+   `device_info_plus` يحتاج entitlement خاصاً (`com.apple.developer.device-information.user-assigned-device-name`)
+   ليُعيد الاسم الذي اختاره المستخدم؛ بدونه يعود بـ`iPhone`. الأثر تجميلي فقط في سجل الأجهزة.
+3. **ورقة المشاركة على iPad لا تعمل في هذا الإصدار:**
+   استدعاءات `Printing.sharePdf` و`SharePlus.instance.share` لا تمرّر `sharePositionOrigin`،
+   وهو **إلزامي على iPad** فقط (ينهار الـpopover بدونهما)، بينما لا يلزم على iPhone.
+   التطبيق معلن كـuniversal (`TARGETED_DEVICE_FAMILY = "1,2"`)، فاختبر على الآيفون كما هو مقصود؛
+   وإذا اعتمدت iPad لاحقاً فأضف المستطيل المرجع للزر في كل موضع تصدير.
+4. **الطباعة (`Printing.layoutPdf`) تفتح حوار AirPrint:**
+   بلا طابعة متاحة سيظهر الحوار فارغاً — هذا **ليس** خطأً في التطبيق؛ لاختبار التصدير نفسه استخدم زر
+   «تصدير/مشاركة» (share sheet) الذي لا يحتاج طابعة.
+
 ---
 
 ## الجزء السادس: ملاحظات الأمان
@@ -281,6 +340,8 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 | **التطبيق يعمل لكن كل الطلبات تفشل** | ATS يحجب `http`، أو الخادم/الجدار الناري | تحقق من `NSAppTransportSecurity` في الـ`Info.plist`، ثم من Safari على الآيفون (§5.0) |
 | **انهيار لحظة اختيار الشعار** | `NSPhotoLibraryUsageDescription` محذوف | أعده إلى `Info.plist` وأعد البناء |
 | **تسجيل الخروج التلقائي عند كل إقلاع / البطاقة البيومترية تُلغى** | `keychain-access-groups` غير مربوطة بالهدف | تأكد من وجود الملفَّين وأن `CODE_SIGN_ENTITLEMENTS` مضبوط في الإعدادات الثلاث (وأن Sideloadly وقّع بنفس App ID) |
+| **`flutter has exited unexpectedly: FileSystemException: Failed to decode data using encoding 'utf-8', path = '.gitignore'`** | ملف بترميز Windows-1256 (محرر ويندوز قديم) — لا علاقة له بـiOS | `python tools\check_encoding.py --fix` ثم ادفع وأعد البناء |
+| **ورقة المشاركة لا تظهر على iPad** | `sharePositionOrigin` إلزامي على iPad ولم يُمرَّر | لا يخص الآيفون؛ أضف المستطيل المرجعي للزر في كل موضع تصدير قبل اعتماد iPad (§5.2-3) |
 | العربية تظهر رموزاً | تحويل الترميز (خادم/عميل) أو خط غير محمّل | نفس تشخيص نسخة أندرويد — راجع `DBdevloping_history.md` |
 
 ---

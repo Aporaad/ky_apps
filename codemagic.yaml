@@ -52,6 +52,23 @@ workflows:
       - name: List available Xcode versions (تشخيص)
         script: ls -1 /Applications | grep -i '^xcode' || true
 
+      - name: Encoding gate (بوابة الترميز)
+        # سبب وجودها: ملف .gitignore كان بترميز Windows-1256 فهوت أداة Flutter
+        # SwiftPackageManagerGitignoreMigration قبل بدء البناء برسالة لا تذكر الترميز،
+        # وأضاعت جولة بناء كاملة. هذه الخطوة تُفشل البناء في ثانية برسالة صريحة.
+        # Why: a Windows-1256 .gitignore crashed SwiftPackageManagerGitignoreMigration with a
+        # message that never mentioned encoding and wasted a full build. Fail fast instead.
+        script: |
+          set -e
+          for f in .gitignore ios/.gitignore android/.gitignore pubspec.yaml; do
+            if [ -f "$f" ] && ! iconv -f UTF-8 -t UTF-8 "$f" > /dev/null 2>&1; then
+              echo "FAIL: $f is not valid UTF-8 — flutter build ios will crash on it."
+              echo "Fix locally: python tools/check_encoding.py --fix"
+              exit 1
+            fi
+          done
+          echo "UTF-8 OK: .gitignore · ios/.gitignore · android/.gitignore · pubspec.yaml"
+
       - name: Get packages (تحميل الحزم)
         script: flutter pub get
 
@@ -84,6 +101,37 @@ workflows:
           # -qry preserves symlinks inside Frameworks — signing fails without it.
           zip -qry "ky-apps-${VERSION}-unsigned.ipa" Payload
           ls -lh "ky-apps-${VERSION}-unsigned.ipa"
+
+      - name: Verify unsigned IPA (التحقق من محتوى الملف)
+        # لا نعتمد على "البناء نجح" كدليل على صلاحية الملف: نقرأ Info.plist من داخل الحزمة
+        # ونفشل البناء إن غاب معرّف الحزمة أو ATS أو إذن الصور — وهي أعطال لا تظهر إلا
+        # على الجهاز بعد التثبيت. يُستخدم plutil (مدمج في macOS، بلا اعتماديات).
+        # "Build succeeded" is not proof the bundle is usable: read Info.plist from inside it and
+        # fail if the bundle id, ATS, or the photo permission is missing — these only surface on
+        # the device after installation. plutil ships with macOS, so no extra dependency.
+        script: |
+          set -e
+          cd build/ios/iphoneos
+          APP=Payload/Runner.app
+          PLIST="$APP/Info.plist"
+          # استخراج متسامح: المفتاح الغائب يُصبح نصاً مميزاً بدل أن يوقف `set -e`
+          # عند plutil برسالة أقل وضوحاً. Tolerant extraction so OUR message is the one shown.
+          BUNDLE=$(/usr/bin/plutil -extract CFBundleIdentifier raw "$PLIST" 2>/dev/null || echo "missing")
+          VERSION=$(/usr/bin/plutil -extract CFBundleShortVersionString raw "$PLIST" 2>/dev/null || echo "?")
+          BUILD=$(/usr/bin/plutil -extract CFBundleVersion raw "$PLIST" 2>/dev/null || echo "?")
+          NAME=$(/usr/bin/plutil -extract CFBundleDisplayName raw "$PLIST" 2>/dev/null || echo "?")
+          ATS=$(/usr/bin/plutil -extract NSAppTransportSecurity.NSAllowsArbitraryLoads raw "$PLIST" 2>/dev/null || echo "missing")
+          LOCAL=$(/usr/bin/plutil -extract NSAppTransportSecurity.NSAllowsLocalNetworking raw "$PLIST" 2>/dev/null || echo "missing")
+          PHOTO=$(/usr/bin/plutil -extract NSPhotoLibraryUsageDescription raw "$PLIST" 2>/dev/null || echo "")
+          echo "bundle=$BUNDLE version=$VERSION build=$BUILD name=$NAME"
+          echo "ats=$ATS local=$LOCAL photo_chars=${#PHOTO}"
+          test "$BUNDLE" = "com.alkaboudy.app" || { echo "FAIL: bundle id is '$BUNDLE' not com.alkaboudy.app"; exit 1; }
+          test "$ATS" = "true" || { echo "FAIL: NSAllowsArbitraryLoads missing — every API call fails on device"; exit 1; }
+          test "$LOCAL" = "true" || { echo "FAIL: NSAllowsLocalNetworking missing — LAN API unreachable"; exit 1; }
+          test -n "$PHOTO" || { echo "FAIL: NSPhotoLibraryUsageDescription missing — logo picker crashes"; exit 1; }
+          test -d "$APP/Frameworks/App.framework" || { echo "FAIL: App.framework missing from bundle"; exit 1; }
+          test -d "$APP/Frameworks/Flutter.framework" || { echo "FAIL: Flutter.framework missing from bundle"; exit 1; }
+          echo "IPA VERIFIED: $BUNDLE v$VERSION+$BUILD ($NAME)"
 
     artifacts:
       # ملف التثبيت + رموز التفكيك (لازمة لقراءة أي crash على الجهاز).
