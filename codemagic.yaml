@@ -18,12 +18,14 @@ workflows:
     instance_type: mac_mini_m2
     max_build_duration: 60
 
-    # لا نجلِب المستودع الفرعي kyApp_API: بناء iOS لا يحتاجه، وتخطّيه يوفّر دقائق
-    # ويجنّب فشلاً بسبب node_modules/vendor.
-    # Skip the kyApp_API submodule: the iOS build never needs it, and skipping saves
-    # minutes plus a possible failure caused by node_modules/vendor.
-    clone:
-      submodules: false
+    # تنبيه: مخطط Codemagic الرسمي يرفض أي حقل غير معروف داخل clone
+    # (خطأ "clone -> extra fields not permitted")، لذلك لا نضع كتلة clone إطلاقاً.
+    # النتيجة: المستودع الفرعي kyApp_API يُجلَب تلقائياً عند clone الافتراضي، وهو مستودع
+    # عام فلا يُسبب فشلاً، ويزيد زمن الجلب ثواني فقط.
+    # NOTE: Codemagic's schema rejects unknown keys inside clone ("clone -> extra fields
+    # not permitted"), so the clone block is omitted on purpose. The kyApp_API submodule
+    # is therefore fetched by the default clone; it is a public repo, so this only costs
+    # a few seconds and cannot fail the build.
 
     environment:
       # إصدارات مثبّتة صراحةً لمطابقة أدوات التطوير المحلية (Flutter 3.29.3 / Dart 3.7.2).
@@ -43,6 +45,13 @@ workflows:
         - $HOME/.pub-cache
 
     scripts:
+      # خطوة تشخيصية تكلف ثانية واحدة: إن لم يكن Xcode المطلوب مثبتاً على الآلة،
+      # تظهر قائمة الإصدارات المتاحة في السجل فوراً بدل انتظار دقائق ثم فشل غامض.
+      # One-second diagnostic: if the requested Xcode is missing on the machine, the
+      # available versions show up in the log immediately instead of a late vague failure.
+      - name: List available Xcode versions (تشخيص)
+        script: ls -1 /Applications | grep -i '^xcode' || true
+
       - name: Get packages (تحميل الحزم)
         script: flutter pub get
 

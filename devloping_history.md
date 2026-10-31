@@ -4030,3 +4030,63 @@ Pest `Tailoring` 11/229 · pint PASS.
   ودفع `main` — ثم تُسجَّل الزمن والأخطاء الحقيقية في إدخال لاحق.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 00:20 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 00:57 — تصحيح: `codemagic.yaml` مرفوض من مخطط Codemagic (`clone` غير مدعوم أصلاً)
+
+- **الخطأ الذي أرجعه codemagic.io:** `1 validation error in codemagic.yaml: ios-unsigned -> clone
+  → extra fields not permitted`.
+- **السبب المثبت (لا تخمين):** نُزّل مخططهم الرسمي `codemagic.io/codemagic-schema.json` وفُحص
+  برمجياً؛ تعريف `Workflow` عنده `additionalProperties: false` وحقوله هي فقط:
+  `name, instance_type, max_build_duration, triggering, inputs, environment, integrations, cache,
+  when, working_directory, pre_clone_scripts, scripts, artifacts, publishing, labels` — أي أن
+  **`clone` ليس مفتاحاً معروفاً على مستوى الـworkflow أصلاً** (خيارات الجلب تُضبط من الواجهة،
+  لا من الملف)، لذلك كان خطأ إضافتها من الأصل.
+- **الإصلاح:** حُذفت كتلة `clone: submodules: false` واستُبدلت بتعليق يشرح المنع. الأثر الجانبي
+  المقبول: المستودع الفرعي `kyApp_API` سيُجلب مع الـclone الافتراضي؛ وهو مستودع عام (GitHub)
+  فلا يفشل الجلب، والتكلفة ثوانٍ فقط. لا يوجد بديل مدعوم لإيقاف الجلب من داخل `codemagic.yaml`.
+- **تحقق مضاد للخطأ قبل إعادة البناء:** فُحصت مفاتيح ملفنا على المخطط الفعلي — workflow بلا
+  حقول زائدة، و`environment` بمفاتيح مسموحة فقط (`flutter`, `xcode`, `cocoapods`, `vars`)،
+  و`scripts` تستخدم `name` + `script` وهما المسموحان في تعريف `BuildScript` (بقية المسموح:
+  `ignore_failure`, `on_failure`, `when`, `working_directory`, `test_report`)، و`artifacts`
+  قائمة نصوص.
+- **توثيق:** `ios_release_guide.md` §3.3 صار يحوي قائمة الحقول المسموحة وقاعدة "لا كتلة clone"،
+  و§7 يحوي صفاً لهذا الخطأ بعينه.
+- **لم يُمسّ:** `pubspec.yaml` (لا زيادة رقم إصدار — لم يتغير أي كود Dart)، ولا `lib/` ولا `android/`.
+- **التحقق:** `flutter analyze` = No issues found! (275.4 ثانية) · `codemagic.yaml` يُحلَّل كـYAML
+  ويطابق حقول المخطط المسموحة.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 00:57 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:07 — iOS: إغلاق بوابات الجودة + توحيد إصدار النظام على 13.0 في المواضع الثلاثة
+
+- **`ios/Flutter/AppFrameworkInfo.plist`:** ‏`MinimumOSVersion` من `12.0` إلى `13.0`. الملف هو
+  قالب `Info.plist` لإطار `App.framework` المحزوم، فبقاؤه على 12.0 يجعل الإطار يعلن حداً أدنى
+  مختلفاً عن التطبيق (`IPHONEOS_DEPLOYMENT_TARGET = 13.0`) وعن `ios/Podfile` (`platform :ios,
+  '13.0'`). المصدر الواحد الآن في ثلاثة ملفات برقم واحد: **13.0**.
+- **`codemagic.yaml`:** أُضيفت أول خطوة تشخيصية `ls -1 /Applications | grep -i '^xcode' || true`
+  تطبع إصدارات Xcode المثبتة على آلة البناء؛ فائدتها أن `xcode: "16.2"` إذا لم يكن
+  متاحاً يفشل البناء برسالة متأخرة بعد دقائق، وهذه الخطوة تكشفه في الثانية الأولى وتُظهر
+  القائمة التي يُختار منها.
+- **`flutter test` (بوابة الخطة §ب-3):** `+471 ~10: All tests passed!` — 471 ناجحاً و10 متجاوزة
+  و0 فاشل. هذا يعيد تأكيد البوابة الموثقة في `android_release_guide.md` §3.0 (لم يبق أي إخفاق
+  قائم). السجل الكامل في `.zwork/ios_gate_test.txt`.
+- **`flutter analyze`:** No issues found! (275.4 ثانية).
+- **تدقيق آلي لسلامة الملفات (لا اعتماد على المراجعة البصرية):**
+  - `Info.plist` يُقرأ بـ`plistlib` بلا خطأ (21 مفتاحاً)، والقيم المتحققة: الاسم العربي،
+    إذن الصور، إذن الشبكة المحلية، Face ID، و`NSAppTransportSecurity` بالقيمتين المطلوبتين.
+  - `project.pbxproj`: عدد `com.example` = 0، و`com.alkaboudy.app` = 6 (Runner ×3 + RunnerTests
+    ×3)، و`IPHONEOS_DEPLOYMENT_TARGET = 13.0` = 3، و`12.0` = 0.
+  - `AppIcon.appiconset`: الـ19 مرجعاً في `Contents.json` كلها ملفات موجودة، بمقاس = size×scale،
+    ونمط RGB (بلا alpha) — أي أن مجموعة الأيقونات متسقة مع الفهرس تماماً.
+  - `codemagic.yaml`: 6 خطوات، وفحص كل المفاتيح على مخطط Codemagic الرسمي = لا مفاتيح زائدة.
+  - `git check-ignore` على كل ملفات الخطة = لا شيء مستثنى (ستُدفع كلها مع أول commit).
+- **لم يُمسّ:** `lib/` · `android/` · `kyApp_API/` · `pubspec.yaml` (الإصدار `1.1.0+2` كما هو).
+- **ما لا يمكن التحقق منه من ويندوز (بصراحة):** نجاح البناء الفعلي على macOS، وتوقيع الـIPA،
+  وتشغيل التطبيق على الجهاز — كلها تتطلب Codemagic/آيفون، وقائمة تجربتها في
+  `ios_release_guide.md` §5.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:07 · **لا commit** (لم يُطلب).

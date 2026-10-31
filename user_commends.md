@@ -2363,3 +2363,22 @@ exhausted 256M for size class 7120» — بعد 1.39GB محجوزة و6.65 مل�
 > قي قسم الاقمشة حقل العرض ياحيوان يكون 58/45/38 وليس عرض وعرضين ياجزمه
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 09:38.
+
+---
+
+## 2026-11-01 00:57 — خطأ رفض codemagic.yaml عند البناء (نصّ الأمر كما ورد)
+
+> ظهر هذا الخطاء 1 validation error in codemagic.yaml:
+> ios-unsigned -> clone
+>   extra fields not permitted
+>
+> عند محاوله البناء في   codemagic.io
+
+**ما نُفّذ:** نُزّل مخطط Codemagic الرسمي (`codemagic.io/codemagic-schema.json`) وثبت أن `clone`
+ليس مفتاحاً مدعوماً على مستوى الـworkflow (`additionalProperties: false`)، فحُذفت كتلة
+`clone: submodules: false` بالكامل — المستودع الفرعي `kyApp_API` سيُجلب تلقائياً وهو عام فلا
+فشل. ثم فُحصت كل مفاتيح الملف على المخطط الفعلي (workflow · environment · scripts · artifacts)
+فلم يبق أي حقل زائد، وأُضيفت قاعدة الحقول المسموحة إلى `ios_release_guide.md` §3.3 وصفُّ خطأ
+خاص بها في §7.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 00:57.

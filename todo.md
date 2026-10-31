@@ -2166,3 +2166,54 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
       الأيقونات الـ15 كلها مربّعة وبنمط RGB (بلا قناة alpha).
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 00:20 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 00:57 — iOS: تصحيح `codemagic.yaml` — المخطط يرفض `clone.submodules`
+
+- [x] **الخطأ الفعلي عند البناء:** `1 validation error in codemagic.yaml: ios-unsigned -> clone:
+      extra fields not permitted`.
+- [x] **السبب المثبت:** مخطط Codemagic الرسمي (`codemagic.io/codemagic-schema.json`) صارم
+      (`additionalProperties: false`) **ولا يوجد فيه مفتاح `clone` إطاراً** على مستوى الـworkflow؛
+      الحقول المسموحة فقط: `name` · `instance_type` · `max_build_duration` · `triggering` ·
+      `inputs` · `environment` · `integrations` · `cache` · `when` · `working_directory` ·
+      `pre_clone_scripts` · `scripts` · `artifacts` · `publishing` · `labels`.
+- [x] **الحل:** حُذفت كتلة `clone: submodules: false` نهائياً، ووُضحت بدلها ملاحظة في الملف
+      نفسه. الأثر: `kyApp_API` يُجلب تلقائياً عند clone الافتراضي — مستودع عام فلا فشل، وثوانٍ
+      فقط من الزمن.
+- [x] **تحقق مضاد للخطأ:** فُحصت مفاتيح الملف مفتاحاً مفتاحاً على المخطط الفعلي:
+      لا حقول زائدة في الـworkflow ولا في `environment` (`flutter` 3.29.3 · `xcode` "16.2" ·
+      `cocoapods` default · `vars`) ولا في `scripts` (`name` + `script` فقط مسموحان فكلاهما صحيح)،
+      و`artifacts` قائمة نصوص كما يطلب.
+- [x] **توثيق:** أُضيفت في `ios_release_guide.md` §3.3 قاعدة "مخطط صارم — لا مفاتيح غير معروفة
+      ولا كتلة clone"، وفي جدول تشخيص الأخطاء §7 صف خاص بهذا الخطأ.
+- [x] **التحقق:** `flutter analyze` = **No issues found!** (275.4 ثانية). الخطوة المتبقية: إعادة
+      البناء من واجهة Codemagic.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 00:57 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:07 — iOS: إغلاق بوابات الجودة وضبط اتساق إصدار النظام
+
+- [x] **`flutter test` (بوابة الخطة §ب-3):** **471 ناجحاً · 10 متجاوزة · 0 فاشل** — لا إخفاق
+      جديد مقارنة بالمُوثَّق سابقاً (السجل: `.zwork/ios_gate_test.txt`).
+- [x] **`flutter analyze`:** **No issues found!** (275.4 ثانية).
+- [x] **اتساق إصدار iOS:** `ios/Flutter/AppFrameworkInfo.plist` ‏`MinimumOSVersion` من 12.0 إلى
+      **13.0** ليُطابق `IPHONEOS_DEPLOYMENT_TARGET` و`ios/Podfile` (ثلاثة مواضع برقم واحد — لا
+      تُترك متفاوتة).
+- [x] **خطوة تشخيص في CI:** أُضيفت أول خطوة في `codemagic.yaml` تطبع إصدارات Xcode المثبتة
+      (`ls -1 /Applications | grep -i '^xcode'`) — تُوفّر جولة بناء كاملة إن لم يتوفر 16.2.
+- [x] **تحقق آلي (فحص آلي لا بالنظر):**
+      - `Info.plist` يُحلَّل كـplist سليم و21 مفتاحاً، وفيه `CFBundleDisplayName=الكبودي` ·
+        `NSPhotoLibraryUsageDescription` · `NSLocalNetworkUsageDescription` · `NSFaceIDUsageDescription` ·
+        `NSAppTransportSecurity={NSAllowsArbitraryLoads: true, NSAllowsLocalNetworking: true}`.
+      - `project.pbxproj`: `com.example` = **0** · `com.alkaboudy.app` = **6** ·
+        `IPHONEOS_DEPLOYMENT_TARGET = 13.0` = **3** · `12.0` = **0**.
+      - أيقونات: **19** مرجعاً في `Contents.json` كلها موجودة بالمقاس الصحيح ونمط **RGB** بلا شفافية.
+      - `codemagic.yaml`: 6 خطوات · تطابق تام مع مخطط Codemagic (لا مفاتيح زائدة).
+      - `git check-ignore`: لا شيء من ملفات الخطة مستثنى من git.
+- [ ] **متبقٍ خارج قدرة ويندوز (بيانات/عتاد المستخدم):** ربط Codemagic ← بناء ← تثبيت بـSideloadly
+      على الآيفون ← تنفيذ قائمة التجربة (§5 من `ios_release_guide.md`).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:07 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).

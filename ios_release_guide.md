@@ -123,6 +123,15 @@ ky_apps/
 **بديل احتياطي (GitHub Actions):** مستودع خاص على GitHub = 200 دقيقة macOS شهرياً
 (مضاعف ×10) ≈ 10–13 بناء فقط. يُنشأ `.github/workflows/ios-unsigned.yml` عند الحاجة فقط.
 
+**قاعدة إلزامية عند تعديل `codemagic.yaml`:** مخطط Codemagic صارم `additionalProperties: false`
+ويرفض **أي مفتاح غير معروف** برسالة من نوع `<workflow> -> <key>: extra fields not permitted`
+(حدث فعلاً مع `clone.submodules`). الحقول المسموحة على مستوى الـworkflow هي فقط:
+`name` · `instance_type` · `max_build_duration` · `triggering` · `inputs` · `environment` ·
+`integrations` · `cache` · `when` · `working_directory` · `pre_clone_scripts` · `scripts` ·
+`artifacts` · `publishing` · `labels`. وداخل `environment`: `vars` · `groups` · `ios_signing` ·
+`android_signing` · `flutter` · `xcode` · `cocoapods` · `node` · `java` · `ruby` · `ndk`…
+ولا توجد كتلة `clone` في هذا الملف إطلاقاً (خيارات الجلب تُضبط من واجهة Codemagic).
+
 ---
 
 ## الجزء الرابع: إصدار نسخة جديدة — خطوة بخطوة
@@ -252,7 +261,8 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 | `maximum App ID limit … 10 App IDs every 7 days` | حدّ Apple للحساب المجاني | انتظر أياماً أو استخدم Apple ID آخر |
 | `maximum number of installed apps using a free developer profile` | 3 تطبيقات كحد أقصى | احذف تطبيقاً جانبياً من الجهاز |
 | `DeviceNotSupportedByThinning` | الجهاز غير مدعوم في الملف | فعّل «Remove limitation on supported devices» في الخيارات المتقدمة |
-| فشل بناء: CocoaPods / Xcode غير متاح | إصدار Xcode المطلوب غير موجود على الآلة | غيّر `xcode` في `codemagic.yaml` إلى أحدث إصدار متاح، أو ارفع `flutter` إلى أحدث stable |
+| فشل بناء: CocoaPods / Xcode غير متاح | إصدار Xcode المطلوب غير موجود على الآلة | سجل البناء يعرض **قائمة الإصدارات المتاحة** — غيّر `xcode` في `codemagic.yaml` إلى أقربها إلـ`16.2` |
+| `<workflow> -> <key>: extra fields not permitted` | مفتاح غير معروف في `codemagic.yaml` | راجع قائمة الحقول المسموحة في §3.3، واعلم أنه لا توجد كتلة `clone` |
 | فشل بناء: `IPHONEOS_DEPLOYMENT_TARGET` | Pod يطلب إصداراً أعلى | تأكد أن `ios/Podfile` موجود ومحفوظ (فيه `post_install` يوحّد 13.0) |
 | **التطبيق يعمل لكن كل الطلبات تفشل** | ATS يحجب `http`، أو الخادم/الجدار الناري | تحقق من `NSAppTransportSecurity` في الـ`Info.plist`، ثم من Safari على الآيفون (§5.0) |
 | **انهيار لحظة اختيار الشعار** | `NSPhotoLibraryUsageDescription` محذوف | أعده إلى `Info.plist` وأعد البناء |
