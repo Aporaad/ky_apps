@@ -3,7 +3,19 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>$(DEVELOPMENT_LANGUAGE)</string>
+	<string>ar</string>
+	<!-- تطبيق عربي أولاً: إعلان العربية لغة التطبيق الوحيدة يجعل حوارات النظام
+		 (أذونات الصور/الشبكة، وورقة المشاركة) تظهر بالعربية أيضاً.
+		 Arabic-first: declaring Arabic as the only app localization makes the system dialogs
+		 (photo/network permissions and the share sheet) appear in Arabic as well. -->
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>ar</string>
+	</array>
+	<!-- يطلبه share_plus لخلط لغة التطبيق مع لغة الجهاز في ورقة المشاركة.
+		 Required by share_plus so the share sheet may mix app and device localizations. -->
+	<key>CFBundleAllowMixedLocalizations</key>
+	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>يستخدم التطبيق Face ID لتسجيل الدخول بشكل آمن وسريع</string>
 	<!-- إذن قراءة معرض الصور — يطلبه زر «اختيار الشعار» في إعدادات الهوية (image_picker).

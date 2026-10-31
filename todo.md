@@ -2217,3 +2217,31 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
       على الآيفون ← تنفيذ قائمة التجربة (§5 من `ios_release_guide.md`).
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 01:07 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:25 — iOS: إغلاق ثغرتين من README الحزم (Keychain + لغة النظام)
+
+- [x] **الثغرة الأمنية/الوظيفية الأولى:** `flutter_secure_storage_darwin` يفرض صلاحية
+      **Keychain Sharing** على iOS؛ بدونها تُعيد الكتابة نجاحاً ظاهرياً بلا تخزين فعلي —
+      أي طرد المستخدم لشاشة الدخول في كل إقلاع وإلغاء التسجيل البيومتري. لم تكن الخطة
+      تنص عليها ولم يكن للمشروع أي ملف entitlements.
+- [x] **الحل:** ملفان جديدان `ios/Runner/DebugProfile.entitlements` و`Release.entitlements`
+      يحملان `keychain-access-groups = $(AppIdentifierPrefix)com.alkaboudy.app`، وربطهما بهدف
+      `Runner` عبر `CODE_SIGN_ENTITLEMENTS` في إعدادات Debug و Profile و Release، وإضافتهما
+      إلى شجرة المشروع كمرجعين حقيقيين.
+- [x] **الثغرة الثانية:** `share_plus` يطلب `CFBundleAllowMixedLocalizations` و`CFBundleDevelopmentRegion`.
+      أُضيفا مع `CFBundleLocalizations = [ar]` — فتظهر حوارات النظام (أذونات الصور/الشبكة)
+      وورقة المشاركة **بالعربية**، وهو ما يقتضيه تطبيق عربي أولاً كان إعلانه `$(DEVELOPMENT_LANGUAGE)` = en.
+- [x] **حفظ سلامة ملف Xcode:** التعديل على `project.pbxproj` جرى بسكربت يتحقق من الحقن
+      (مطابقة واحدة لكل مرساة) مع الحفاظ على نهايات **CRLF** وتوازن الأقواس — وتم التحقق بعده:
+      `CODE_SIGN_ENTITLEMENTS` ×3 ({Profile: DebugProfile, Debug: DebugProfile, Release: Release}) ·
+      `CRLF == LF` · الأقواس متوازنة · لا مفاتيح مكررة في `Info.plist`.
+- [x] **توثيق:** `ios_release_guide.md` — خريطة الملفات، وجدول التعديلات (+4 صفوف)،
+      وتنبيه أن الـentitlements ليست ترفاً، وصف تشخيصي لـ«تسجيل الخروج التلقائي»،
+      والثابت رقم 7 في §9.
+- [x] **التحقق:** 16 فحصاً آلياً (15 ناجحاً مباشرةً + فحصا الـentitlements أُعيدا بسبب تفسير
+      PowerShell لـ`$(` فنجحا) — الملفان يحتويان القيمة الصحيحة فعلاً (plistlib + قراءة مباشرة).
+- [ ] **متبقٍ خارج قدرة ويندوز:** البناء على Codemagic ← التثبيت بـSideloadly ← قائمة التجربة §5.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:25 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).

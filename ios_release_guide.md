@@ -90,8 +90,11 @@ ky_apps/
 ├── tools/ios_icons.py                   ← يولّد أيقونات iOS الـ15 من assets/logo1.png
 ├── ios/
 │   ├── Podfile                          ← محفوظ في git (platform 13.0 + post_install)
+│   ├── Flutter/AppFrameworkInfo.plist   ← MinimumOSVersion = 13.0 (يُطابق الهدف)
 │   └── Runner/
 │       ├── Info.plist                   ← ATS + أذونات الصور/الشبكة المحلية + الاسم العربي
+│       ├── DebugProfile.entitlements    ← Keychain Sharing (إلزامي لـ secure storage)
+│       ├── Release.entitlements         ← نفسه للإصدار
 │       └── Assets.xcassets/AppIcon.appiconset/   ← 15 أيقونة RGB بلا شفافية
 └── ios_release_guide.md                 ← هذا الملف
 ```
@@ -104,11 +107,20 @@ ky_apps/
 | `ios/Runner/Info.plist` | `NSPhotoLibraryUsageDescription` | زر «اختيار الشعار» (`image_picker`) — بدونها **ينهار التطبيق** لحظة النقر |
 | `ios/Runner/Info.plist` | `NSLocalNetworkUsageDescription` | iOS 14+ يسأل قبل الاتصال بعنوان خاص (`192.168.x.x`) |
 | `ios/Runner/Info.plist` | `CFBundleDisplayName = الكبودي` | مطابقة `android:label` |
+| `ios/Runner/Info.plist` | `CFBundleDevelopmentRegion = ar` · `CFBundleLocalizations = [ar]` · `CFBundleAllowMixedLocalizations` | حوارات النظام (أذونات الصور/الشبكة) وورقة المشاركة تظهر بالعربية؛ والأخير يطلبه `share_plus` |
+| `ios/Runner/DebugProfile.entitlements` + `Release.entitlements` | ملفان جديدان: `keychain-access-groups` | **بدونهما لا يعمل `flutter_secure_storage` على iOS** — تُرجع الكتابة نجاحاً ظاهرياً بلا تخزين فعلي، فيُطرد المستخدم لتسجيل الدخول كل مرة ويُلغى التسجيل البيومتري |
+| `project.pbxproj` | `CODE_SIGN_ENTITLEMENTS` في Debug/Profile/Release + مرجعا الملفين في الشجرة | ربط الـentitlements بهدف `Runner` |
+| `ios/Flutter/AppFrameworkInfo.plist` | `MinimumOSVersion` 12.0 → 13.0 | توحيد الحد الأدنى بين الهدف والـPodfile وإطار `App.framework` |
 | `project.pbxproj` | `com.example.kyApps` → `com.alkaboudy.app` (×3) | `com.example.*` معرّف قالب Flutter وليس هوية الشركة |
 | `project.pbxproj` | `IPHONEOS_DEPLOYMENT_TARGET` 12.0 → 13.0 (×3) | كل الحزم تعلن 12.0 كحد أدنى؛ 13.0 يمنع رفض Xcode الحديث |
 | `ios/Podfile` | ملف جديد محفوظ في git | حتمية البناء السحابي بدل قالب يُولَّد كل مرة |
 | الأيقونات | 15 ملفاً مولّدة من شعار الشركة | كانت شعار Flutter الافتراضي الأزرق |
 | `codemagic.yaml` | ملف جديد | بناء IPA غير موقّع على macOS سحابي |
+
+> **الـentitlements ليست ترفاً:** `SecItemAdd` على iOS يحتاج صلاحية سلسلة مفاتيح للـApp ID. فلتراجعها
+> أولاً قبل أي تشخيص لـ«تسجيل الخروج التلقائي» أو «البصمة تطلب التسجيل كل مرة».
+> **The entitlements are not optional:** `SecItemAdd` needs the App ID's keychain access group.
+> Check them first when diagnosing "logs out on its own" or "biometrics ask to enrol every time".
 
 ### 3.3 إعداد Codemagic أول مرة (خطوات لمرة واحدة)
 
@@ -245,7 +257,9 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 3. **التوقيع المجاني لا يُستخدم للتوزيع:** لا يُمنح الـIPA الموقّع بيد غيرك — تسجيل
    الأجهزة وحدود المدة تجعل ذلك غير عملي أصلاً.
 4. **بيانات التطبيق الحساسة** (التوكن، رابط API، الصلاحيات) تبقى في Keychain عبر
-   `flutter_secure_storage` — لا تُنقل إلى `SharedPreferences` على iOS أيضاً.
+   `flutter_secure_storage` — لا تُنقل إلى `SharedPreferences` على iOS أيضاً. وهذا يبقى صحيحاً
+   **فقط** ما دامت `keychain-access-groups` معلنة في `ios/Runner/*.entitlements`: بدونها
+   يقول النظام «تم الحفظ» ولا يحفظ، فيضيع التوكن فعلياً بين إقلاعين.
 
 ---
 
@@ -266,6 +280,7 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 | فشل بناء: `IPHONEOS_DEPLOYMENT_TARGET` | Pod يطلب إصداراً أعلى | تأكد أن `ios/Podfile` موجود ومحفوظ (فيه `post_install` يوحّد 13.0) |
 | **التطبيق يعمل لكن كل الطلبات تفشل** | ATS يحجب `http`، أو الخادم/الجدار الناري | تحقق من `NSAppTransportSecurity` في الـ`Info.plist`، ثم من Safari على الآيفون (§5.0) |
 | **انهيار لحظة اختيار الشعار** | `NSPhotoLibraryUsageDescription` محذوف | أعده إلى `Info.plist` وأعد البناء |
+| **تسجيل الخروج التلقائي عند كل إقلاع / البطاقة البيومترية تُلغى** | `keychain-access-groups` غير مربوطة بالهدف | تأكد من وجود الملفَّين وأن `CODE_SIGN_ENTITLEMENTS` مضبوط في الإعدادات الثلاث (وأن Sideloadly وقّع بنفس App ID) |
 | العربية تظهر رموزاً | تحويل الترميز (خادم/عميل) أو خط غير محمّل | نفس تشخيص نسخة أندرويد — راجع `DBdevloping_history.md` |
 
 ---
@@ -313,3 +328,5 @@ git add -A; git commit -m "iOS: release 1.1.1+3"; git push origin main
 4. `NSPhotoLibraryUsageDescription` يبقى في `Info.plist` ما دام زر اختيار الشعار موجوداً.
 5. `NSAllowsArbitraryLoads` يُزال عند نشر الخادم على HTTPS.
 6. الـdSYM يُحفظ لكل إصدار موزَّع.
+7. `keychain-access-groups` يبقى في `ios/Runner/DebugProfile.entitlements` و`Release.entitlements`
+   ومربوطاً بـ`CODE_SIGN_ENTITLEMENTS` في الإعدادات الثلاث — حذفه يُفسد الجلسة والبيومترية بصمت.

@@ -4090,3 +4090,38 @@ Pest `Tailoring` 11/229 · pint PASS.
   `ios_release_guide.md` §5.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 01:07 · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 01:25 — iOS: صلاحية Keychain (ثغرة تُفقد الجلسة بصمت) + لغة النظام العربية
+
+- **كيف اكتُشفت:** مراجعة README كل حزمة iOS في مخزن pub المحلي (مصدر رسمي لا تخمين):
+  `flutter_secure_storage_darwin-0.3.2` و`share_plus-12.0.2` و`local_auth_darwin-1.6.0`
+  و`image_picker_ios-0.8.13` و`printing-5.14.3` و`url_launcher_ios-6.3.4`.
+- **الثغرة (1):** README يقول حرفياً إنه يجب إضافة **Keychain Sharing** في
+  `Runner/DebugProfile.entitlements` و`Runner/Release.entitlements` مع `keychain-access-groups`،
+  وأن إغفالها (أو إغفال اسم App Group) يؤدي إلى «values appearing to be written successfully
+  but never actually being written at all». الأثر على تطبيقنا: `ky_auth_token` و`ky_user_permissions`
+  و`ky_session_expires_at` تُكتب بلا خطأ ولا تُحفظ، فيُطرد المستخدم لكل شاشة الدخول عند كل إقلاع
+  ويُلغى تسجيل `local_auth` البيومتري. المشروع لم يكن فيه أي ملف entitlements إطلاقاً.
+- **الحل (1):** ملفان جديدان (`ios/Runner/DebugProfile.entitlements` و`Release.entitlements`) بمحتوى
+  `keychain-access-groups = ['$(AppIdentifierPrefix)com.alkaboudy.app']`، وربطهما بـ
+  `CODE_SIGN_ENTITLEMENTS` في إعدادات هدف `Runner` الثلاث (Debug/Profile → DebugProfile،
+  Release → Release)، مع إضافة مرجعيهما في `PBXFileReference` وفي أبناء مجموعة `Runner`
+  ليظهرا في شجرة Xcode.
+- **تنفيذ التعديل على `project.pbxproj`:** الملف حساس للتبويبات ونهايات الأسطر (تأكدنا أنه
+  **CRLF خالص**: 616 = 616). كُتب سكربت لمرة واحدة يبني الأنماط بـ`\t` و`\r\n`، ويؤكد
+  `assert count == 1` لكل مرساة، ويُدرج الأسطر الثلاثة، ثم حُذف السكربت بعد النجاح (684 حرفاً أُضيفت).
+- **الثغرة (2):** README `share_plus` يطلب `CFBundleAllowMixedLocalizations` و`CFBundleDevelopmentRegion`.
+  أُضيفا، وغُيّر `CFBundleDevelopmentRegion` من `$(DEVELOPMENT_LANGUAGE)` (يحل إلى `en`) إلى `ar`
+  مع `CFBundleLocalizations = ['ar']` — فصار التطبيق معلناً نفسه عربياً وحده، فتظهر أذونات
+  الصور/الشبكة وورقة المشاركة بالعربية حتى على جهاز إنجليزي (الواجهة أصلاً مفروضة بالعربية).
+- **تحقق بعد التعديل (آلي):** `CODE_SIGN_ENTITLEMENTS` ×3 مربوطة بالإعدادات الصحيحة ·
+  `CRLF == LF` (623/623) · الأقواس `{}` و`()` متوازنة · `Info.plist` يُحلّل بـ23 مفتاحاً بلا مفتاح مكرر ·
+  الملفان يُقرآن بـplistlib ويحملان القيمة الصحيحة · الـ19 أيقونة سليمة · `AppFrameworkInfo` = 13.0 ·
+  `codemagic.yaml` 6 خطوات مطابقة للمخطط · الدليل 18066 حرفاً.
+- **ملاحظة أداة:** فحصان ظهرا فاشلين مؤقتاً ليس لعيب في الملفين بل لنفسير PowerShell للنص
+  `$(AppIdentifierPrefix)` كتعبير فرعي داخل سلسلة مزدوجة الأقواس؛ أُعيد الفحص بقراءة مباشرة فنجحا.
+- **لم يُمسّ:** `lib/` · `android/` · `pubspec.yaml` (الإصدار `1.1.0+2`).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 01:25 · **لا commit** (لم يُطلب).

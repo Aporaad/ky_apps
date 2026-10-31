@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+		صلاحية مشاركة سلسلة المفاتيح — إلزامية لـ flutter_secure_storage على iOS.
+		بدون هذا المفتاح تُعيد الكتابة نجاحاً ظاهرياً بينما لا تُخزَّن القيمة فعلاً،
+		فتضيع جلسة الدخول والتسجيل البيومتري عند كل إقلاع للتطبيق.
+		Keychain sharing — required by flutter_secure_storage on iOS. Without it a write
+		appears to succeed while nothing is stored, so the auth token and the biometric
+		enrollment are lost on every launch.
+		المصدر: README حزمة flutter_secure_storage_darwin (قسم iOS).
+		Source: flutter_secure_storage_darwin README (iOS section).
+	-->
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)com.alkaboudy.app</string>
+	</array>
+</dict>
+</plist>
