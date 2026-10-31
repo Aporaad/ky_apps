@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import '../../../../core/constants/app_info.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../utils/external_links.dart';
 import 'app_info_card.dart';
 import 'contact_icon_button.dart';
+import 'whatsapp_icon.dart';
 
 /// قسم «معلومات المطور» — الاسم وفي سطره نفسه أيقونتا اتصال وواتساب
 /// The "developer information" section — the name with the call and WhatsApp icons on its own row.
@@ -78,14 +80,20 @@ class DeveloperInfoSection extends StatelessWidget {
           // contact side by side, and the tooltip holds the number as written — no duplicated
           // button label eating the row's width.
           ContactIconButton(
-            icon: Icons.call_outlined,
+            icon: Icon(
+              FontAwesomeIcons.phone,
+              size: 17,
+              color: AppColors.primary,
+            ),
             tooltip: kDeveloperPhoneDisplay,
             color: AppColors.primary,
             onPressed: () => ExternalLinks.openTel(context, kDeveloperPhone),
           ),
           const SizedBox(width: 8),
           ContactIconButton(
-            icon: Icons.chat_rounded,
+            // شعار واتساب الرسمي بدل `Icons.chat_outlined` العامة
+            // The official WhatsApp mark instead of the generic Icons.chat_outlined.
+            icon: const WhatsAppIcon(),
             tooltip: 'واتساب',
             color: AppColors.whatsapp,
             onPressed: () =>

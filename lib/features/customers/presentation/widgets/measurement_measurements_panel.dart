@@ -40,11 +40,11 @@ class MeasurementMeasurementsPanel extends StatelessWidget {
       title: 'تفاصيل المقاسات',
       icon: Icons.straighten_rounded,
       accent: AppColors.info,
-      subtitle: tailoringJoin([model.beneficiary, model.typeName]),
-      trailing: MeasurementBadge(
-        label: '${model.measurements.length}/12',
-        color: AppColors.info,
-      ),
+      // لا سطر ثانوي هنا: المستفيد والنوع مكانهما «بيانات العميل والمستفيد»، وتكرارهما في
+      // كل قسم يجعل الشاشة تردد نفسها بدل أن تُقرأ مرة واحدة.
+      // No subtitle here: beneficiary and type belong to the identity section, and repeating
+      // them in every card makes the sheet echo itself instead of being read once.
+      trailingText: '${model.measurements.length}/12',
       child: visible.isEmpty
           ? const _EmptyLine(text: 'لا توجد مقاسات مسجّلة لهذا الموديل')
           : MeasurementFieldGrid(

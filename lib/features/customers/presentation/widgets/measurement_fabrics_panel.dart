@@ -6,20 +6,22 @@ import '../../../tailoring/data/models/cutting_piece_item.dart';
 import '../../../tailoring/data/models/tailoring_parse.dart';
 import 'measurement_kit.dart';
 
-/// القسم الرابع: الأقمشة الخاصة بالموديل — كل قماش في سطرين
-/// Section four: the model's fabrics — every fabric on exactly two lines.
+/// القسم الرابع: الأقمشة الخاصة بالموديل — كل قماش في سطرين داخل عرض الشاشة
+/// Section four: the model's fabrics — every fabric on two lines, inside the screen's width.
 ///
 /// السطر الأول هوية القماش وكميته وسعره: رقم الطلب (`OHDID`) · القماش · العرض · اللون ·
-/// هنش · ياردة · السعر. والسطر الثاني مسؤولو التنفيذ ومرحلتها: القصّاص · الخيّاط · المرحلة.
-/// تقسيم كهذا يبقي كل عمود على محاذاته عبر الأقمشة، وهو ما يعجز عنه جدول بعشرة أعمدة على جوال.
-/// Line one is the fabric's identity, quantity and price: order number (OHDID), cloth, width,
-/// colour, hinsh, yards, price. Line two is who executed it and how far: cutter, tailor, stage.
-/// The split keeps every column aligned down the list, which a ten-column table cannot do on a phone.
+/// هنش · ياردة · السعر. والسطر الثاني التنفيذ: القصّاص · الخيّاط · المرحلة.
+/// لا عمود ترقيم (#) ولا تمرير أفقي: كل الأعمدة تُرى دفعة واحدة لأن القارئ الذي يقارن
+/// قماشين لا يجب أن يحرّك الشاشة ليراهما معاً.
+/// Line one is the fabric, its quantity and price: order id (OHDID), cloth, width, colour, hinsh,
+/// yards, price. Line two is the execution: cutter, tailor, stage. There is no row-number column
+/// and no horizontal scrolling: every column is visible at once, because someone comparing two
+/// fabrics must not have to slide the screen to see both.
 ///
-/// «العرض» هو `CLOTH_TYPE` نفسه: قيمته في القاعدة «عرضية/عادية» لا نوع قماش، فتسميته «النوع»
-/// كانت تضلّل القارئ.
-/// "Width" is CLOTH_TYPE itself: its values are عرضية/عادية in the live data, so labelling that
-/// column "type" was actively misleading.
+/// «العرض» هو `CLOTH_TYPE`: قيمه في القاعدة «عرضية/ضيقة» لا نوع قماش، فتسميته «النوع» كانت
+/// تضلّل. والرف والمصدر محذوفان بطلب صريح.
+/// "Width" is CLOTH_TYPE — its stored values are عرضية/ضيقة, so "type" misled; shelf and source
+/// are removed on request.
 class MeasurementFabricsPanel extends StatelessWidget {
   final CuttingModelItem model;
 
@@ -31,11 +33,7 @@ class MeasurementFabricsPanel extends StatelessWidget {
       title: 'الأقمشة الخاصة بالموديل',
       icon: Icons.dry_cleaning_rounded,
       accent: AppColors.accentLight,
-      subtitle: tailoringJoin([model.beneficiary, model.typeName]),
-      trailing: MeasurementBadge(
-        label: '${model.pieces.length} قطعة',
-        color: AppColors.accentLight,
-      ),
+      trailingText: '${model.pieces.length} قطعة',
       child: model.pieces.isEmpty
           ? Text(
               'لا توجد قطع مسجّلة لهذا الموديل',
@@ -45,173 +43,116 @@ class MeasurementFabricsPanel extends StatelessWidget {
                 color: AppColors.textSecondary,
               ),
             )
-          // عمود واحد بعرض أدنى: المحاذاة أهم من حشو الشاشة، والتكبير بالإصبع يعوّض الضيق
-          // One column with a floor width: alignment beats stuffing the viewport, and pinch zoom
-          // covers the rest on a narrow screen.
-          // العرض محسوب لا «غير محدد»: التمرير الأفقي يعطي الابن عرضاً لا نهائياً، و`Expanded`
-          // داخل عرض لا نهائي يسقط التخطيط قبل أن يرسم حرفاً.
-          // The width is computed, never unbounded: a horizontal scroller hands its child infinite
-          // width, and Expanded inside that blows up the layout before a single glyph is drawn.
-          : LayoutBuilder(
-              builder: (ctx, constraints) {
-                const minWidth = 700.0;
-                final width = constraints.maxWidth < minWidth
-                    ? minWidth
-                    : constraints.maxWidth;
-
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: SizedBox(
-                    width: width,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (var i = 0; i < model.pieces.length; i++) ...[
-                          if (i > 0) const SizedBox(height: 6),
-                          _FabricCard(piece: model.pieces[i], index: i),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                for (var i = 0; i < model.pieces.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 6),
+                  _FabricCard(piece: model.pieces[i]),
+                ],
+              ],
             ),
     );
   }
 }
 
-/// بطاقة قماش واحد بسطرين مفصولين بخطّ
-/// One fabric as two lines separated by a rule.
+/// بطاقة قماش واحد: سطر للأعمدة السبعة، وخط فاصل، ثم سطر المسؤولية والمرحلة
+/// One fabric card: seven columns, a rule, then the responsibility and stage line.
 class _FabricCard extends StatelessWidget {
   final CuttingPieceItem piece;
-  final int index;
 
-  const _FabricCard({required this.piece, required this.index});
+  const _FabricCard({required this.piece});
+
+  /// أوزان الأعمدة: رقم الطلب يأخذ نصيباً وافراً لأنه في القاعدة 11 رقماً (مثال حيّ
+  /// 26211325025) وكسره بالاقصاء أسوأ من اقصاء اسم القماش، فالاسم يطول ويقصر أما الرقم فمعرّف.
+  /// Column weights: the order id gets generous room because live values run to 11 digits
+  /// (26211325025 for example), and ellipsing an identifier is worse than ellipsing a cloth
+  /// name — names vary, identifiers do not.
+  static const List<double> _firstLineWeights = [2.4, 2.2, 1.3, 1.3, 0.9, 1.0, 1.3];
+  static const List<String> _firstLineLabels = [
+    'رقم الطلب',
+    'القماش',
+    'العرض',
+    'اللون',
+    'هنش',
+    'ياردة',
+    'السعر',
+  ];
 
   @override
   Widget build(BuildContext context) {
     final tone = AppColors.accentLight;
+    final values = <String?>[
+      piece.ohdId?.toString() ?? '${piece.seqNo1}',
+      piece.clothName,
+      piece.clothType,
+      piece.colorText,
+      tailoringNumber(piece.hinsh),
+      tailoringNumber(piece.yards),
+      tailoringNumber(piece.price, decimals: 2),
+    ];
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(9),
-        border: Border.all(color: tone.withValues(alpha: 0.35)),
+        border: Border.all(color: tone.withValues(alpha: 0.45)),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // السطر الأول: هوية القماش وكميته وسعره
-          // Line one: the fabric itself, its quantity and its price.
           Container(
-            color: tone.withValues(alpha: 0.07),
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
-            // IntrinsicHeight لأن الصفوف داخل تمرير رأسي لا محدود: `stretch` بلا ارتفاع
-            // محسوب ترمي القيود غير الصالحة قبل أن تُرسم الخلية الأولى.
-            // IntrinsicHeight because these rows live in an unbounded vertical scroller:
-            // `stretch` without a computed height hands children invalid constraints before
-            // the first cell is ever painted.
+            color: tone.withValues(alpha: 0.10),
+            padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _cell('#${index + 1}', flex: 1, accent: tone),
-                  _rule(),
-                  _cell(
-                    'رقم الطلب',
-                    value: piece.ohdId?.toString(),
-                    flex: 2,
-                    numeric: true,
-                  ),
-                  _rule(),
-                  _cell('القماش', value: piece.clothName, flex: 4),
-                  _rule(),
-                  _cell('العرض', value: piece.clothType, flex: 2.4),
-                  _rule(),
-                  _cell('اللون', value: piece.colorText, flex: 2.4),
-                  _rule(),
-                  _cell(
-                    'هنش',
-                    value: tailoringNumber(piece.hinsh),
-                    flex: 1.8,
-                    numeric: true,
-                  ),
-                  _rule(),
-                  _cell(
-                    'ياردة',
-                    value: tailoringNumber(piece.yards),
-                    flex: 1.8,
-                    numeric: true,
-                  ),
-                  _rule(),
-                  _cell(
-                    'السعر',
-                    value: tailoringNumber(piece.price, decimals: 2),
-                    flex: 2.4,
-                    numeric: true,
-                    valueColor: AppColors.primary,
-                  ),
-                ],
+                children: _spread(
+                  [
+                    for (var i = 0; i < values.length; i++)
+                      MeasurementField(
+                        label: _firstLineLabels[i],
+                        value: values[i],
+                        dense: true,
+                        numeric: i != 1 && i != 3,
+                        valueColor: i == 6 ? AppColors.primary : null,
+                      ),
+                  ],
+                  _firstLineWeights,
+                ),
               ),
             ),
           ),
-          Container(height: 1, color: tone.withValues(alpha: 0.28)),
-          // السطر الثاني: المسؤولون والمرحلة
-          // Line two: the people responsible and the stage reached.
+          Container(height: 1.2, color: tone.withValues(alpha: 0.45)),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+            padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
             child: IntrinsicHeight(
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // ترتيب الخانات يترك مجالاً لشارة المرحلة دون قصّ النص
-                  // This order leaves the stage chip its own room instead of clipping a name.
-                  _cell(
-                    'القصّاص',
-                    value: piece.cutterName,
-                    flex: 3,
-                    icon: Icons.content_cut_rounded,
-                  ),
-                  _rule(),
-                  _cell(
-                    'الخيّاط',
-                    // «غير مسند» لا «—»: الخيّاط غير المسند قرار إنتاجي لا معلومة ناقصة
-                    // "Unassigned" is a production state, not a missing value.
-                    value: piece.hasTailor ? piece.tailorName : 'غير مسند',
-                    flex: 3,
-                    icon: Icons.design_services_rounded,
-                    valueColor: piece.hasTailor ? null : AppColors.textSecondary,
-                  ),
-                  _rule(),
-                  Expanded(
-                    flex: 3,
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
-                      child: Row(
-                        children: [
-                          Text(
-                            'المرحلة',
-                            style: TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          MeasurementBadge(
-                            label: piece.stage.label,
-                            color: _stageColor(piece.stage),
-                            solid: piece.stage == CuttingPieceStage.delivered,
-                          ),
-                        ],
-                      ),
+                children: _spread(
+                  [
+                    MeasurementField(
+                      label: 'القصّاص',
+                      value: piece.cutterName,
+                      dense: true,
+                      icon: Icons.content_cut_rounded,
                     ),
-                  ),
-                ],
+                    MeasurementField(
+                      label: 'الخيّاط',
+                      // «غير مسند» لا «—»: غير المسند حالة إنتاجية لا معلومة ناقصة
+                      // "Unassigned" is a production state, not a missing value.
+                      value: piece.hasTailor ? piece.tailorName : 'غير مسند',
+                      dense: true,
+                      icon: Icons.design_services_rounded,
+                      valueColor: piece.hasTailor
+                          ? null
+                          : AppColors.textSecondary,
+                    ),
+                    _StageCell(piece: piece),
+                  ],
+                  const [2.4, 2.4, 1.6],
+                ),
               ),
             ),
           ),
@@ -220,37 +161,72 @@ class _FabricCard extends StatelessWidget {
     );
   }
 
-  /// خانة بسطر تسمية وفوقه/إليه قيمة، بعرض نسبي ثابت عبر كل البطاقات
-  /// A labelled cell with a fixed flex, so columns line up across every fabric card.
-  Widget _cell(
-    String label, {
-    String? value,
-    required double flex,
-    bool numeric = false,
-    IconData? icon,
-    Color? valueColor,
-    Color? accent,
-  }) {
-    return Expanded(
-      flex: flex.round(),
-      child: MeasurementField(
-        label: label,
-        value: value,
-        icon: icon,
-        numeric: numeric,
-        valueColor: valueColor,
+  /// توزيع الخلايا بأوزانها مع خط رفيع بينها — بلا أي عمود ترقيم
+  /// Lays the cells out at their weights with hairlines between them — no row-number column.
+  List<Widget> _spread(List<Widget> cells, List<double> weights) {
+    final children = <Widget>[];
+
+    for (var i = 0; i < cells.length; i++) {
+      children.add(
+        Expanded(flex: (weights[i] * 10).round(), child: cells[i]),
+      );
+
+      if (i != cells.length - 1) {
+        children.add(Container(width: 1, color: gridRule));
+      }
+    }
+
+    return children;
+  }
+}
+
+/// خلية المرحلة: تسمية فوق شارة ملوّنة — كبقية خانات السطر الثاني لا كعنصر معلّق
+/// The stage cell: a label over a coloured badge, aligned with the rest of line two.
+class _StageCell extends StatelessWidget {
+  final CuttingPieceItem piece;
+
+  const _StageCell({required this.piece});
+
+  @override
+  Widget build(BuildContext context) {
+    final stage = piece.stage;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'المرحلة',
+            style: TextStyle(
+              fontSize: 8.5,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+              letterSpacing: 0.2,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 2),
+          MeasurementBadge(
+            label: stage.label,
+            color: fabricStageColor(stage),
+            // التسليم وحده يُملأ اللون: هو الحالة «المنتهية» في السجل
+            // Only delivery fills solid: it is the finished state of the record.
+            solid: stage == CuttingPieceStage.delivered,
+          ),
+        ],
       ),
     );
   }
-
-  /// خط فصل رأسي — هو «الفاصل بين الحقول» المطلوب، لا فراغ يُفهم ظنًّا
-  /// The vertical rule: the requested field separator, not whitespace left to guesswork.
-  Widget _rule() => Container(width: 1, color: AppColors.border);
-
-  Color _stageColor(CuttingPieceStage stage) => switch (stage) {
-    CuttingPieceStage.delivered => AppColors.success,
-    CuttingPieceStage.tailored => AppColors.info,
-    CuttingPieceStage.cut => AppColors.warning,
-    CuttingPieceStage.waiting => AppColors.textSecondary,
-  };
 }
+
+/// لون المرحلة بلوحة التطبيق — نفس دلالة الألوان في كل شاشات التفصيل
+/// The stage colour from the app palette, carrying the same meaning across the tailoring screens.
+Color fabricStageColor(CuttingPieceStage stage) => switch (stage) {
+  CuttingPieceStage.delivered => AppColors.success,
+  CuttingPieceStage.tailored => AppColors.info,
+  CuttingPieceStage.cut => AppColors.warning,
+  CuttingPieceStage.waiting => AppColors.textSecondary,
+};

@@ -206,6 +206,20 @@ void main() {
     expect(repo.requests.last, '40|خالد|beneficiary_asc|1');
   });
 
+  testWidgets('a model with no beneficiary is titled with the customer name', (
+    tester,
+  ) async {
+    // 18,846 صفاً من 45,313 بلا مستفيد: القائمة تعرض اسم العميل نفسه، لا خانة اعتذار
+    // 18,846 of 45,313 rows carry no beneficiary: the list shows the customer's own name, not
+    // an apology where the title should be.
+    await _pumpHost(tester, _FakeRepo(items: [_model(beneficiary: null)]));
+    await tester.tap(find.text('اختيار موديل'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('تراب الصغير'), findsWidgets);
+    expect(find.textContaining('بلا مستفيد'), findsNothing);
+  });
+
   testWidgets('an empty customer says so in the sheet itself', (tester) async {
     await _pumpHost(tester, _FakeRepo());
     await tester.tap(find.text('اختيار موديل'));

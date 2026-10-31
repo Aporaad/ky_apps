@@ -122,10 +122,6 @@ class MeasurementModelRef {
     return (named == null || named.isEmpty) ? 'موديل $seqNo' : named;
   }
 
-  /// مستفيد غير مسمّى يُسمّى بصراحة: الشرطة تُقرأ «لا بيانات» لا «بلا مستفيد محدد»
-  /// An unnamed beneficiary is named plainly: a dash reads as "no data", not "no beneficiary".
-  String get beneficiaryLabel => beneficiary ?? 'بلا مستفيد محدّد';
-
   /// مرحلة الموديل من أعلام الإنجاز — التسليم يتجاوز الخياطة والخياطة تتجاوز القص
   /// The model's stage from its flags: delivery outranks tailoring, tailoring outranks cutting.
   String get stageLabel {

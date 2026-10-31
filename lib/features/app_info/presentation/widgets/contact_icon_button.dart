@@ -19,7 +19,14 @@ class ContactIconButton extends StatelessWidget {
     super.key,
   });
 
-  final IconData icon;
+  /// الرمز داخل الزر — `Icon` عادي أو شعار علامة مثل `WhatsAppIcon`
+  /// The glyph inside the button — a plain [Icon] or a brand mark such as `WhatsAppIcon`.
+  ///
+  /// ودجت لا `IconData`: شعار واتساب الرسمي يأتي من خط علامات لا من `Icons`، فلو حُصر الحقُّل
+  /// بـ `IconData` لتعذّر تمريره إلا بتحايل.
+  /// A widget rather than an `IconData`: the official WhatsApp mark comes from a brand font, not
+  /// from `Icons`, so an `IconData` field could not carry it.
+  final Widget icon;
 
   /// نص التلميح — يُقرأ بالضغط المطوّل ولا يُرسم فوق الصفحة
   /// The tooltip text — read on long-press and never painted over the page.
@@ -51,9 +58,7 @@ class ContactIconButton extends StatelessWidget {
           child: SizedBox(
             width: size,
             height: size,
-            child: Center(
-              child: Icon(icon, size: size * 0.5, color: color),
-            ),
+            child: Center(child: icon),
           ),
         ),
       ),

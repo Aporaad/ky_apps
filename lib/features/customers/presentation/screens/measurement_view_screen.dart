@@ -106,9 +106,6 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
     final subject = async.value;
     final header = subject?.detail.header;
     final model = subject?.model;
-    final custName = (header?.custName.isNotEmpty ?? false)
-        ? header!.custName
-        : widget.custName;
 
     return AppBar(
       backgroundColor: Colors.white,
@@ -121,18 +118,20 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
       ),
       title: Row(
         children: [
-          Icon(
-            Icons.straighten_rounded,
-            color: Color(0xFFD97706),
-            size: 21,
-          ),
-          const SizedBox(width: 9),
+          // لا أيقونة في العنوان: شريط الهوية تحتَهُ يحملها، وأخذُ 30 بكسل من العنوان كان يبتر
+          // «مقاسات العملاء» على جوال بعرض 390 مع أربعة أزرار في الطرف.
+          // No icon in the title: the identity band already carries one, and those 30 pixels cut
+          // "مقاسات العملاء" short on a 390-wide phone beside four trailing actions.
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // اسم العميل ليس هنا: شريط الهوية أعلى الصفحة يحمله مرة واحدة، وتكراره في
+                // عنوان الشاشة كان يجعله يظهر مرتين في أول بوصة.
+                // The customer's name is not here: the identity band carries it once, and repeating
+                // it in the title showed it twice within the first inch of the screen.
                 Text(
-                  custName.isEmpty ? 'مقاسات العميل' : 'مقاسات $custName',
+                  'مقاسات العملاء',
                   style: TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.bold,
@@ -345,6 +344,20 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
 
     // الأقسام الأربعة كما تُعرض، ثم تُرتَّب حسب العرض المتاح
     // The four sections as shown, then laid out for the width on offer.
+    //
+    // شريط الهوية أولاً: اسم العميل يُكتب هنا مرة واحدة أعلى الصفحة، فلا يُعاد في أي خانة تحته.
+    // The identity band comes first: the customer's name is written here once, at the top, and is
+    // never repeated in any cell below it.
+    final identityBand = _IdentityBand(
+      customerName: subject.detail.header.custName.isNotEmpty
+          ? subject.detail.header.custName
+          : widget.custName,
+      beneficiary: model.beneficiary,
+      billLabel: subject.detail.header.referenceLabel,
+      piecesCount: model.piecesCount,
+      stageLabel: model.stage.label,
+      stageColor: fabricStageColor(model.stage),
+    );
     final subjectCard = MeasurementSubjectCard(
       header: subject.detail.header,
       model: model,
@@ -386,7 +399,7 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
             if (!wide) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [subjectCard, ...tail],
+                children: [identityBand, gap, subjectCard, ...tail],
               );
             }
 
@@ -398,6 +411,8 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                identityBand,
+                gap,
                 subjectCard,
                 if (showPair) ...[
                   gap,
@@ -507,3 +522,159 @@ class _MeasurementViewScreenState extends ConsumerState<MeasurementViewScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 }
+
+  /// شريط هوية أعلى شاشة المقاسات: اسم العميل مرة واحدة + المستفيد والفاتورة والقطع والمرحلة
+  /// The identity band at the top of the measurements screen: the customer's name once, plus the
+  /// beneficiary, the bill, the piece count and the stage.
+  ///
+  /// كان اسم العميل يُكتب في عنوان الشاشة ثم يُعاد داخل «بيانات العميل»، فيقرأ القارئ الكلمة نفسها
+  /// مرتين قبل أن يصل إلى أي رقم. الشريط يحلّ ذلك: مكان واحد للاسم أعلى الصفحة، وبقية الحقول تحته
+  /// بلا تكرار. ولونه الأساسي المصمت يمنح الشاشة رأساً واضحاً لا «شريطاً باهتاً».
+  /// The name used to appear in the title and again inside "customer data", so the reader met the
+  /// same word twice before reaching a single number. The band fixes that: one place for the name at
+  /// the top, every field below it without repetition. Its solid primary fill also gives the screen a
+  /// definite head instead of a faded strip.
+  class _IdentityBand extends StatelessWidget {
+    final String customerName;
+    final String? beneficiary;
+    final String billLabel;
+    final int piecesCount;
+    final String stageLabel;
+    final Color stageColor;
+  
+    const _IdentityBand({
+      required this.customerName,
+      required this.billLabel,
+      required this.piecesCount,
+      required this.stageLabel,
+      required this.stageColor,
+      this.beneficiary,
+    });
+  
+    @override
+    Widget build(BuildContext context) {
+      final tone = AppColors.primary;
+  
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [tone, tone.withValues(alpha: 0.80)],
+            begin: AlignmentDirectional.centerStart,
+            end: AlignmentDirectional.centerEnd,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: tone.withValues(alpha: 0.25),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.20),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: const Icon(
+                Icons.person_rounded,
+                size: 17,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    customerName.isEmpty ? 'عميل غير مسمّى' : customerName,
+                    style: const TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      // المستفيد يظهر فقط عند وجوده — لا خانة ولا نص لغيابه
+                      // The beneficiary pill exists only when there is one — no cell, no label for
+                      // its absence.
+                      if (beneficiary != null) _pill(beneficiary!, Icons.person_outline_rounded),
+                      _pill('فاتورة $billLabel', Icons.receipt_long_rounded),
+                      _pill('$piecesCount قطعة', Icons.dry_cleaning_rounded),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+              decoration: BoxDecoration(
+                // شارة المرحلة بيضاء على الأبيض الشفاف: تبقى مقروءة فوق اللون الأساسي مهما كان
+                // The stage chip stays white-on-translucent-white so it reads on any primary tone.
+                color: Colors.white.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.timelapse_rounded, size: 12, color: stageColor),
+                  const SizedBox(width: 4),
+                  Text(
+                    stageLabel,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      color: stageColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  
+    /// حبّة معلومات صغيرة داخل الشريط — حدود بيضاء شفافة ونص أبيض
+    /// A small info pill inside the band: a translucent white border and white text.
+    Widget _pill(String text, IconData icon) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.14),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 10.5, color: Colors.white.withValues(alpha: 0.9)),
+            const SizedBox(width: 4),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }

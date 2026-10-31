@@ -27,7 +27,11 @@ import 'home_customize_screen.dart';
 /// session's grants, and the stored layout. The filtered result is never persisted — grants are
 /// revoked mid-session, and a stored "what the user saw" ages into a wrong answer.
 class HomeDashboardScreen extends ConsumerStatefulWidget {
-  const HomeDashboardScreen({super.key});
+  const HomeDashboardScreen({super.key, this.now});
+
+  /// يُمرَّر في الاختبارات البصرية لتثبيت تاريخ الترويسة؛ وفي التشغيل هو `DateTime.now()`
+  /// Injected by visual tests to pin the header's date; at runtime it is `DateTime.now()`.
+  final DateTime? now;
 
   @override
   ConsumerState<HomeDashboardScreen> createState() =>
@@ -107,6 +111,7 @@ class _HomeDashboardScreenState extends ConsumerState<HomeDashboardScreen> {
                 displayName: auth.user?.displayName ?? 'الموظف',
                 branchNo: auth.user?.branchNo,
                 onCustomize: _openCustomize,
+                now: widget.now,
               ),
               SizedBox(height: compact ? 16 : 22),
 

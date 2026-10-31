@@ -17,15 +17,23 @@ class MeasurementModelTile extends StatelessWidget {
   final MeasurementModelRef model;
   final VoidCallback onTap;
 
+  /// اسم العميل — البديل الوحيد عند غياب المستفيد: لا نص «بلا مستفيد» في القائمة
+  /// The customer's name — the only fallback when a model has no beneficiary. The list never
+  /// prints "no beneficiary"; it prints the name the row already belongs to.
+  final String customerName;
+
   const MeasurementModelTile({
     super.key,
     required this.model,
     required this.onTap,
+    this.customerName = '',
   });
 
   @override
   Widget build(BuildContext context) {
     final tone = _stageColor(model);
+    final title = model.beneficiary ??
+        (customerName.isEmpty ? model.displayName : customerName);
 
     return Material(
       color: AppColors.surface,
@@ -73,7 +81,7 @@ class MeasurementModelTile extends StatelessWidget {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                model.beneficiaryLabel,
+                                title,
                                 style: TextStyle(
                                   fontSize: 13.5,
                                   fontWeight: FontWeight.w800,

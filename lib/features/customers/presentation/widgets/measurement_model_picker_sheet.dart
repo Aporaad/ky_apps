@@ -540,6 +540,9 @@ class _MeasurementModelPickerSheetState
 
           return MeasurementModelTile(
             model: model,
+            // بلا مستفيد يظهر اسم العميل نفسه: «بلا مستفيد محدّد» نص لا يفيده أحد
+            // Without a beneficiary the customer's own name shows; "no beneficiary" helps nobody.
+            customerName: widget.custName,
             // رقم العميل من هذه النافذة لا من الصف: القائمة محصورة به أصلاً
             // The customer comes from this sheet, never from the row itself.
             onTap: () => Navigator.pop(context, model),

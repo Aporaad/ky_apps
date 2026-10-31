@@ -47,6 +47,10 @@ class MeasurementSectionCard extends StatelessWidget {
   /// A subtitle line under the title — used for the customer/beneficiary so fields never repeat it.
   final String? subtitle;
 
+  /// شارة في طرف العنوان — تُرسم دائماً أبيض على Accent لأن الترويسة صارت مصمتة
+  /// A title-bar badge, always drawn white-on-accent now that the header itself is solid.
+  final String? trailingText;
+
   const MeasurementSectionCard({
     super.key,
     required this.title,
@@ -54,6 +58,7 @@ class MeasurementSectionCard extends StatelessWidget {
     required this.child,
     this.accent,
     this.trailing,
+    this.trailingText,
     this.subtitle,
   });
 
@@ -68,11 +73,11 @@ class MeasurementSectionCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: tone.withValues(alpha: 0.28), width: 1),
+        border: Border.all(color: tone.withValues(alpha: 0.45), width: 1.2),
         boxShadow: [
           BoxShadow(
-            color: tone.withValues(alpha: 0.06),
-            blurRadius: 10,
+            color: tone.withValues(alpha: 0.10),
+            blurRadius: 12,
             offset: const Offset(0, 3),
           ),
         ],
@@ -85,15 +90,14 @@ class MeasurementSectionCard extends StatelessWidget {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
             decoration: BoxDecoration(
-              // ترويسة بلون Accent شبه كامل: الشريط السابق بشفافية 7% كان «باهتاً» فعلاً
-              // A near-solid accent header: the previous 7%-alpha strip really was washed out.
+              // ترويسة مصمتة بالكامل: الشريط الشفاف—even at 20%—كان يبدو «باهتاً» على الورق
+              // الأبيض، والحكم البصري الذي رُفض التصميم من أجله لا يُصلَح بشفافية أقل.
+              // A fully solid header: a translucent strip — even at 20% — still reads as faded on
+              // white, and the visual verdict that rejected the design is not fixed by less alpha.
               gradient: LinearGradient(
-                colors: [tone.withValues(alpha: 0.20), tone.withValues(alpha: 0.06)],
+                colors: [tone, tone.withValues(alpha: 0.82)],
                 begin: AlignmentDirectional.centerStart,
                 end: AlignmentDirectional.centerEnd,
-              ),
-              border: Border(
-                bottom: BorderSide(color: tone.withValues(alpha: 0.35), width: 1),
               ),
             ),
             child: Row(
@@ -101,7 +105,7 @@ class MeasurementSectionCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(5),
                   decoration: BoxDecoration(
-                    color: tone,
+                    color: Colors.white.withValues(alpha: 0.22),
                     borderRadius: BorderRadius.circular(7),
                   ),
                   child: Icon(icon, size: 14, color: Colors.white),
@@ -114,10 +118,10 @@ class MeasurementSectionCard extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: TextStyle(
-                          fontSize: 13,
+                        style: const TextStyle(
+                          fontSize: 14,
                           fontWeight: FontWeight.w800,
-                          color: AppColors.textPrimary,
+                          color: Colors.white,
                           height: 1.15,
                         ),
                         maxLines: 1,
@@ -129,7 +133,7 @@ class MeasurementSectionCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 10.5,
                             fontWeight: FontWeight.w600,
-                            color: AppColors.textSecondary,
+                            color: Colors.white.withValues(alpha: 0.92),
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
@@ -137,7 +141,30 @@ class MeasurementSectionCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (trailing != null) trailing!,
+                if (trailingText != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.18),
+                      borderRadius: BorderRadius.circular(7),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.45),
+                      ),
+                    ),
+                    child: Text(
+                      trailingText!,
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: Colors.white,
+                      ),
+                    ),
+                  )
+                else if (trailing != null)
+                  trailing!,
               ],
             ),
           ),
@@ -166,6 +193,11 @@ class MeasurementField extends StatelessWidget {
   /// Numeric cells align left so a column of figures reads like a column.
   final bool numeric;
 
+  /// وضع مضغوط لسلاسل الأعمدة الطويلة (الأقمشة): كل عمود داخل عرض الشاشة بلا تمرير أفقي
+  /// The dense mode for wide row shapes (fabrics): every column fits the screen, no horizontal
+  /// scrolling to reach the rest of them.
+  final bool dense;
+
   const MeasurementField({
     super.key,
     required this.label,
@@ -173,6 +205,7 @@ class MeasurementField extends StatelessWidget {
     this.icon,
     this.valueColor,
     this.numeric = false,
+    this.dense = false,
   });
 
   @override
@@ -181,7 +214,10 @@ class MeasurementField extends StatelessWidget {
     final isBlank = text == '—';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      padding: EdgeInsets.symmetric(
+        horizontal: dense ? 5 : 8,
+        vertical: dense ? 3 : 5,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -189,7 +225,7 @@ class MeasurementField extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 11, color: AppColors.textSecondary),
+                Icon(icon, size: dense ? 9.5 : 11, color: AppColors.textSecondary),
                 const SizedBox(width: 3),
               ],
               Flexible(
@@ -198,40 +234,78 @@ class MeasurementField extends StatelessWidget {
                   style: TextStyle(
                     // التسمية مرئية لا «باهتة»: ثانوي غامق بدل الباهت الفاتح
                     // The label is legible, not faded: the dark secondary tone, never the pale one.
-                    fontSize: 9.5,
+                    fontSize: dense ? 8 : 9.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
                     letterSpacing: 0.2,
+                    height: 1.1,
                   ),
-                  maxLines: 1,
+                  // في الصفوف السبعة على الجوال تسمية من كلمتين («رقم الطلب») لا تتّسع في سطر:
+                  // سطران للعنوان أرخص من بتر الكلمة إلى «رقم الطلـ».
+                  // In a seven-column phone row a two-word label does not fit one line: wrapping
+                  // the caption is cheaper than truncating it to "رقم الطلـ".
+                  maxLines: dense ? 2 : 1,
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
           const SizedBox(height: 2),
-          Text(
-            text,
-            textAlign: numeric ? TextAlign.end : TextAlign.start,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w800,
-              // الفراغ يبقى باهتاً عمداً: القيمة الغائبة لا تنافس الموجودة
-              // Blanks stay pale on purpose: an absent value must not compete with a real one.
-              color: isBlank
-                  ? AppColors.textMuted
-                  : (valueColor ?? AppColors.textPrimary),
+          // في الوضع المضغوط تُصغَّر القيمة لتتّسع بدل أن تُقصّ: رقم الطلب 11 رقماً واسم القماش
+          // طويل، والقصّ يخفي معلومة كاملة — أما التصغير فيُبقيها مقروءة داخل عرض الشاشة.
+          // In dense mode the value shrinks to fit instead of being clipped: an 11-digit order id
+          // and a long cloth name would otherwise lose real content to an ellipsis.
+          if (dense)
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: AlignmentDirectional.centerStart,
+                child: Text(
+                  text,
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: isBlank
+                        ? AppColors.textMuted
+                        : (valueColor ?? AppColors.textPrimary),
+                  ),
+                ),
+              ),
+            )
+          else
+            Text(
+              text,
+              textAlign: numeric ? TextAlign.end : TextAlign.start,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                // الفراغ يبقى باهتاً عمداً: القيمة الغائبة لا تنافس الموجودة
+                // Blanks stay pale on purpose: an absent value must not compete with a real one.
+                color: isBlank
+                    ? AppColors.textMuted
+                    : (valueColor ?? AppColors.textPrimary),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
         ],
       ),
     );
   }
 }
 
-/// شبكة حقول مبعثرة: أعمدة متساوية بفواصل رأسية وصفوف بفواصل أفقية
+/// لون فواصل شبكة الحقول — رمادي مائل للزرقة واضح على الأبيض
+/// The field-grid rule colour: a blue-grey that is actually visible on white.
+///
+/// `AppColors.border` (‏#E2E8F0) شبه شفاف على شاشة هاتف، والطلب كان فواصل تُميِّز الحقول لا
+/// فراغاً يُخمَّن. دالّة تُقرأ وقت الرسم لأن اللوحة قابلة للتهيئة من الخادم.
+/// AppColors.border (#E2E8F0) is nearly invisible on a phone; the request was for rules that
+/// separate fields, not whitespace left to guesswork. A getter, since the palette is configurable.
+Color get gridRule => AppColors.secondary.withValues(alpha: 0.35);
+
+/// شبكة حقول متناظرة: أعمدة متساوية بفواصل رأسية وصفوف بفواصل أفقية
 /// The field grid: equal columns divided by real vertical rules, rows by horizontal ones.
 class MeasurementFieldGrid extends StatelessWidget {
   final List<Widget> fields;
@@ -240,10 +314,17 @@ class MeasurementFieldGrid extends StatelessWidget {
   /// The minimum cell width, which decides the column count on phone and desktop.
   final double minCellWidth;
 
+  /// صف واحد عند اتساع المكان لكل الحقول: تفاصيل العميل ثلاثة أرقام، وصفّهن في سطرين
+  /// يضاعف الارتفاع بلا معلومة إضافية.
+  /// One row when the width can hold every field: the customer block is three numbers, and
+  /// splitting them over two lines doubles the height for nothing.
+  final bool singleRow;
+
   const MeasurementFieldGrid({
     super.key,
     required this.fields,
     this.minCellWidth = 118,
+    this.singleRow = false,
   });
 
   @override
@@ -252,9 +333,13 @@ class MeasurementFieldGrid extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (ctx, constraints) {
-        final columns = (constraints.maxWidth / minCellWidth)
+        var columns = (constraints.maxWidth / minCellWidth)
             .floor()
             .clamp(1, fields.length);
+
+        if (singleRow && constraints.maxWidth >= 600) {
+          columns = fields.length;
+        }
 
         final rows = <Widget>[];
         for (var start = 0; start < fields.length; start += columns) {
@@ -267,7 +352,7 @@ class MeasurementFieldGrid extends StatelessWidget {
           decoration: BoxDecoration(
             color: AppColors.surface,
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: gridRule, width: 1.1),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -275,7 +360,7 @@ class MeasurementFieldGrid extends StatelessWidget {
             children: [
               for (var i = 0; i < rows.length; i++) ...[
                 if (i > 0)
-                  Container(height: 1, color: AppColors.border),
+                  Container(height: 1, color: gridRule),
                 rows[i],
               ],
             ],
@@ -291,7 +376,7 @@ class MeasurementFieldGrid extends StatelessWidget {
     final children = <Widget>[];
 
     for (var i = 0; i < cells.length; i++) {
-      if (i > 0) children.add(Container(width: 1, color: AppColors.border));
+      if (i > 0) children.add(Container(width: 1, color: gridRule));
       children.add(Expanded(child: cells[i]));
     }
 

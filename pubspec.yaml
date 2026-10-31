@@ -58,6 +58,12 @@ dependencies:
   # Open tel:/https: links from the app-info screen (the developer's phone and WhatsApp).
   url_launcher: ^6.3.1
 
+  # شعارات العلامات التجارية الرسمية (واتساب) — Material Icons لا تحوي شعار واتساب،
+  # ولم يكن مقبولاً تمثيله بـ Icons.chat_rounded. الخط يُقلَّم عند البناء إلى الرموز المستعملة فقط.
+  # Official brand marks (WhatsApp): Material Icons has no WhatsApp logo, and Icons.chat_rounded is
+  # not an acceptable stand-in. The icon font is tree-shaken at build time to the glyphs actually used.
+  font_awesome_flutter: ^10.7.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

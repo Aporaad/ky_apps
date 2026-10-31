@@ -57,6 +57,12 @@ Future<void> _loadArabicFont() async {
   await loader.load();
 }
 
+/// تاريخ مثبّت للقطات: الترويسة تكتب التحية والتاريخ من ساعة الجهاز، فبلا تثبيته تفشل الصورة
+/// تلقائياً في اليوم التالي لا لأن التصميم تغيّر.
+/// A pinned date for the snapshots: the header writes the greeting and date from the device clock,
+/// so without pinning, the image fails the next day for no design change at all.
+final DateTime _pinnedNow = DateTime(2026, 10, 22, 9, 15);
+
 Future<void> _pump(WidgetTester tester, Size size, HomeLayout layout) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -85,7 +91,7 @@ Future<void> _pump(WidgetTester tester, Size size, HomeLayout layout) async {
           backgroundColor: const Color(0xFFF8FAFC),
           body: PortalSectionScope(
             openSection: (_) {},
-            child: const HomeDashboardScreen(),
+            child: HomeDashboardScreen(now: _pinnedNow),
           ),
         ),
       ),

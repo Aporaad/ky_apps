@@ -23,16 +23,36 @@ class MeasurementSpecsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final specs = model.specs;
+    // الترتيب بطلب المستخدم: نوع الأزرار · نوع الكم · نوع الرقبة · جيب جانبي · نوع الجبزور ·
+    // جيب الصدر، ثم بقية ما تحمله القاعدة فعلياً.
+    // The user's own order first (button, sleeve, neck, side pocket, gabzor, chest pocket), then
+    // whatever else the database actually stores.
+    //
+    // «جيب جانبي» هو `POCKET_OR_WITHOUT`: قيمه في القاعدة الحيّة «جيوب / بدون / جيوب شمال /
+    // جيوب يمين» (83,395 من 84,971 صفاً) فهو فعلاً حالة الجيب الجانبي. و«جيب الصدر» لا عمود
+    // نصي له: أقرب ما يُسجَّل له `SHAPE_POCKET_UP_NO` (مُعرَّف الجيب العلوي) ويظهر عند وجوده
+    // فقط. أما `PEN_POCKET` ففارغ في كل الصفوف (0 من 84,971) فأُزيل من القائمة: خانة لا تمتلئ
+    // أبداً ليست معلومة، وهي ضريبة بصرية على شاشة طلبت الاختصار.
+    // "Side pocket" is POCKET_OR_WITHOUT — its live values are جيوب/بدون/جيوب شمال/جيوب يمين
+    // (83,395 of 84,971 rows), so it really is the side-pocket state. "Chest pocket" has no text
+    // column; the nearest recorded thing is SHAPE_POCKET_UP_NO (the upper-pocket id), shown only
+    // when present. PEN_POCKET is empty in every single row (0 of 84,971), so it is dropped: a
+    // cell that can never fill is not information, and it costs height on a screen built to be
+    // compact.
     final items = <(String, String?, IconData?)>[
-      ('نوع الرقبة', specs.neckType, Icons.accessibility_new_rounded),
-      ('نوع الكم', specs.tipperType, Icons.straighten_rounded),
-      ('نوع الكباك', specs.comCabakType, Icons.settings_brightness_rounded),
-      ('الجيوب', specs.pocketOrWithout, Icons.category_rounded),
-      ('نوع الجبزور', specs.gabzorType, Icons.brush_rounded),
       ('نوع الأزرار', specs.buttonType, Icons.radio_button_checked_rounded),
+      ('نوع الكم', specs.tipperType, Icons.straighten_rounded),
+      ('نوع الرقبة', specs.neckType, Icons.accessibility_new_rounded),
+      ('جيب جانبي', specs.pocketOrWithout, Icons.category_rounded),
+      ('نوع الجبزور', specs.gabzorType, Icons.brush_rounded),
+      (
+        'جيب الصدر',
+        specs.shapePocketUpNo?.toString(),
+        Icons.inventory_2_rounded,
+      ),
+      ('نوع الكباك', specs.comCabakType, Icons.settings_brightness_rounded),
       ('عدد الأزرار', specs.buttonNo, Icons.format_list_numbered_rounded),
       ('جيب الجوال', specs.mobilePocket, Icons.smartphone_rounded),
-      ('جيب القلم', specs.penPocket, Icons.edit_rounded),
       ('نوع الحجازي', specs.hegaziType, Icons.pattern_rounded),
     ];
 

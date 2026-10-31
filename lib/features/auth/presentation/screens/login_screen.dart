@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/biometric_service.dart';
@@ -8,6 +9,7 @@ import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../app_info/presentation/screens/app_info_screen.dart';
 import '../../../app_info/presentation/utils/external_links.dart';
 import '../../../app_info/presentation/widgets/contact_icon_button.dart';
+import '../../../app_info/presentation/widgets/whatsapp_icon.dart';
 import '../providers/auth_notifier.dart';
 import '../widgets/biometric_login_button.dart';
 import '../widgets/user_type_selector.dart';
@@ -143,10 +145,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     // Company name from config — reflects on the login screen immediately.
     final companyName =
         ref.watch(appConfigNotifierProvider.select((s) => s.config.companyName));
-    // رقم الشركة من التهيئة — يقود أيقونتي التواصل أسفل البطاقة، وفارغه يُخفيهما
-    // The company phone from config — drives the two contact icons under the card; blank hides them.
-    final companyPhone =
-        ref.watch(appConfigNotifierProvider.select((s) => s.config.companyPhone));
+    // رقم التواصل الفعّال: `contactPhone` يعود للافتراضي المضمّن إن كانت القيمة المخزَّنة فارغة
+    // (كاش قديم أو جهاز جديد بلا اتصال) — فالأيقونتان لا تختفيان لمجرد تعذّر الوصول إلى الـ API.
+    // The effective contact number: `contactPhone` falls back to the baked-in default when the
+    // stored value is blank (stale cache or a fresh device with no network), so the two icons never
+    // disappear just because the API is unreachable.
+    final contactPhone =
+        ref.watch(appConfigNotifierProvider.select((s) => s.config.contactPhone));
 
     // مقاسات مشتقة من ارتفاع النافذة: البطاقة كلها على شاشة واحدة بلا تمرير
     // Metrics derived from the window height: the whole card on one screen, no scrolling.
@@ -405,7 +410,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       // «الإصدار» الذي انتقل إلى شاشة «معلومات البرنامج والدعم» وحدها.
                       // Under the card: two small call and WhatsApp icons for contacting the company,
                       // replacing the version line that now lives on the app-info screen alone.
-                      _CompanyContactBar(phone: companyPhone),
+                      _CompanyContactBar(phone: contactPhone),
 
                       // // زر البصمة إذا كانت مفعّلة ومدعومة بالجهاز
                       // if (authState.isBiometricEnabled &&
@@ -507,27 +512,35 @@ class _CompanyContactBar extends StatelessWidget {
   const _CompanyContactBar({required this.phone});
 
   /// رقم الشركة كما هو مخزَّن — يُطبَّع داخل `ExternalLinks` (محلي أو دولي)
-  /// The stored company number — normalised inside `ExternalLinks` (local or international).
+  /// The stored company number — normalised inside [ExternalLinks] (local or international).
   final String phone;
 
   @override
   Widget build(BuildContext context) {
-    // بلا رقم مضبوط في القاعدة لا تُعرض أيقونتان عاطلتان توهمان بالنقر
-    // With no number set in the database, no dead icons are drawn pretending to be tappable.
+    // حارس على مدخلات الودجت وحدها: مُرَّر الرقم من `contactPhone` فلا يكون فارغاً في الواقع،
+    // لكن ودجت لا يرسم زرّاً عاطلاً أبداً مهما كان مُدخله.
+    // A guard on the widget's own input: the caller passes `contactPhone`, which is never blank in
+    // practice, yet the widget refuses to draw a dead button whatever it is handed.
     if (phone.trim().isEmpty) return const SizedBox.shrink();
 
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         ContactIconButton(
-          icon: Icons.call_outlined,
+          icon: Icon(
+            FontAwesomeIcons.phone,
+            size: 17,
+            color: AppColors.primary,
+          ),
           tooltip: 'اتصال بالشركة',
           color: AppColors.primary,
           onPressed: () => ExternalLinks.openTel(context, phone),
         ),
         const SizedBox(width: 10),
         ContactIconButton(
-          icon: Icons.chat_rounded,
+          // شعار واتساب الرسمي (لا فقاعة دردشة عامة)
+          // The official WhatsApp mark (not a generic chat bubble).
+          icon: const WhatsAppIcon(),
           tooltip: 'واتساب الشركة',
           color: AppColors.whatsapp,
           onPressed: () => ExternalLinks.openWhatsappTo(context, phone),

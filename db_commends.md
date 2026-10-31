@@ -2370,3 +2370,85 @@ customers.measurements_export  تصدير مقاسات العملاء
 
 **النموذج:** Qoder · **الوقت:** 2026-10-29 01:40 · **DDL:** لا · **DML:** تحديث 147 صفّ صلاحية
 (idempotent) وتسجيل 23 إعداداً.
+
+---
+
+## 2026-10-31 02:12 — أوامر مقاسات العملاء: فحص أعمدة المواصفات/الأقمشة (قراءة فقط عبر oracledb MCP)
+
+كل الأوامر `SELECT`؛ لا `INSERT` ولا `UPDATE` ولا `DDL` في هذه الجولة. نُفِّذت بموصل `oracledb`
+لأن اتصال التطبيق المحلي (`localhost:1521/orclrd`) ما زال `ORA-12514`.
+
+### 1) أعمدة جدول الموديلات (لحسم «جيب جانبي» و«جيب الصدر»)
+
+```sql
+SELECT COLUMN_ID, COLUMN_NAME, DATA_TYPE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='SALES_DETAILES_SHAPES'
+ ORDER BY COLUMN_ID;                                     -- 53 عموداً
+```
+
+### 2) توزيع الامتلاء لأعمدة الجيوب والأزرار
+
+```sql
+SELECT COUNT(*) AS ROWS_TOTAL,
+       COUNT(POCKET_OR_WITHOUT)   AS HAS_POCKET_FLAG,   -- 83,395
+       COUNT(MOBILE_POCKET)       AS HAS_MOBILE,        -- 83,245
+       COUNT(PEN_POCKET)          AS HAS_PEN,           --      0
+       COUNT(SHAPE_POCKET_UP_NO)  AS HAS_UP,            --     12
+       COUNT(SHAPE_POCKET_DOWN_NO) AS HAS_DOWN,         --     13
+       COUNT(BUTTONS_NUM)         AS HAS_BUTTONS_NUM,   --      8
+       COUNT(BUTTON_TYPE)         AS HAS_BUTTON_TYPE    -- 84,971
+  FROM ACCOUNTS.SALES_DETAILES_SHAPES;
+```
+
+### 3) القيم الفعلية لعمودَي الجيوب (بلا تحويل ترميز — القاعدة WE8MSWIN1252)
+
+```sql
+SELECT * FROM (
+  SELECT POCKET_OR_WITHOUT, MOBILE_POCKET, PEN_POCKET, COUNT(*) AS CNT
+    FROM ACCOUNTS.SALES_DETAILES_SHAPES
+   GROUP BY POCKET_OR_WITHOUT, MOBILE_POCKET, PEN_POCKET
+   ORDER BY COUNT(*) DESC
+) WHERE ROWNUM <= 10;
+-- جيوب / بدون / جيوب شمال / جيوب يمين  +  جيب الجوال: عادي، عادي+…  +  جيب القلم: لا شيء
+```
+
+### 4) قيم `CLOTH_TYPE` في الواجهة (للتأكد أنه «العرض» لا «النوع»)
+
+```sql
+SELECT * FROM (
+  SELECT CLOTH_TYPE, COUNT(*) AS CNT
+    FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW
+   GROUP BY CLOTH_TYPE ORDER BY COUNT(*) DESC
+) WHERE ROWNUM <= 8;                       -- عرضية 37,077 · عرض44 5,234 · عرض 3,044 · فراغ 42
+```
+
+### 5) تنفيذ استعلام التفصيل كما هو في المتحكم (مفتاح حيّ)
+
+```sql
+SELECT COUNT(*) AS ROWS_OK FROM (SELECT v.SEQ_NO, v.SEQ_NO1, v.OHID, v.OHDID, … ,
+        s.NECK_TYPE, …, s.SHAPE_POCKET_UP_NO, s.SHAPE_POCKET_DOWN_NO
+   FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW v
+   LEFT JOIN ACCOUNTS.SALES_DETAILES_SHAPES s
+          ON s.BILL_NO = v.BILL_NO AND s.YEAR = v.YEAR AND s.SEQ_NO = v.SEQ_NO
+   LEFT JOIN ACCOUNTS.STYLE st ON st.SHAPE_STYLE_NO = v.SHAPE_STYLE_NO
+  WHERE v.BILL_NO = 19405 AND v.YEAR = 2026 AND v.SEQ_NO = 82755
+  ORDER BY v.SEQ_NO1);                     -- ROWS_OK = 55 (بلا خطأ: كل الأعمدة موجودة)
+```
+
+### 6) عيّنة قيم القطعة (لتصميم سطري الأقمشة)
+
+```sql
+SELECT * FROM (
+  SELECT OHDID, SANF_PRICE, SANFPRICE, CLOTH_NAME, CLOTH_TYPE, CLOTHS_COLOR2,
+         CONSUMED_CLOTH_QTY_HINSH, CONSUMED_CLOTH_QTY_YARDS,
+         CUTTER_NAME, TAILOR_NAME1, HANDING_DONE1, L1, L2
+    FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW
+   WHERE BILL_NO = 19405 AND YEAR = 2026 AND SEQ_NO = 82755
+) WHERE ROWNUM <= 3;
+-- OHDID = 26211325025 (11 رقماً) · SANF_PRICE = 2000 · SANFPRICE = 6000
+-- العارض مختلف لكل قطعة: أحمد عبد العزيز شرهان / مازن ميثاق الصبري / خالد محمد الصعواني
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 02:12 · **DDL:** لا · **DML:** لا (قراءة فقط) ·
+**الأداة:** موصل `oracledb` MCP.

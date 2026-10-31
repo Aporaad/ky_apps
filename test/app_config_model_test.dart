@@ -141,6 +141,37 @@ void main() {
     expect(d.textSecondaryColor, AppPalette.textSecondary);
   });
 
+  group('هوية الشركة تعمل بلا اتصال', () {
+    test('الافتراضي يحمل الهاتف والعنوان فلا تختفي وسيلة التواصل', () {
+      // سيناريو الجهاز الجديد بلا شبكة: لا كاش ولا خادم — الاعتماد على هذه القيم وحدها
+      // The fresh-device-with-no-network case: no cache and no server — these values stand alone.
+      final d = AppConfigModel.defaults();
+
+      expect(d.companyPhone, AppConfigModel.fallbackCompanyPhone);
+      expect(d.companyAddress.trim(), isNotEmpty);
+      expect(d.companyName.trim(), isNotEmpty);
+
+      // والرقم قابل للطلب فعلاً بعد التطبيع (967 + الرقم المحلي)
+      expect(d.contactPhone, isNotEmpty);
+    });
+
+    test('contactPhone يعوّض الفراغ القادم من كاش قديم', () {
+      // القيمة المخزَّنة الفارغة تُعتبر بيانات قديمة تُصلَح لا قراراً يُحترم
+      // A stored blank is treated as stale data to repair, not a decision to honour.
+      final stale = AppConfigModel.defaults().copyWith(companyPhone: '   ');
+
+      expect(stale.companyPhone.trim(), isEmpty);
+      expect(stale.contactPhone, AppConfigModel.fallbackCompanyPhone);
+    });
+
+    test('contactPhone يحترم الرقم المخزَّن حين يوجد', () {
+      final configured =
+          AppConfigModel.defaults().copyWith(companyPhone: ' 777123456 ');
+
+      expect(configured.contactPhone, '777123456');
+    });
+  });
+
   test('copyWith يبدّل الحقول المحددة ويُبقي الباقي', () {
     final base = AppConfigModel.defaults();
     final changed = base.copyWith(companyName: 'جديد', fontFamily: 'Amiri');

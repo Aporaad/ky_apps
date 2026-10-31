@@ -10,6 +10,7 @@ import 'package:ky_apps/features/app_config/data/models/app_config_model.dart';
 import 'package:ky_apps/features/app_config/presentation/providers/app_config_notifier.dart';
 import 'package:ky_apps/features/app_info/presentation/screens/app_info_screen.dart';
 import 'package:ky_apps/features/app_info/presentation/widgets/developer_info_section.dart';
+import 'package:ky_apps/features/app_info/presentation/widgets/whatsapp_icon.dart';
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:ky_apps/features/auth/presentation/widgets/api_password_dialog.dart';
 import 'package:ky_apps/features/support/data/repositories/support_repository.dart';
@@ -166,6 +167,18 @@ void main() {
         findsNothing,
       );
 
+      // واتساب يُرسم بالشعار الرسمي (خط العلامات) لا بـ`Icons.chat_outlined` العامة
+      // WhatsApp is drawn with the official brand mark, not the generic Icons.chat_outlined.
+      expect(
+        find.descendant(
+          of: find.byType(DeveloperInfoSection),
+          matching: find.byType(WhatsAppIcon),
+        ),
+        findsOneWidget,
+      );
+      expect(find.byIcon(Icons.chat_outlined), findsNothing);
+      expect(find.byIcon(Icons.chat_rounded), findsNothing);
+
       // الأيقونتان في سطر الاسم: مركزاهما على نفس ارتفاعه تقريباً، وأحدهما ليس سطراً منفصلاً
       // The icons share the name's row: their centres sit on nearly the same height, proving they
       // are not a row of their own (a separate row would be 40+ px away).
@@ -236,6 +249,37 @@ void main() {
       final address = tester.getTopLeft(find.text('العنوان'));
       final website = tester.getTopLeft(find.text('الموقع الإلكتروني'));
       expect(website.dy, greaterThan(address.dy));
+    });
+
+    testWidgets('قسم الاستفسار يتصل بالشركة لا بالمطور', (tester) async {
+      // رقم شركة مختلف عن رقم المطور: التلميح يكشف أي رقم استُعمل فعلاً
+      // A company number different from the developer's: the tooltip reveals which one was used.
+      final config = fullConfig().copyWith(companyPhone: '777000111');
+      await pumpScreen(tester, config: config);
+
+      expect(find.byTooltip('اتصال بالشركة: 777000111'), findsOneWidget);
+      expect(find.byTooltip('واتساب الشركة: 777000111'), findsOneWidget);
+
+      // ورقم المطور ما زال في بطاقته وحدها
+      // The developer's number stays inside his own card.
+      expect(find.byTooltip(kDeveloperPhoneDisplay), findsOneWidget);
+      expect(find.byTooltip('اتصال بالشركة: $kDeveloperPhone'), findsNothing);
+    });
+
+    testWidgets('رقم شركة فارغ في التهيئة يعود إلى الافتراضي المضمّن', (tester) async {
+      // كاش قديم/صف ناقص لا يجوز أن يحرم المستخدم من قناة التواصل
+      // A stale cache or a missing row must not strip the user of the contact channel.
+      final config = fullConfig().copyWith(companyPhone: '');
+      await pumpScreen(tester, config: config);
+
+      expect(
+        find.byTooltip(
+          'اتصال بالشركة: ${AppConfigModel.fallbackCompanyPhone}',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('اتصال'), findsOneWidget);
+      expect(find.text('واتساب'), findsOneWidget);
     });
 
     testWidgets('خمس نقرات على الاسم تفتح حوار كلمة السر حين يُسمح بالفتح', (

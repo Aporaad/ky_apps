@@ -8,7 +8,7 @@ import 'tailoring_section_card.dart';
 /// القسم 1: بيانات الفاتورة والطلب — كلها من الـ VIEW + صف SALES_BILL الواحد
 /// Section 1: the invoice and order data — all from the view plus the single SALES_BILL row.
 ///
-/// شريط هوية واحد (رقم الفاتورة · اليدوي · التاريخ · عاجل) ثم حقول الطلب في **صفّين فقط**
+/// شريط هوية واحد (رقم الفاتورة · اليدوي · التاريخ · مستعجل) ثم حقول الطلب في **صفّين فقط**
 /// بأعمدة متساوية، ثم البيان في خانة تمتد على الصف. السنة والفرع والمجموعة حُذفت بطلب
 /// المستخدم لأنها لا تُحتاج في الاستعراض.
 /// One identity strip (bill number · manual · date · urgent), then the order fields in **exactly
@@ -42,7 +42,7 @@ class BillHeaderCard extends StatelessWidget {
               _identity('يدوي ${header.manualLabel}', color: AppColors.textPrimary),
               _identity(header.date ?? '—', color: AppColors.textPrimary),
               if (header.urgent)
-                _identity('عاجل', color: AppColors.error, bold: true),
+                _identity('مستعجل', color: AppColors.error, bold: true),
             ],
           ),
           const SizedBox(height: 5),

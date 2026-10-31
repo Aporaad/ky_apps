@@ -50,7 +50,7 @@ Three facts shape almost every decision in this codebase:
 | Sales, tailoring cards (كروت التفصيل), stores/inventory, home dashboard | **Placeholders** — `DataListScaffold`/`PortalSectionScaffold` empty states |
 | الإدارة (admin: users, grants, sessions, security settings, activity) | **Working** — `lib/features/admin/`, gated by `permission:` on both sides |
 | Customer portal (`user_type = customer`) | **Stub** — login shows "بوابة العميل قيد التطوير حالياً" |
-| Permissions & sessions (**IBAC**, not RBAC) | **Implemented** — 141-code catalog, direct per-user grants, `permission:` route guard, admin UI under الإدارة |
+| Permissions & sessions (**IBAC**, not RBAC) | **Implemented** — 147-code catalog (25 modules), direct per-user grants, `permission:` route guard, admin UI under الإدارة |
 
 > **There is no RBAC and none is planned.** Permissions are attached directly to a user row
 > (Identity-Based Access Control, `APP_USERS_PERMISSIONS`), with an `IS_ADMIN = 1` full bypass.
@@ -72,7 +72,7 @@ ky_apps/                          ← Flutter client (repo: github.com/Aporaad/k
 │   ├── core/                     ← shared infrastructure
 │   │   ├── constants/api_constants.dart   ← base URL, endpoint paths, timeouts
 │   │   ├── constants/app_info.dart        ← app version/build + developer name/phone/WhatsApp
-│   │   ├── constants/permission_codes.dart ← the 141 IBAC codes + Arabic section titles
+│   │   ├── constants/permission_codes.dart ← the 147 IBAC codes + Arabic section titles
 │   │   ├── network/              ← dio_client.dart, auth_interceptor.dart, error_interceptor.dart
 │   │   ├── storage/secure_storage_service.dart
 │   │   ├── theme/                ← app_theme.dart, app_colors.dart
@@ -185,7 +185,7 @@ composer dev              # or: server + queue + pail logs + vite concurrently
 
 ```bash
 curl http://<lan-ip>:8000/api/hello     # API alive (the Flutter "test connection" probe)
-php artisan route:list --path=api       # 129 registered API endpoints
+php artisan route:list --path=api       # 138 registered API endpoints
 flutter analyze && flutter test         # client healthy
 ```
 
@@ -333,7 +333,7 @@ Android needs `USE_BIOMETRIC` + `USE_FINGERPRINT` (present in the main manifest)
 
 The client mirrors the server rules **for display only**; the server decides every request again.
 
-- `lib/core/constants/permission_codes.dart` — `Perm.*` constants for all 141 catalog codes
+- `lib/core/constants/permission_codes.dart` — `Perm.*` constants for all 147 catalog codes
   (`module.action`), `permModuleOrder`, and the Arabic section titles. **Codes are ASCII — never put
   Arabic through them**, and never invent a code that is not in `APP_PERMISSIONS`.
 - `lib/core/utils/permission_check.dart` — `canCode` / `canAnyCode` / `canAllCode`, the pure mirror of
@@ -453,7 +453,7 @@ Full details live in [`kyApp_API/AGENTS.md`](kyApp_API/AGENTS.md). The essential
   tools — prefer `search-docs`, `database-query`, `database-schema`, `record-rule` over manual
   equivalents. Skills live in `kyApp_API/.agents/skills/`.
 
-### Endpoint surface (129 API routes)
+### Endpoint surface (138 API routes)
 
 Every route carries **two** layers where relevant: `auth:sanctum` for the session, then
 `permission:<code>` for the grant. Deny-by-default: no grant ⇒ **403** with the missing permission's
@@ -463,14 +463,20 @@ Arabic name. `IS_ADMIN = 1` bypasses the grant table entirely.
 |---|---|---|
 | **Public (6)** | 6 | `POST /auth/login`, `POST /auth/biometric/login`, `GET /hello` (the client's connectivity probe), `GET /app-config` (branding/settings before login), `POST /app-config/verify-api-password` (`throttle:5,1`), `POST /support/inquiries` (`throttle:5,1` — the inquiry form works before login) |
 | **`auth:sanctum` only (6)** | 6 | `logout`, `me`, `user`, `auth/permissions`, `biometric/register`, `biometric/revoke` — these are the session's *own* property: gating `me` behind a grant would lock out a user who has none and could never learn why |
-| **`auth:sanctum` + `permission:*`** | 117 | all business + admin routes |
+| **`auth:sanctum` + `permission:*`** | 126 | all business + admin routes |
 
-Business guards: customers (6) · workers as three independent modules `employees`/`cutters`/`tailors`
-(18) · accounts (12: `view` reads, `create`/`update` items, `structure_manage` for the tree,
-`statement` for extracts) · currencies (8: `currencies.*` for the vocabularies,
-`currencies.prices_view`/`prices_manage` for prices) · invoices (2) · jobs (5) ·
-services/providers (12) · messaging `sms`/`whatsapp` (11) · app config (2) ·
-`selectFromTable` behind `system.*`.
+Business guards (counts re-read from `route:list`): customers (10 — 6 record routes plus 4
+`customers.measurements_*` archives) · workers as three independent modules
+`employees`/`cutters`/`tailors` (22) · accounts (24: `view` reads, `create`/`update` items,
+`structure_manage` for the tree, `statement_group`/`statement_detail` for extracts,
+`export`/`print`) · currencies (8: `currencies.*` for the vocabularies,
+`currencies.prices_view`/`prices_manage` for prices) · invoices (2) · tailoring (5:
+`tailoring.view`, `print`/`export` for the activity trail, `payments_view` for the money block) ·
+my-statement (2: `my_statement.financial`/`work`) · jobs (6) · services/providers (15) ·
+messaging `sms`/`whatsapp` (12) · app config (2 guarded) · `selectFromTable` behind `system.*`.
+
+There is **no** `services.create`/`services.delete` code in the catalog: creating and deleting a
+service ride on `services.update`, which is what `routes/api.php` actually registers.
 
 Admin (`/users`, `/permissions`, `/sessions`, `/settings`, `/users/{id}/activity`,
 `/support/inquiries` — 18 routes) uses `users.view` / `users.create` / `users.update` /
@@ -497,7 +503,7 @@ The real schema is legacy Oracle 11g, owner `ACCOUNTS`, `prefix_schema => 'accou
 | Table | Purpose |
 |---|---|
 | `APP_USERS` | staff/customer logins. PK is **`USER_ID`** (`USER_NO` is gone — it was the legacy ERP number). Biometric columns: `DEVICE_TOKEN`, `DEVICE_NAME`, `PLATFORM`, `BIOMETRIC_ENABLED`, `BIOMETRIC_REGISTERED_AT`, `BIOMETRIC_LAST_USED`. IBAC adds **`IS_ADMIN`** (1 = full bypass, grant-free) |
-| `APP_PERMISSIONS` | the catalog: 141 rows, 24 modules, ASCII `PERMISSION_CODE` (`module.action`) + Arabic `NAME_AR`/`DESCRIPTION_AR`. Seeded, not edited from the UI |
+| `APP_PERMISSIONS` | the catalog: 147 rows, 25 modules, ASCII `PERMISSION_CODE` (`module.action`) + Arabic `NAME_AR`/`DESCRIPTION_AR`. Seeded, not edited from the UI |
 | `APP_USERS_PERMISSIONS` | **the IBAC core** — direct user→permission grants (`USER_ID`, `PERMISSION_ID`, `GRANTED_BY`, `IS_ACTIVE`, `EXPIRES_ON`) |
 | `APP_SETTINGS` | security/session settings plus the runtime branding keys (company name/address/website/phone/services, app name, theme colors, font) with `VALUE_TYPE` (`int` / `bool` / `string`) and bounds, read through `SettingsStore` / `AppConfig` |
 | `APP_USER_ACTIVITY` | audit trail (`ACTION_TYPE`, `DESCRIPTION_AR`, `STATUS`, `IP_ADDRESS`, `CREATED_ON`), written by `ActivityLogger` |
@@ -841,8 +847,8 @@ Backend         Laravel 12.69, PHP ^8.2.12, Sanctum 4, yajra/laravel-oci8 12.0, 
 Database        Oracle 11g, schema ACCOUNTS, charset WE8MSWIN1252 (Arabic = CP1256 bytes)
 Default API     http://192.168.0.11:8000/api   (runtime-configurable, key ky_api_base_url)
 Health probe    GET /api/hello
-Routes          129 in routes/api.php — 6 public, 6 auth-only, the rest auth:sanctum + permission:<code>
-Access          IBAC: APP_PERMISSIONS (141 codes / 24 modules) + APP_USERS_PERMISSIONS, IS_ADMIN bypass
+Routes          138 in routes/api.php — 6 public, 6 auth-only, the rest auth:sanctum + permission:<code>
+Access          IBAC: APP_PERMISSIONS (147 codes / 25 modules) + APP_USERS_PERMISSIONS, IS_ADMIN bypass
 Sessions        SessionPolicy on PERSONAL_ACCESS_TOKENS.EXPIRES_AT (idle 240′ sliding, absolute 14d) —
                 all time via SessionPolicy::dbNow() (Oracle clock), dead tokens deleted on rejection,
                 purgeExpired() on login + sessions screen, X-Session-Expires-At header + 30 s client watchdog

@@ -52,6 +52,27 @@ class AppConfigModel {
   /// 400 chars on both client and server (the `SETTING_VALUE` column is tighter than that).
   final String companyServices;
 
+  /// رقم الشركة الافتراضي — يُستعمل حين تصل القيمة فارغة (كاش قديم أو صف غير مضبوط)
+  /// The default company number — used when the stored value arrives blank (a stale cache or an
+  /// unconfigured row).
+  static const String fallbackCompanyPhone = '780154000';
+
+  /// رقم التواصل الفعّال: المخزَّن، وإن كان فارغاً فالافتراضي المضمّن
+  /// The effective contact number: the stored one, or the baked-in default when it is blank.
+  ///
+  /// تعتمد عليه أيقونتا الاتصال/واتساب في شاشة الدخول وقسم الاستفسار: انقطاع الخادم ليس وقتاً
+  /// لحرمان المستخدم من وسيلة تواصل. والخادم نفسه يُعوّض الصف الفارغ بالافتراضي في `publicPayload`
+  /// فلا يرسل فراغاً أصلاً — أي فراغ يصِل العميل إنما هو كاش قديم يحتاج إصلاحاً لا احتراماً.
+  /// The call/WhatsApp icons on the login screen and in the inquiry section rely on it: a downed
+  /// server is no time to strip the user of a way to reach the company. The server itself
+  /// substitutes the default for a blank row in `publicPayload`, so a blank reaching the client is
+  /// stale data to repair rather than a value to honour.
+  String get contactPhone {
+    final stored = companyPhone.trim();
+
+    return stored.isEmpty ? fallbackCompanyPhone : stored;
+  }
+
   /// اسم التطبيق الظاهر في الشريط العلوي/nice title
   final String appName;
 
@@ -67,12 +88,20 @@ class AppConfigModel {
 
   /// القيم الافتراضية — مطابقة لـ `AppConfig::DEFAULTS` في الخادم و`AppPalette` في العميل
   /// Defaults — mirror the server `AppConfig::DEFAULTS` and the client `AppPalette`.
+  ///
+  /// العنوان والهاتف ليسا فراغاً: يُعرضان حين يُفتح التطبيق بلا اتصال وقبل أول مزامنة (أو على جهاز
+  /// جديد بلا كاش)، وهما هوية الشركة المعلومة. لو بقيا فارغين لاختفت أيقونتا الاتصال والواتساب من
+  /// شاشة الدخول لمجرد انقطاع الخادم — وهو أسوأ وقت لحرمان المستخدم من وسيلة تواصل.
+  /// The address and phone are not blank: they show when the app opens with no network and before
+  /// the first sync (or on a fresh device with no cache) — the company's known identity. Blank
+  /// values would make the call/WhatsApp icons vanish from the login screen the moment the server
+  /// is down, the worst possible time to leave the user without a way to reach the company.
   factory AppConfigModel.defaults() {
     return AppConfigModel(
       companyName: 'الكبودي للخياطة الرجالية',
-      companyAddress: '',
+      companyAddress: 'الجراف- جوار بيت الشايف',
       companyWebsite: '',
-      companyPhone: '',
+      companyPhone: fallbackCompanyPhone,
       appName: 'الكبودي للخياطة الرجاليه',
       companyNameEn: "ALKABODI FOR MEN's TAILORING",
       companyAddressEn: '',

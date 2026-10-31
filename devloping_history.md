@@ -3656,3 +3656,201 @@ signal 3 (SIGQUIT) → tombstoned
 - `flutter test test/features/app_info` = **22 ناجحاً**.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-30 23:24 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-31 02:12 — مقاسات العملاء: التباين، صف واحد، وخانات لا تُختَرع
+
+### قائمة الموديلات المنبثقة
+
+- `MeasurementModelTile` صار يستقبل `customerName`: بلا مستفيد ⇒ العنوان هو اسم العميل نفسه،
+  ولا نص «بلا مستفيد محدّد» في أي مكان. حُذف `beneficiaryLabel` من `MeasurementModelRef` بعد أن
+  لم يبق له قارئ — الحقل الميت يبقى خطأً صامتاً إلى أول من يظن أنه مستعمل.
+
+### لوحة `measurement_kit.dart` (تباين أعلى)
+
+- `MeasurementSectionCard`: تدرج Accent (0.34 → 0.12) بدل شريط 7%، حد سفلي 1.6، أيقونة مصمتة،
+  عنوان 14w800، وإطار البطاقة 1.2 بشفافية 0.45.
+- `MeasurementField`: تسمية w700 بحجم 9.5 بلون `textSecondary` (#475569) وقيمة w800 بحجم 12.5
+  بلون `textPrimary`؛ الغائب يبقى `textMuted` عمداً. وضع `dense` (8.5/11 وحشو 5/3) لصفوف الأقمشة.
+- `gridRule`: فواصل الشبكة بلون `secondary` بشفافية 0.35 بدل `AppColors.border` (#E2E8F0) الذي
+  لا يُرى على الأبيض؛ دالّة لا ثابتاً لأن اللوحة تُهيّأ من الخادم.
+- `MeasurementFieldGrid(singleRow: …)`: «العميل» ثلاثة أرقام في صف واحد كما طُلب.
+
+### الأقسام
+
+- **بيانات العميل والمستفيد:** اسم العميل محذوف (يظهر في عنوان الشاشة وحده)؛ مجموعتان تاليتان
+  بعناوين: المستفيد والموديل (خانة المستفيد مشروطة بوجوده) والفاتورة والطلب.
+- **مواصفات الموديل:** بقائمة المستخدم نفسها — نوع الأزرار، نوع الكم، نوع الرقبة، **جيب جانبي**،
+  نوع الجبزور، **جيب الصدر** — ثم نوع الكباك وعدد الأزرار وجيب الجوال والحجازي.
+  «جيب جانبي» = `POCKET_OR_WITHOUT` (معبأ 83,395/84,971 وقيم «جيوب/بدون/جيوب شمال/جيوب يمين»)،
+  و«جيب الصدر» = `SHAPE_POCKET_UP_NO` عند وجوده فقط، و`PEN_POCKET` أُزيل: فارغ في كل الصفوف.
+- **الأقمشة:** بلا عمود ترقيم وبلا تمرير أفقي. لكل قماش سطران بأوزان نسبية:
+  (رقم الطلب · القماش · العرض · اللون · هنش · ياردة · السعر) ثم (القصّاص · الخيّاط · المرحلة)
+  مع خلية «المرحلة» بشارة ملوّنة وتسمية مثل بقية الخانات، وفاصل 1.2 بين السطرين.
+  «العرض» = `CLOTH_TYPE` (قيمته الحيّة «عرضية» 37,077 مرة)، ورقم الطلب = `OHDID` (11 رقماً في
+  الحيّ) فأُوسع عليه قبل اسم القماش. الرف والمصدر محذوفان من الشاشة ومن الـ PDF معاً.
+- **الـ PDF:** جدول الأقمشة بنفس الأعمدة المطلوبة (رقم الطلب · القماش · العرض · اللون · هنش ·
+  ياردة · السعر · القصّاص · الخيّاط · المرحلة) وبلا رف/مصدر؛ وكتلة الهوية بلا الحقول المحذوفة.
+
+### إصلاحات وسلوكيات
+
+- تكرار الطلب عند أول فتح (حمل المزوّد + حمل `initState`) — حارس `isLoading` في شاشة العملاء
+  ونافذة الموديلات معاً.
+- ابتلاع مسافة البحث في حقل الأقمشة — تتبّع `_lastEmitted` بدل مقارنة الحقل بقيمة مقطوعة.
+- ألوان ديناميكية داخل `const`: فُصلت إلى وقت الرسم (`accent ?? AppColors.primary`)، وجُعلت
+  `MeasurementGroupLabel`/`MeasurementBadge` بلا قيم افتراضية ثابتة.
+- `Expanded` داخل تمرير أفقي غير محدود و`CrossAxisAlignment.stretch` داخل عمود غير محدود:
+  صُحّحا بالحساب الصريح للعرض ثم بـ `IntrinsicHeight`، والأول أُزيل أصلاً حين صار العرض بلا تمرير.
+
+### الاختبارات
+
+- `test/features/customers/` = **40 ناجحاً**: النماذج 13، المستودع 8، الشاشة 16 (سطرا الأقمشة
+  وأعمدتهما، غياب الحقول المحذوفة، إخفاء خانة المستفيد، عدم تكرار الاسم)، النافذة 5.
+- `flutter analyze` = **No issues found!** · `flutter test` = **464 ناجحاً / 5 متجاوزة**.
+- تعذّر تشغيل Pest: اتصال التطبيق بـ `localhost:1521/orclrd` مرفوض (`ORA-12514`)؛ تحقق القاعدة
+  في هذه الجولة تم قراءةً عبر موصل `oracledb` على الخادم البعيد، بما في ذلك تنفيذ استعلام التفصيل
+  كاملاً على فاتورة حيّة (55 صفاً).
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 02:12 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-31 02:39 — شعار واتساب الرسمي بدل الفقاعة العامة في المواضع الثلاثة
+
+**الطلب:** أيقونة واتساب في «معلومات المطور» وفي «الاستفسار والمساعدة» تُرسم بالشعار الرسمي لا
+بـ`Icons.chat_outlined`، مع تأكيد أيقونتي الاتصال/واتساب أسفل شاشة الدخول وبقاء البطاقة في شاشة واحدة.
+
+### الاعتماد الجديد
+
+- `pubspec.yaml`: `font_awesome_flutter: ^10.7.0` — **السبب:** Material Icons لا تحوي شعار واتساب
+  مطلقاً، والفقاعة العامة لا تُقرأ كواتساب. الخط يُقلَّم عند البناء (`--tree-shake-icons`) إلى
+  الرموز المستعملة فقط، فالكلفة الفعلية رمزان لا أكثر.
+- `flutter pub get` نُفِّذ بنجاح و`pubspec.lock` يحمل الحزمة، فالبناء اللاحق يعمل بلا شبكة.
+
+### العميل — ودجت الشعار
+
+- `lib/features/app_info/presentation/widgets/whatsapp_icon.dart` — **ملف جديد**: `WhatsAppIcon`
+  يرسم `FontAwesomeIcons.whatsapp` بلون `AppColors.whatsapp` افتراضاً وبـ`semanticLabel: 'واتساب'`
+  (الشعار بلا نص فيُعلَن لقارئ الشاشة). موضع واحد للحقيقة: أي تغيير للشعار لاحقاً يقع هنا وحده.
+
+### العميل — المواضع الثلاثة
+
+- `developer_info_section.dart`: أيقونة التواصل صارت `WhatsAppIcon` بدل `Icons.chat_outlined`،
+  وأيقونة الاتصال صارت `FontAwesomeIcons.phone` (17px) لتوافق الوزن البصري للشعار المجاور.
+- `support_inquiry_section.dart`: زر «واتساب» في قسم الاستفسار صار `WhatsAppIcon(size: 18)`
+  بدل `Icons.chat_rounded`/`chat_outlined`؛ وزر «اتصال» بقي `Icons.call_outlined` لأنه زر بنص.
+- `login_screen.dart` → `_CompanyContactBar`: الأيقونتان كما هما (اتصال/واتساب لرقم الشركة من
+  `APP_SETTINGS`) وأيقونة واتساب صارت الشعار الرسمي، والاتصال `FontAwesomeIcons.phone`.
+- `contact_icon_button.dart`: حقل الرمز تغيّر من `IconData` إلى `Widget icon` — لأن شعار العلامة
+  ليس `IconData` أصلاً. تعليق صريح يشرح السبب داخل الملف.
+
+### الاختبارات
+
+- `test/features/auth/last_username_test.dart`: تأكيدات أيقونات Material استُبدلت بـ
+  `find.byType(WhatsAppIcon)` و`findsNothing` لـ`Icons.chat_rounded`/`chat_outlined`، مع بقاء
+  تأكيدَي التلميح والموضع تحت زر «دخول».
+- `test/features/app_info/app_info_screen_test.dart`: `WhatsAppIcon` داخل `DeveloperInfoSection`
+  موجود مرة واحدة، ولا أثر لأي رمز دردشة عام في الشاشة كلها.
+
+### التحقق
+
+- `flutter analyze` = **No issues found!** (28.3s).
+- `flutter test` (كامل) = **464 ناجحاً / 5 متجاوزة — All tests passed!**
+- `flutter test test/features/app_info test/features/auth/last_username_test.dart` = **39 ناجحاً**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 02:39 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-31 — اللقطات البصرية للرئيسية: تاريخ مثبّت وإعادة توليد
+
+### المشكلة
+
+`flutter test` على هذا الجهاز أعاد خمسة إخفاقات في `test/home_visual_test.dart` — لأن
+`KY_VISUAL=1` مثبّت في بيئة المستخدم، فاللقطات لم تُتجاوز كما يفترض تعليقها. والصور نفسها كانت
+قديمةً بعد توسيع كتالوج الاختصارات، وكانت تفشل أيضاً لأن ترويسة الرئيسية تكتب التاريخ والتحية من
+ساعة الجهاز فتتغيّر اللقطة كل يوم بلا أي تغيير في التصميم.
+
+### التغييرات
+
+- `lib/features/home/presentation/screens/home_dashboard_screen.dart`: حقل `now` اختياري يُمرَّر
+  إلى `HomeHeader` (وفي التشغيل يبقى `null` فيُقرأ `DateTime.now()`). لا سلوك جديد للمستخدم.
+- `test/home_visual_test.dart`: `_pinnedNow = DateTime(2026, 10, 22, 9, 15)` يُمرَّر في كل لقطة،
+  فأصبحت اللقطة قابلة للتكرار في أي يوم.
+- `test/goldens/home_mobile.png` · `home_mobile_small.png` · `home_mobile_three.png` ·
+  `home_mobile_four.png` · `home_desktop.png`: أُعيد توليدها (`--update-goldens`) بعد تحديث
+  الكتالوج (بطاقة «مقاسات العملاء» وغيرها) ورُوجعت بالعين.
+
+### الاختبارات
+
+- `flutter analyze` = **No issues found!** · `flutter test` (كامل) = **474 ناجحاً، صفر إخفاق**.
+- `php -l` على `app/`+`routes/`+`database/` سليم · `pint --test` نظيف · `route:list` = 138 مساراً.
+- مرآة أكواد الصلاحيات: الخادم 147 والعميل 147 — بلا فرق في أي اتجاه.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-10-31 05:17 — قسم الاستفسار يخاطب الشركة، وهوية الشركة تعمل بلا اتصال
+
+**الطلب:** بيانات التواصل في «الاستفسار والمساعدة» تخصّ الشركة لا المطور، وأيقونات التواصل أسفل شاشة
+الدخول يجب ألا تختفي عند تعذّر الاتصال بالـ API بل تعود إلى المعلومات الافتراضية للشركة.
+
+### العيوب المكتشفة (بأدلّة من الشيفرة)
+
+1. `support_inquiry_section.dart` كان يستدعي `kDeveloperPhone` و`kDeveloperWhatsappUrl` — أي أن شكوى
+   العميل تذهب إلى المطوّر لا إلى الشركة.
+2. `AppConfigModel.defaults()` كان يحمل `companyPhone: ''` **و**`companyAddress: '967780154000'`
+   (الرقم الدولي موضوعاً في حقل العنوان)، فمسار «بلا خادم وبلا كاش» لا يحمل أي رقم ⇒
+   `_CompanyContactBar` يعيد `SizedBox.shrink` وتختفي الأيقونتان.
+3. `AppConfig::DEFAULTS` في الخادم كان يحمل العنوان والهاتف فارغين كذلك.
+
+### العميل
+
+- `lib/features/app_config/data/models/app_config_model.dart`:
+  - `static const String fallbackCompanyPhone = '780154000';` — مصدر واحد للرقم الافتراضي.
+  - `String get contactPhone` — المخزَّن، وإن كان فارغاً فالثابت أعلاه. مبرَّر: الخادم نفسه يُعوّض
+    الصف الفارغ بالافتراضي في `publicPayload`، فأي فراغ يصل العميل هو بيانات قديمة تُصلَح.
+  - `defaults()`: العنوان `'الجراف- جوار بيت الشايف'` والهاتف `fallbackCompanyPhone` بدل الفراغ
+    والرقم الموضوع في حقل العنوان، مع تعليق يشرح أن هذه هي هوية الشركة حين يُفتح التطبيق بلا شبكة.
+- `lib/features/app_info/presentation/widgets/support_inquiry_section.dart`:
+  - من `StatelessWidget` إلى `ConsumerWidget`، والرقم من
+    `appConfigNotifierProvider.select((s) => s.config.contactPhone)`.
+  - «اتصال» ⇒ `ExternalLinks.openTel(context, phone)`، و«واتساب» ⇒
+    `ExternalLinks.openWhatsappTo(context, phone)` (رابط `wa.me` من الأرقام المطبَّعة).
+  - `Tooltip` على الزرّين يحمل الرقم المكتوب — يكشف الرقم بالضغط المطوّل، ويُتيح للاختبار إثبات أنه
+    رقم *الشركة* لا رقم المطوّر.
+  - حُذف استيراد `core/constants/app_info.dart` من هذا الملف: لا ثوابت مطوّر فيه بعد اليوم.
+- `lib/features/auth/presentation/screens/login_screen.dart`: `_CompanyContactBar(phone: contactPhone)`
+  بدل `companyPhone`، وتعليق يوضّح أن الأيقونتين لا تسقطان بانقطاع الـ API. وبقي حارس الفراغ في
+  الودجت كتحقّق من مدخلاته.
+
+### الخادم
+
+- `kyApp_API/app/Support/AppConfig.php`: `COMPANY_ADDRESS` و`COMPANY_PHONE` في `DEFAULTS` صارا
+  القيمتين الحقيقيتين، فالحمولة العامة لا تُعيد فراغاً لعمود الهاتف أبداً. لا تغيير في
+  `publicPayload` ولا في `WRITABLE_KEYS` ولا في سقوف `AppConfigController::textLimit`.
+- `02_ibac_seed.php` لا يتأثر: يحدّث التسميات والنطاقات فقط ويُبقي قيم المشغّل كما هي.
+
+### الاختبارات
+
+- `test/app_config_model_test.dart` — مجموعة **«هوية الشركة تعمل بلا اتصال»** (3 حالات): الافتراضي
+  يحمل الهاتف والعنوان · `contactPhone` يعوّض الفراغ (كاش قديم) · يحترم الرقم المخزَّن.
+- `test/features/app_info/app_info_screen_test.dart` — حالتان: تلميح القسم يكشف رقم *الشركة*
+  (`777000111`) لا رقم المطوّر · رقم فارغ يعود إلى `fallbackCompanyPhone`.
+- `test/features/auth/last_username_test.dart` — `_StubAppConfig` صار يقبل `AppConfigModel?` حيث
+  `null` = الافتراضي؛ وحالتان: «بلا اتصال بالأي بي آي تظهر الأيقونتان من الهوية الافتراضية»،
+  و«رقم فارغ يعود إلى الافتراضي لا إلى الاختفاء» (بديلاً لحالة الاختفاء القديمة).
+
+### التحقق
+
+- `flutter analyze` = **No issues found!** (35.1s).
+- `flutter test` (كامل) = **470 ناجحاً / 10 متجاوزة — All tests passed!**
+- `flutter test test/features/app_info test/features/auth/last_username_test.dart test/app_config_model_test.dart`
+  = **57 ناجحاً**.
+- `php artisan test --filter=AppConfig` = **9 ناجحاً (33 تأكيداً)** — نُفِّذ على القاعدة البعيدة
+  (`DB_HOST`/`DB_SERVICE_NAME` للعملية وحدها) لأن `localhost:1521/orclrd` ما زال `ORA-12514`.
+- `php -l app/Support/AppConfig.php` نظيف · `pint --dirty` = **passed**.
+
+**النموذج:** Qoder · **الوقت:** 2026-10-31 05:17 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).

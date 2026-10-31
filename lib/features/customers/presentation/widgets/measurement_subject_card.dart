@@ -4,19 +4,17 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../tailoring/data/models/cutting_bill_detail_model.dart';
 import '../../../tailoring/data/models/cutting_model_item.dart';
 import '../../../tailoring/data/models/cutting_piece_item.dart';
-import '../../../tailoring/data/models/tailoring_parse.dart';
 import 'measurement_kit.dart';
 
-/// القسم الأول: التفاصيل الأساسية للعميل والمستفيد
-/// Section one: the customer's and the beneficiary's basics.
+/// القسم الأول: بيانات العميل ثم المستفيد/الموديل ثم الطلب — بلا تكرار للاسم
+/// Section one: the customer, then the beneficiary and model, then the order — no repeated name.
 ///
-/// مجموعات منفصلة بعناوين — «العميل» و«المستفيد والموديل» و«الفاتورة والطلب» — فالحقول المتجاورة
-/// بلا تسمية مجموعة تُقرأ كتكتلة واحدة لا كسجل. وقد حُذفت الحقول التي لا معنى لها في هذا
-/// السياق: العنوان، مجموعة الحساب، شكل الموديل، رقم الموديل، والفرع.
-/// Fields are split under group captions — customer, beneficiary and model, bill and order —
-/// because adjacent values without a caption read as one blob, not as a record. The fields with
-/// no business here were dropped outright: address, account group, model shape, model number and
-/// branch.
+/// اسم العميل يظهر أعلى الشاشة في شريط العنوان وحده، وإعادته داخل «بيانات العميل» كانت تجعل
+/// نفس الكلمة مرتين في شاشة واحدة. وأرقام العميل الثلاثة (الهاتف، رقم العميل، رقم الحساب) في
+/// صف واحد كما طُلب. والمستفيد الغائب يُخفى تماماً لا يُستبدل بنص اعتذاري.
+/// The customer's name belongs to the screen title only; repeating it inside "customer data"
+/// showed the same word twice on one screen. The three customer numbers sit on one row as
+/// asked. And an absent beneficiary is hidden outright, not replaced by an apologetic label.
 class MeasurementSubjectCard extends StatelessWidget {
   final CuttingBillHeader header;
   final CuttingModelItem? model;
@@ -31,45 +29,29 @@ class MeasurementSubjectCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return MeasurementSectionCard(
       title: 'بيانات العميل والمستفيد',
-      icon: Icons.person_rounded,
+      icon: Icons.badge_rounded,
       accent: AppColors.accent,
-      subtitle: tailoringJoin([
-        header.custName.isEmpty ? null : header.custName,
-        model?.beneficiary,
-      ]),
-      trailing: MeasurementBadge(
-        label: header.referenceLabel,
-        color: AppColors.accent,
-      ),
+      trailingText: header.referenceLabel,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          MeasurementGroupLabel(
-            text: 'العميل',
-            color: AppColors.accent,
-          ),
+          // ── العميل: صف واحد لا أكثر ────────────────────────────────────────
+          MeasurementGroupLabel(text: 'العميل', color: AppColors.accent),
           MeasurementFieldGrid(
+            singleRow: true,
+            minCellWidth: 96,
             fields: [
               MeasurementField(
-                label: 'اسم العميل',
-                value: header.custName.isEmpty ? 'عميل غير مسمّى' : header.custName,
-                icon: Icons.badge_rounded,
+                label: 'رقم الهاتف',
+                value: header.telNo1 ?? header.telNo2,
+                icon: Icons.phone_rounded,
+                numeric: true,
               ),
               MeasurementField(
                 label: 'رقم العميل',
                 value: header.custNo?.toString(),
                 icon: Icons.tag_rounded,
                 numeric: true,
-              ),
-              MeasurementField(
-                label: 'الهاتف',
-                // الهاتفان في خانة واحدة: خانة «هاتف آخر» فارغة تساوي صفًا مهدوراً
-                // Both phones share one cell: an empty "second phone" cell is a wasted line.
-                value: tailoringJoin(
-                  [header.telNo1, header.telNo2],
-                  separator: ' / ',
-                ),
-                icon: Icons.phone_rounded,
               ),
               MeasurementField(
                 label: 'رقم الحساب',
@@ -81,19 +63,22 @@ class MeasurementSubjectCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
+          // ── المستفيد والموديل ─────────────────────────────────────────────
           MeasurementGroupLabel(
             text: 'المستفيد والموديل',
             color: AppColors.info,
           ),
           MeasurementFieldGrid(
+            minCellWidth: 104,
             fields: [
-              MeasurementField(
-                label: 'المستفيد',
-                // شرطة واحدة تُقرأ «لا بيانات»: تسمية الغياب أصدق من فراغ مبهم
-                // A bare dash reads as "no data"; naming the absence is more honest.
-                value: model?.beneficiary ?? 'بلا مستفيد محدّد',
-                icon: Icons.person_outline_rounded,
-              ),
+              // لا مستفيد ⇒ لا خانة: الغياب يُخفى ولا يُعلَن
+              // No beneficiary means no cell at all: absence is hidden, not announced.
+              if (model?.beneficiary != null)
+                MeasurementField(
+                  label: 'اسم المستفيد',
+                  value: model!.beneficiary,
+                  icon: Icons.person_outline_rounded,
+                ),
               MeasurementField(
                 label: 'نوع الموديل',
                 value: model?.typeName,
@@ -114,11 +99,13 @@ class MeasurementSubjectCard extends StatelessWidget {
           ),
           const SizedBox(height: 10),
 
+          // ── الفاتورة والطلب ────────────────────────────────────────────────
           MeasurementGroupLabel(
             text: 'الفاتورة والطلب',
             color: AppColors.primary,
           ),
           MeasurementFieldGrid(
+            minCellWidth: 104,
             fields: [
               MeasurementField(
                 label: 'تاريخ الفاتورة',

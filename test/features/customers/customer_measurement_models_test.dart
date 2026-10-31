@@ -108,20 +108,20 @@ void main() {
       expect(model.billLabel, '35 / 2023');
     });
 
-    test('a delivered model reads as delivered, and a blank beneficiary is named', () {
+    test('a delivered model reads as delivered, and a blank beneficiary stays absent', () {
       final delivered = MeasurementModelRef.fromJson(
         const {'bill_no': 1, 'year': 2026, 'seq_no': 2, 'handing_done': 1},
       );
       final blank = MeasurementModelRef.fromJson(
-        // 18,846 صفاً بلا مستفيد: البديل الصريح أفضل من شرطة تُقرأ «لا بيانات»
-        // 18,846 rows have no beneficiary: an explicit fallback beats a dash.
+        // 18,846 صفاً بلا مستفيد: الغياب يبقى غياباً فلا تخترع الواجهة اسماً له
+        // 18,846 rows have no beneficiary: the model keeps it null, so the UI hides the field
+        // rather than printing an invented label for it.
         const {'bill_no': 1, 'year': 2026, 'seq_no': 2, 'beneficiary': '   '},
       );
 
       expect(delivered.stageLabel, 'تم التسليم');
       expect(delivered.isComplete, isTrue);
       expect(blank.beneficiary, isNull);
-      expect(blank.beneficiaryLabel, 'بلا مستفيد محدّد');
       expect(blank.displayName, 'موديل 2');
     });
 

@@ -54,7 +54,7 @@ class BillPaymentCard extends StatelessWidget {
         children: [
           TailoringInfoGrid(
             singleRow: true,
-            minCellWidth: 96,
+            minCellWidth:50,
             children: [
               TailoringInfoTile(
                 label: 'الإجمالي',
@@ -76,12 +76,6 @@ class BillPaymentCard extends StatelessWidget {
                 value: tailoringNumber(data.paidTotal),
                 icon: Icons.price_check_rounded,
               ),
-              if (data.othersPayments != null && (data.othersPayments ?? 0) != 0)
-                TailoringInfoTile(
-                  label: 'مدفوعات أخرى',
-                  value: tailoringNumber(data.othersPayments),
-                  icon: Icons.add_card_rounded,
-                ),
               TailoringInfoTile(
                 label: data.balanceLabel,
                 value: data.balanceValue,
@@ -98,22 +92,7 @@ class BillPaymentCard extends StatelessWidget {
                 icon: Icons.receipt_rounded,
               ),
             ],
-          ),
-          // إشارة الرصيد السالب تُشرح صراحةً بدل ترك المستخدم يقرأ السالب خطأ
-          // The negative balance is explained instead of leaving the sign to be misread.
-          if (data.isAdvance) ...[
-            const SizedBox(height: 3),
-            Text(
-              'دفع العميل أكثر من الصافي بمقدار ${data.balanceValue} — رصيد مقدم لصالحه',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.success,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+          ),                    
         ],
       ),
     );

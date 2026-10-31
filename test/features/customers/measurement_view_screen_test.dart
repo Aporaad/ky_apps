@@ -222,9 +222,21 @@ void main() {
 
     // السطر الأول: رقم الطلب · القماش · العرض · اللون · هنش · ياردة · السعر
     // Line one: order id, cloth, width, colour, hinsh, yards, price.
-    for (final label in ['رقم الطلب', 'القماش', 'العرض', 'اللون', 'هنش', 'ياردة', 'السعر']) {
-      expect(find.text(label), findsWidgets, reason: 'عمود مفقود: $label');
-    }
+    // القائمة كلها تُفحص مرة واحدة: الفحص أولاً بأول يُخفي الأعمدة الناقصة خلف أولها
+    // Every label is checked in one pass: checking one-by-one hides the rest behind the first miss.
+    const firstLine = [
+      'رقم الطلب',
+      'القماش',
+      'العرض',
+      'اللون',
+      'هنش',
+      'ياردة',
+      'السعر',
+    ];
+    final missingFirst = firstLine
+        .where((label) => find.text(label).evaluate().isEmpty)
+        .toList();
+    expect(missingFirst, isEmpty, reason: 'أعمدة ناقصة في السطر الأول');
 
     // السطر الثاني: القصّاص · الخيّاط · المرحلة
     // Line two: cutter, tailor and stage.
@@ -248,6 +260,32 @@ void main() {
     for (final label in ['العنوان', 'مجموعة الحساب', 'شكل الموديل', 'رقم الموديل', 'الفرع']) {
       expect(find.text(label), findsNothing, reason: 'حقل كان يجب حذفه: $label');
     }
+
+    // لا نص اعتذاري عن مستفيد غائب، ولا تكرار لاسم العميل داخل القسم
+    // No apologetic "no beneficiary" text anywhere, and no repeated customer name in the body.
+    expect(find.text('بلا مستفيد محدّد'), findsNothing);
+    expect(find.text('اسم العميل'), findsNothing);
+  });
+
+  testWidgets('a model without a beneficiary hides the field instead of announcing it', (
+    tester,
+  ) async {
+    final bare = MeasurementSubject(
+      custNo: 40,
+      detail: CuttingBillDetail.fromJson(const <String, dynamic>{
+        'header': {'bill_no': 35, 'year': 2023, 'cust_no': 40, 'cust_name': 'تراب'},
+        'models': [
+          {'seq_no': 48, 'type_name': 'قصيري', 'pieces': [{'seq_no1': 1}]},
+        ],
+      }),
+    );
+    await _pump(tester, _FakeRepo(subject: bare));
+
+    // خانة المستفيد نفسها غائبة، لا غائبة بقيمتها الفارغة
+    // The beneficiary cell is gone entirely, not present-with-an-empty-value.
+    expect(find.text('اسم المستفيد'), findsNothing);
+    expect(find.text('بلا مستفيد محدّد'), findsNothing);
+    expect(find.text('نوع الموديل'), findsOneWidget);
   });
 
   testWidgets('the filter button shows and hides the filter bar', (

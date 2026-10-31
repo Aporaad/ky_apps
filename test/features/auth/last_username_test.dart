@@ -7,6 +7,7 @@ import 'package:ky_apps/core/storage/secure_storage_service.dart';
 import 'package:ky_apps/core/widgets/app_logo.dart';
 import 'package:ky_apps/features/app_config/data/models/app_config_model.dart';
 import 'package:ky_apps/features/app_config/presentation/providers/app_config_notifier.dart';
+import 'package:ky_apps/features/app_info/presentation/widgets/whatsapp_icon.dart';
 import 'package:ky_apps/features/auth/data/models/auth_response.dart';
 import 'package:ky_apps/features/auth/data/models/user_model.dart';
 import 'package:ky_apps/features/auth/data/repositories/auth_repository.dart';
@@ -45,18 +46,18 @@ class _StubAuth extends AuthNotifier {
   AuthState build() => _initial;
 }
 
-/// تهيئة خاملة: لا كاش ولا خادم — تكفي شاشة الدخول باسم شركة افتراضي ورقم تواصل
-/// Idle app config: no cache, no server — the login screen needs a company name and contact number.
+/// تهيئة خاملة: لا كاش ولا خادم — الافتراضي المضمّن أو تهيئة جاهزة يمرّرها الاختبار
+/// Idle app config: no cache, no server — either the baked-in defaults or a config the test passes.
 class _StubAppConfig extends AppConfigNotifier {
-  _StubAppConfig({this.companyPhone = ''});
+  _StubAppConfig({AppConfigModel? config}) : _config = config;
 
-  /// رقم الشركة الذي تستعمله أيقونتا التواصل أسفل البطاقة (فارغ = لا أيقونات)
-  /// The company number behind the two contact icons under the card (blank = no icons).
-  final String companyPhone;
+  /// `null` يعني الافتراضي المضمّن — أي حالة «جهاز جديد بلا شبكة»
+  /// Null means the baked-in defaults — i.e. the “fresh device with no network” case.
+  final AppConfigModel? _config;
 
   @override
   AppConfigState build() => AppConfigState(
-    config: AppConfigModel.defaults().copyWith(companyPhone: companyPhone),
+    config: _config ?? AppConfigModel.defaults(),
     loading: false,
   );
 }
@@ -296,8 +297,14 @@ void main() {
     Future<void> pumpLogin(
       WidgetTester tester, {
       String? lastUsername,
-      String companyPhone = '',
+      String? companyPhone,
     }) async {
+      // `companyPhone == null` ⇒ التهيئة الافتراضية كما هي (حالة انقطاع الـ API)
+      // `companyPhone == null` keeps the baked-in defaults — the API-down case.
+      final config = companyPhone == null
+          ? null
+          : AppConfigModel.defaults().copyWith(companyPhone: companyPhone);
+
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
@@ -306,7 +313,7 @@ void main() {
               () => _StubAuth(AuthState(lastUsername: lastUsername)),
             ),
             appConfigNotifierProvider.overrideWith(
-              () => _StubAppConfig(companyPhone: companyPhone),
+              () => _StubAppConfig(config: config),
             ),
           ],
           child: const MaterialApp(home: LoginScreen()),
@@ -404,11 +411,15 @@ void main() {
 
       // أيقونتان صغيرتان فقط، بلا نص ظاهر — لكل واحدة تلميح يعلن وظيفتها
       // Two small icons only, no visible text — each carries a tooltip announcing its job.
-      expect(find.byIcon(Icons.call_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.chat_rounded), findsOneWidget);
       expect(find.byTooltip('اتصال بالشركة'), findsOneWidget);
       expect(find.byTooltip('واتساب الشركة'), findsOneWidget);
       expect(find.text('اتصال بالشركة'), findsNothing);
+
+      // واتساب يُرسم بالشعار الرسمي (خط العلامات) لا بفقاعة Material العامة
+      // WhatsApp is drawn with the official brand mark, not a generic Material bubble.
+      expect(find.byType(WhatsAppIcon), findsOneWidget);
+      expect(find.byIcon(Icons.chat_rounded), findsNothing);
+      expect(find.byIcon(Icons.chat_outlined), findsNothing);
 
       // مكان سطر الإصدار القديم: الأيقونتان تحت زر «دخول» مباشرة
       // The old version line's place: the icons sit right under the sign-in button.
@@ -417,13 +428,29 @@ void main() {
       expect(callCenter, greaterThan(buttonBottom));
     });
 
-    testWidgets('بلا رقم شركة مضبوط لا تُعرض أيقونات تواصل', (tester) async {
+    testWidgets('بلا اتصال بالأي بي آي تظهر الأيقونتان من الهوية الافتراضية', (
+      tester,
+    ) async {
+      // لا خادم ولا كاش (أو كاش يحمل رقماً فارغاً): `contactPhone` يعود للافتراضي المضمّن،
+      // فلا يخسر المستخدم وسيلة الاتصال في أسوأ وقت ممكن.
+      // No server and no cache (or a cache with a blank number): `contactPhone` falls back to the
+      // baked-in default, so the user never loses the contact channel at the worst moment.
       await pumpLogin(tester);
 
-      // حقل فارغ في القاعدة = لا أيقونتان عاطلتان توهمان بالنقر
-      // A blank database field means no dead icons pretending to be tappable.
-      expect(find.byTooltip('اتصال بالشركة'), findsNothing);
-      expect(find.byTooltip('واتساب الشركة'), findsNothing);
+      expect(find.byTooltip('اتصال بالشركة'), findsOneWidget);
+      expect(find.byTooltip('واتساب الشركة'), findsOneWidget);
+      expect(find.byType(WhatsAppIcon), findsOneWidget);
+    });
+
+    testWidgets('رقم شركة فارغ في التهيئة يعود إلى الافتراضي لا إلى الاختفاء', (
+      tester,
+    ) async {
+      await pumpLogin(tester, companyPhone: '');
+
+      // الفراغ يُعتبر بيانات قديمة تُصلَح: الأيقونتان تبقيان
+      // A blank is treated as stale data to repair: the icons stay.
+      expect(find.byTooltip('اتصال بالشركة'), findsOneWidget);
+      expect(find.byTooltip('واتساب الشركة'), findsOneWidget);
     });
 
     testWidgets('بطاقة الدخول تظهر كاملة على شاشة هاتف بلا تمرير', (tester) async {
