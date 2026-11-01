@@ -57,12 +57,15 @@ void main() {
       );
     });
 
-    test('sixteen shortcuts are on by default, and exactly one is pinned', () {
+    test('twenty-five shortcuts are on by default, and exactly one is pinned', () {
       final defaults = homeShortcutCatalog.where(
         (shortcut) => shortcut.defaultOn,
       );
 
-      expect(defaults, hasLength(16));
+      // 16 قبل المخازن + 9 بطاقات مخازن (القسم · التوريد · الصرف · التحويل · الأصناف ·
+      // المرجعيات · الأرصدة · التقارير · الجرد).
+      // 16 before stores + 9 stores cards.
+      expect(defaults, hasLength(25));
       expect(homeShortcutCatalog.where((s) => s.pinned), hasLength(1));
       expect(
         homeShortcutCatalog.firstWhere((s) => s.pinned).id,
@@ -70,14 +73,16 @@ void main() {
       );
     });
 
-    test('the two empty sections are flagged, not hidden', () {
+    test('the remaining empty section is flagged, not hidden', () {
       final flagged =
           homeShortcutCatalog
               .where((shortcut) => shortcut.underDevelopment)
               .map((shortcut) => shortcut.sectionId)
               .toSet();
 
-      expect(flagged, {'sales', 'stores'});
+      // المخازن خرجت من «قيد التطوير» بعد اكتمال وحداتها الثمانية.
+      // Stores left "under development" once its eight units shipped.
+      expect(flagged, {'sales'});
     });
 
     test('the four tailoring operations are wired to real destinations', () {

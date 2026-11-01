@@ -199,6 +199,10 @@ git add -A; git commit -m "iOS: release 1.1.0+2"; git push origin main
 # ثم من Codemagic: Start new build → ios-unsigned
 ```
 
+> **تأكّد أن الدفع وصل فعلاً:** Codemagic يبني من **GitHub** لا من قرصك؛ كوميت محلي غير مدفوع
+> لا يغيّر شيئاً في البناء. المرجع الموثوق هو المستودع البعيد لا `origin/main` المحلي القديم:
+> `git ls-remote --heads origin` يجب أن يُظهر **نفس هاش `git rev-parse HEAD`**.
+
 ### 4.2.1 بوابة الترميز — لا تتخطّاها
 
 `tools/check_encoding.py` يمنع فشلاً حقيقياً شهدناه: ملف `.gitignore` كان بترميز
@@ -220,6 +224,28 @@ python tools\check_encoding.py      # يجب: RESULT: OK
 **الاعتياد الوقائي:** أي تحرير لـ`.gitignore` أو أي ملف بنص عربي يجب أن يُحفط بـ**UTF-8**.
 محررات ويندوز القديمة تكتب ANSI/Windows-1256 بصمت وتُنتج هذا العطل نفسه.
 
+### 4.3.0 فحص جاهزية ويندوز قبل التثبيت (دقيقة واحدة)
+
+Sideloadly لا يتحدث مع الآيفون إلا عبر منظومة Apple للسائق على ويندوز. نسخة **Microsoft Store**
+من iTunes تقدّم `AppleMobileDeviceProcess` ولا تُنشئ خدمة `Apple Mobile Device Service` الكلاسيكية،
+وقد يرى ويندوز الجهاز بحالة `Unknown` فلا يظهر في Sideloadly. افحص قبل لصق الـIPA:
+
+```powershell
+# 1) هل منظومة السائق الكلاسيكية موجودة؟
+Test-Path "C:\Program Files\Common Files\Apple\Mobile Device Support"
+Get-Service -Name "Apple Mobile Device Service" -ErrorAction SilentlyContinue
+
+# 2) هل يرى ويندوز الآيفون؟ وما حالته؟
+Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue |
+  Where-Object { $_.FriendlyName -match "iPhone" } |
+  Select-Object FriendlyName, Status
+```
+
+- `True` + خدمة `Running` + الحالة `OK` → جاهز.
+- المسار `False` أو لا خدمة أو الحالة `Unknown` → ثبّت **iTunes الكلاسيكي x64** من `apple.com`
+  (يُثبّت `Apple Mobile Device Support` والسائق `usbaapl64`)، وأزل نسخة Microsoft Store إن تعارضت.
+  وتأكد أن شاشة الآيفون مفتوحة وأنك ضغطت **الثقة** على الجهاز.
+
 ### 4.3 التثبيت على الآيفون من ويندوز
 
 1. **مرة واحدة:** ثبّت **iTunes بنسخة الويب (x64)** — لا نسخة Microsoft Store
@@ -233,6 +259,31 @@ python tools\check_encoding.py      # يجب: RESULT: OK
 6. فعّل **Auto-Refresh** في Sideloadly (يعمل عبر الواي فاي مع بقاء الحاسوب يعمل ونفس الشبكة).
 7. للتحديث لاحقاً: اسحب الـIPA **الجديد** بنفس الـBundle ID ونفس Apple ID ← يُثبَّت فوق
    القديم وتحتفظ الجلسة والإعدادات.
+
+### 4.3.1 حساب Apple ID المطلوب — ما هو ومن أين تجده
+
+**ما هو:** ليس حساب Apple Developer Program (99$/سنة). هو **حساب Apple العادي** الذي تستخدمه
+في iCloud وApp Store على الآيفون نفسه. حين توقّع به، تمنحك Apple فريقاً شخصياً مجانياً
+("Personal Team") بشهادة تطوير صالحة **7 أيام**.
+
+**كيف تجده — على الآيفون:**
+1. `الإعدادات` ← اضغط **اسمك/صورتك أعلى القائمة** ← البريد الظاهر تحته هو معرّف Apple ID.
+2. أو `الإعدادات` ← `App Store` ← اضغط صورة الحساب أعلى ← يظهر البريد.
+3. أو من المتصفح: `account.apple.com` ← تسجيل الدخول ← بيانات الحساب.
+
+**إن لم يكن لديك حساب:**
+- على الآيفون: `الإعدادات` ← «تسجيل الدخول إلى iPhone» ← «ليس لديك Apple ID؟» ← إنشاء.
+- أو من `account.apple.com` ← Create Your Apple ID.
+- أي بريد يصلح (Gmail/Outlook...) — لا يلزم بريد iCloud.
+- يجب رقم هاتف لاستلام رمز التحقق؛ **التحقق بخطوتين (2FA) إلزامي** لاستخدام الحساب في التوقيع.
+
+**في Sideloadly:** ضع البريد في حقل **Apple ID** ← كلمة السر ← ثم رمز 2FA الذي يظهر على
+الآيفون. لا تستخدم «App-Specific Password» (تعمل مع الحسابات المدفوعة فقط وبخيار anisette معطّل).
+
+**تحذيرات عملية:**
+- لا يصلح **Managed Apple ID** (حساب مدرسة/شركة) للتوقيع.
+- استخدم الحساب الذي تستطيع قبول رمز 2FA على **نفس الآيفون** الذي تُجرّب عليه.
+- كل توقيع مجاني ينتهي بعد 7 أيام (انتهاء الشهادة لا يحذف بيانات التطبيق، §2.2).
 
 ### 4.4 الأرشفة
 
@@ -265,6 +316,75 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 4. إن اختلف عنوان الخادم عن `192.168.0.9` (الافتراضي في `api_constants.dart`)،
    عدّله من داخل التطبيق: أيقونة المعلومات ← «معلومات البرنامج والدعم» ← نقر اسم
    المطور **5 مرات** ← كلمة سر إعدادات API.
+
+### 5.0.1 قياس جاهزية الشبكة — حالة مقيسة (2026-11-01 02:35)
+
+نتيجة القياس على جهاز التطوير وقت كتابة هذا القسم:
+
+| القياس | النتيجة |
+|---|---|
+| عناوين الجهاز IPv4 | `192.168.0.11` (Ethernet) · `192.168.178.176` (Wi‑Fi) · `26.210.208.234` (Radmin VPN) |
+| الاستماع على المنفذ 8000 محلياً | **لا شيء** |
+| `http://127.0.0.1:8000/api/hello` | **فشل** (تعذر الاتصال) |
+| `192.168.0.9:8000` (الافتراضي في التطبيق) | **غير قابل للوصول** (timeout) |
+| خدمة Laravel/PHP/NSSM | **غير موجودة** (الموجود فقط `bio-apache0` لجهاز آخر) |
+| قاعدة جدار حماية للمنفذ 8000 | **لا قاعدة** — لكن جدار الحماية نفسه **معطّل** على الملفات الثلاثة (Domain/Private/Public = False) ⇒ لا يحجب شيئاً حالياً |
+
+أي أن أي محاولة دخول من الآيفون الآن ستنتهي بفشل اتصال **لسبب خارجي عن التطبيق**. للتجهيز:
+
+```powershell
+# 1) تشغيل الـAPI على كل الواجهات (تم فعلاً: يعمل على 0.0.0.0:8000)
+cd kyApp_API
+php artisan serve --host 0.0.0.0 --port 8000
+
+# 2) التأكد محلياً ومن الشبكة (نتائج مقيسة: 200 على العناوين الثلاثة)
+(Invoke-WebRequest "http://127.0.0.1:8000/api/hello" -UseBasicParsing).Content
+(Invoke-WebRequest "http://192.168.178.176:8000/api/hello" -UseBasicParsing).Content
+```
+
+> جدار الحماية على هذا الجهاز معطّل بالكامل، فلا حاجة لإضافة قاعدة للمنفذ 8000 الآن. إن أُعيد
+> تفعيله لاحقاً تصبح القاعدة لازمة:
+> `New-NetFirewallRule -DisplayName "ky API 8000" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow`
+
+**ثم من Safari على الآيفون** استخدم عنوان **نفس الشبكة التي عليها الهاتف**:
+- إن كان الآيفون على الواي فاي `192.168.178.x` ← `http://192.168.178.176:8000/api/hello`
+- إن كان على شبكة الإيثرنت `192.168.0.x` ← `http://192.168.0.11:8000/api/hello`
+
+وبعد نجاح الرد في Safari، أدخل نفس العنوان + `/api` في إعدادات التطبيق (§5.0-4).
+اختبار الشبكة من Safari أولاً يفصل «عطل الشبكة» عن «عطل التطبيق» في خطوة واحدة.
+
+#### قياس لاحق: سبب 500 هو خدمة Oracle خاطئة في `.env`
+
+بعد تشغيل الـAPI ظهر أن `/api/hello` يعمل (200) بينما `/api/app-config` يعطي **500**. السبب
+من سجل Laravel والأداة المساعدة `yajra/laravel-pdo-via-oci8`:
+
+```
+ORA-12514: TNS:listener does not currently know of service requested in connect descriptor
+SERVICE_NAME = orclrd   ← قيمة .env الحالية
+```
+
+واختبار الخدمات بنفس بيانات `.env` (بلا طباعة كلمة السر) أعطى:
+
+| الخدمة | النتيجة |
+|---|---|
+| `ORCL` | **نجح** — 499 جدولاً لمخطط `ACCOUNTS` |
+| `ORCL3` | نجح — 500 جدولاً لمخطط `ACCOUNTS` |
+| `ORCL2` | فشل: `ORA-01017` بيانات اعتماد غير صحيحة |
+| `orclrd` · `XE` · `FREE` | فشل: `ORA-12514` غير مسجّلة على المستمع |
+
+وبعد التجاوز للعملية وحدها (`DB_SERVICE_NAME=ORCL` دون لمس `.env`) عاد `/api/app-config`
+بـ**200** وبيانات حقيقية (`الكبودي للخياطة الرجالية`).
+
+**طريقتان لتعمل التجربة:**
+1. **دائم:** في `kyApp_API/.env` غيّر السطر إلى `DB_SERVICE_NAME=ORCL` (أو `ORCL3`) وأعد تشغيل الخادم.
+   هذا هو العقد الموثّق في `kyApp_API/AGENTS.md` (`DB_SERVICE_NAME=orcl`).
+2. **مؤقت (بلا تعديل):** شغّل الخادم بتجاوز بيئة للعملية فقط:
+   ```powershell
+   cd kyApp_API; $env:DB_SERVICE_NAME="ORCL"; php artisan serve --host 0.0.0.0 --port 8000
+   ```
+
+اختر الخدمة التي تحمل **بيانات العمل الحالية**: `ORCL` و`ORCL3` كلاهما يملك مخطط `ACCOUNTS`
+ولكنهما مجموعتان مختلفتان (499 مقابل 500 جدولاً), والقرار لصاحب البيئة.
 
 ### 5.1 القائمة
 
@@ -326,7 +446,7 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 
 | العرض | السبب | الحل |
 |---|---|---|
-| `Sideloadly` لا يرى الجهاز | نسخة iTunes من Microsoft Store | أزلها وثبّت نسخة الويب (x64)، أعد تشغيل الحاسوب، افتح iTunes مرة، واقبل «الثقة» |
+| `Sideloadly` لا يرى الجهاز | نسخة iTunes من Microsoft Store (لا خدمة AMDS) | تحقق من §4.3.0 ثم ثبّت iTunes الكلاسيكي x64 |
 | `NP_E_CONN_FAILED` | نفس السبب أعلاه | نفس الحل |
 | `Developer Mode disabled` | iOS 16+ يتطلب تفعيله | الإعدادات ← الخصوصية والأمان ← وضع المطوّر |
 | التطبيق لا يفتح: «Untrusted Developer» | الحساب غير موثوق | الإعدادات ← عام ← VPN وإدارة الأجهزة ← الثقة في الحساب |
@@ -342,6 +462,7 @@ Copy-Item "<مسار التنزيل>\Runner.app.dSYM.zip"          "release_arti
 | **تسجيل الخروج التلقائي عند كل إقلاع / البطاقة البيومترية تُلغى** | `keychain-access-groups` غير مربوطة بالهدف | تأكد من وجود الملفَّين وأن `CODE_SIGN_ENTITLEMENTS` مضبوط في الإعدادات الثلاث (وأن Sideloadly وقّع بنفس App ID) |
 | **`flutter has exited unexpectedly: FileSystemException: Failed to decode data using encoding 'utf-8', path = '.gitignore'`** | ملف بترميز Windows-1256 (محرر ويندوز قديم) — لا علاقة له بـiOS | `python tools\check_encoding.py --fix` ثم ادفع وأعد البناء |
 | **ورقة المشاركة لا تظهر على iPad** | `sharePositionOrigin` إلزامي على iPad ولم يُمرَّر | لا يخص الآيفون؛ أضف المستطيل المرجعي للزر في كل موضع تصدير قبل اعتماد iPad (§5.2-3) |
+| **`ORA-12514` من الـAPI** | `.env` يشير إلى خدمة غير مسجّلة (`orclrd`) | استخدم `DB_SERVICE_NAME=ORCL` (أو `ORCL3`) — انظر §5.0.1 |
 | العربية تظهر رموزاً | تحويل الترميز (خادم/عميل) أو خط غير محمّل | نفس تشخيص نسخة أندرويد — راجع `DBdevloping_history.md` |
 
 ---

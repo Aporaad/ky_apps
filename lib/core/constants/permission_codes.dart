@@ -131,6 +131,42 @@ class Perm {
   static const String storesCreate = 'stores.create';
   static const String storesUpdate = 'stores.update';
   static const String storesDelete = 'stores.delete';
+  // أمين المخزن سجل مستقل عن المخزن: رؤيته وإدارته منحان منفصلان
+  // A store keeper is its own registry: viewing and managing are separate grants.
+  static const String storesKeepersView = 'stores.keepers_view';
+  static const String storesKeepersManage = 'stores.keepers_manage';
+  // أوامر التوريد — كل فعل منح مستقل
+  static const String storesReceivingView = 'stores.receiving_view';
+  static const String storesReceivingCreate = 'stores.receiving_create';
+  static const String storesReceivingUpdate = 'stores.receiving_update';
+  static const String storesReceivingDelete = 'stores.receiving_delete';
+  // أوامر الصرف
+  static const String storesIssuingView = 'stores.issuing_view';
+  static const String storesIssuingCreate = 'stores.issuing_create';
+  static const String storesIssuingUpdate = 'stores.issuing_update';
+  static const String storesIssuingDelete = 'stores.issuing_delete';
+  // أوامر التحويل المخزني
+  static const String storesTransferView = 'stores.transfer_view';
+  static const String storesTransferCreate = 'stores.transfer_create';
+  static const String storesTransferUpdate = 'stores.transfer_update';
+  static const String storesTransferDelete = 'stores.transfer_delete';
+  // الأصناف: رؤية الصنف لا تعني تعديله، وحذفه ليس تعطيله
+  static const String storesItemsView = 'stores.items_view';
+  static const String storesItemsCreate = 'stores.items_create';
+  static const String storesItemsUpdate = 'stores.items_update';
+  static const String storesItemsDelete = 'stores.items_delete';
+  // المرجعيات: المجموعات والوحدات والفئات
+  static const String storesCatalogsView = 'stores.catalogs_view';
+  static const String storesCatalogsManage = 'stores.catalogs_manage';
+  // التقارير والأرصدة
+  static const String storesReportsView = 'stores.reports_view';
+  static const String storesReportsPrint = 'stores.reports_print';
+  static const String storesReportsExport = 'stores.reports_export';
+  /// الجرد كشف عدّ حي بلا حفظ — عرضه وطباعته وتصديره ثلاثة منح
+  /// The stocktake is a live counting sheet — view, print and export are three grants.
+  static const String storesStocktakeView = 'stores.stocktake_view';
+  static const String storesStocktakePrint = 'stores.stocktake_print';
+  static const String storesStocktakeExport = 'stores.stocktake_export';
 
   // ── التقارير / reports ───────────────────────────────────
   static const String reportsWildcard = 'reports.*';
@@ -320,6 +356,32 @@ const List<String> allPermissionCodes = [
   Perm.storesCreate,
   Perm.storesUpdate,
   Perm.storesDelete,
+  Perm.storesKeepersView,
+  Perm.storesKeepersManage,
+  Perm.storesReceivingView,
+  Perm.storesReceivingCreate,
+  Perm.storesReceivingUpdate,
+  Perm.storesReceivingDelete,
+  Perm.storesIssuingView,
+  Perm.storesIssuingCreate,
+  Perm.storesIssuingUpdate,
+  Perm.storesIssuingDelete,
+  Perm.storesTransferView,
+  Perm.storesTransferCreate,
+  Perm.storesTransferUpdate,
+  Perm.storesTransferDelete,
+  Perm.storesItemsView,
+  Perm.storesItemsCreate,
+  Perm.storesItemsUpdate,
+  Perm.storesItemsDelete,
+  Perm.storesCatalogsView,
+  Perm.storesCatalogsManage,
+  Perm.storesReportsView,
+  Perm.storesReportsPrint,
+  Perm.storesReportsExport,
+  Perm.storesStocktakeView,
+  Perm.storesStocktakePrint,
+  Perm.storesStocktakeExport,
   Perm.reportsWildcard,
   Perm.reportsView,
   Perm.reportsExport,
@@ -483,6 +545,32 @@ const Map<String, String> permActionLabels = {
   'reveal_credentials': 'إظهار بيانات الدخول',
   'financial': 'كشف مالي شخصي',
   'work': 'كشف عمل شخصي',
+  'keepers_view': 'عرض الأمناء',
+  'keepers_manage': 'إدارة الأمناء',
+  'receiving_view': 'أوامر التوريد',
+  'receiving_create': 'إنشاء توريد',
+  'receiving_update': 'تعديل توريد',
+  'receiving_delete': 'حذف توريد',
+  'issuing_view': 'أوامر الصرف',
+  'issuing_create': 'إنشاء صرف',
+  'issuing_update': 'تعديل صرف',
+  'issuing_delete': 'حذف صرف',
+  'transfer_view': 'أوامر التحويل',
+  'transfer_create': 'إنشاء تحويل',
+  'transfer_update': 'تعديل تحويل',
+  'transfer_delete': 'حذف تحويل',
+  'items_view': 'عرض الأصناف',
+  'items_create': 'إضافة صنف',
+  'items_update': 'تعديل صنف',
+  'items_delete': 'حذف صنف',
+  'catalogs_view': 'عرض المرجعيات',
+  'catalogs_manage': 'إدارة المرجعيات',
+  'reports_view': 'عرض التقارير',
+  'reports_print': 'طباعة التقارير',
+  'reports_export': 'تصدير التقارير',
+  'stocktake_view': 'عرض الجرد',
+  'stocktake_print': 'طباعة الجرد',
+  'stocktake_export': 'تصدير الجرد',
 };
 
 /// اسم القسم المستخرج من الكود (`customers.view` ⇒ `customers`)

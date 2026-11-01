@@ -2302,3 +2302,169 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
 - [ ] **الخطوة التالية للمستخدم:** commit + push ثم `Start new build → ios-unsigned`.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 02:10 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 02:23 — فحص جاهزية التثبيت على ويندوز + التأكد أن الإصلاح وصل GitHub
+
+- [x] **تحقق الدفع (أزال لبساً حقيقياً):** `origin/main` المحلي كان قديماً فأظهر أن الإصلاح غير مدفوع؛
+      والقياس الصحيح عبر `git ls-remote --heads origin` أظهر أن المستودع البعيد على
+      **75f6420** = نفس `HEAD`. إذن Codemagic سيأخذ الإصلاح.
+- [x] **قياس جاهزية التثبيت على جهازك (بيانات فعلية لا افتراض):**
+      - Sideloadly مثبّت ويعمل (`sideloadly` + `sideloadlydaemon`).
+      - iTunes المثبّت هو **نسخة Microsoft Store** (12139.12003.62022.0).
+      - لا توجد خدمة `Apple Mobile Device Service` ولا مجلد
+        `Common Files\Apple\Mobile Device Support` (منظومة السائق الكلاسيكية غائبة).
+      - ويندوز يرى جهازاً باسم `Apple iPhone` بحالة **Unknown** (شاشة مقفلة/غير موثوق/سائق غير مربوط).
+- [x] **الأثر:** إن لم يظهر الآيفون داخل Sideloadly فالسبب مُ‑شخَّص مسبقاً — يُثبَّت
+      **iTunes الكلاسيكي x64** من apple.com (يجلب AMDS + `usbaapl64`).
+- [x] **توثيق:** الدليل — قسم جديد **§4.3.0** «فحص جاهزية ويندوز» بأوامر PowerShell للتحقق،
+      وتنبيه في §4.2 أن المرجع الموثوق للدفع هو `git ls-remote` لا `origin/main` المحلي،
+      وتحديث صفّي تشخيص `Sideloadly لا يرى الجهاز` و`NP_E_CONN_FAILED`.
+- [x] **التحقق:** `ios_audit` = ALL 17 CHECKS PASSED · `check_encoding` = RESULT: OK.
+      (ملاحظة: `todo.md` و`devloping_history.md` و`codemagic.yaml` و`tools/` و`.gitignore`
+      كانت قد دُفعت في 75f6420، ولم يبقَ غير تحديثات الدليل من هذه الجولة.)
+- [ ] **الخطوة التالية:** من Codemagic `Start new build → ios-unsigned` على `main` (المدفوع).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 02:23 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 02:35 — قياس جاهزية الشبكة والـAPI قبل التجربة على الآيفون
+
+- [x] **النتيجة الحاسمة:** الـAPI **متوقف** — لا شيء يستمع على المنفذ 8000 على هذا الجهاز،
+      و`http://127.0.0.1:8000/api/hello` يفشل، و`192.168.0.9:8000` (الافتراضي في التطبيق)
+      لا يستجيب (timeout). أي محاولة دخول من الآيفون الآن ستنتهي بفشل اتصال **لا علاقة له بالتطبيق**.
+- [x] **عناوين الجهاز المقيسة:** `192.168.0.11` (Ethernet) · `192.168.178.176` (Wi‑Fi) ·
+      `26.210.208.234` (Radmin VPN) — ولا واحدة منها هي `192.168.0.9` المكتوبة في `api_constants`.
+- [x] **نواقص بيئية مقيسة:** لا خدمة Laravel/PHP/NSSM (الموجود `bio-apache0` فقط)،
+      ولا قاعدة جدار حماية للمنفذ 8000.
+- [x] **سلامة حزم iOS:** فُحصت podspec الحزم الثماني — لا `static_framework` ولا مكتبات مضمّنة،
+      فـ`use_frameworks!` + `use_modular_headers!` في Podfile لا يتعارضان مع أي منها.
+- [x] **توثيق:** قسم جديد **§5.0.1** في الدليل بجدول القياسات، وأوامر تشغيل الـAPI وقاعدة
+      جدار الحماية، والعنوان الصحيح لكل شبكة (واي فاي/إيثرنت) مع قاعدة فصل التشخيص
+      (Safari أولاً ثم التطبيق).
+- [x] **التحقق:** `ios_audit` = ALL 17 CHECKS PASSED · `check_encoding` = RESULT: OK.
+- [ ] **قبل التجربة على الجهاز:** تشغيل الـAPI + قاعدة الجدار + التأكد من Safari على الآيفون.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 02:35 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## 2026-11-01 — قسم المخازن (8 وحدات) — التنفيذ الكامل
+
+**النطاق:** أوامر التوريد · أوامر الصرف · أوامر التحويل · المخازن والأمناء · الأصناف
+(رئيسية/فرعية) · الوحدات والمجموعات · تقارير المخازن · الجرد.
+**قرار المستخدم:** الكتابة في جداول النظام القديم مباشرة/ لا جدول جديد إطلاقاً/ الجرد بلا ترحيل.
+
+### قاعدة البيانات (13 تسلسلاً فقط — بلا أي جدول)
+
+- [x] `kyApp_API/database/oracle/09_stores_sequences.sql` — سكربت idempotent.
+- [x] تنفيذ حيّ: 13 تسلسلاً أُنشئت (`SEQ_STORES_RCV` 536 · `ISS` 302 · `TRNM` 265472 ·
+      `TRND` 2641710002 · `ITEM` 2184 · `ITEM_D` 101010001014 · `PSANF` 2188 · `STORE` 13 ·
+      `GROUP` 10 · `TYPE` 28 · `UNIT` 12 · `CAT` 19 · `KEEPER` 1).
+- [x] لا `CREATE TABLE` ولا `ALTER TABLE` (D13).
+
+### الخادم (`kyApp_API`)
+
+- [x] `app/Support/StorePolicy.php` — المخازن المستثناة 2/11/12، خرائط الأنواع، الترقيم، سقف التقرير.
+- [x] `app/Support/InventoryLineGuard.php` — تحقق السطور من `SANFS_D` + كفاية الرصيد من `AVVG`.
+- [x] `app/Support/PermissionCatalog.php` — 26 كوداً جديداً في وحدة `stores` (147 → 173).
+- [x] 8 متحكمات تحت `app/Http/Controllers/Stores/` (المخازن · المرجعيات · الأصناف ·
+      التوريد · الصرف · التحويل · التقارير · كشف الجرد).
+- [x] `routes/api.php` — 31 مساراً، كل مسار بصلاحيته، والمسارات الحرفية قبل `{kind}`.
+- [ ] **متبقٍ على الخادم:** تنفيذ `database/oracle/02_ibac_seed.php` لبذر الأكواد الـ26 في
+      `APP_PERMISSIONS` (idempotent) — لازم قبل أن يعمل الحجب على الخادم.
+
+### العميل (`lib/features/stores/`)
+
+- [x] 5 ملفات نماذج + 4 مستودعات + 5 مزودات + 10 شاشات + 2 ويدجت + مولّد تصدير واحد.
+- [x] `api_constants.dart` — مسارات القسم كاملة.
+- [x] `permission_codes.dart` — 26 ثابتاً + `allPermissionCodes` + `permActionLabels`.
+- [x] `portal_sections` — `stores_section.dart` صار يعيد `StoresDashboardScreen`.
+- [x] `home_shortcut_catalog.dart` — 10 بطاقات مخازن (9 افتراضية + «المخازن والأمناء»).
+- [x] تحديث `home_catalog_test` (25 افتراضية، `{'sales'}` وسمها) و`home_notifier_test` (26 نشِطة).
+
+### البوابات
+
+- [x] `flutter analyze` ⇒ **No issues found!**
+- [x] `flutter test` ⇒ **All tests passed** (471 اختباراً قبل اختبارات المخازن + 18 اختباراً جديداً).
+- [x] `php -l` على كل ملفات PHP الجديدة ⇒ بلا أخطاء نحوية.
+- [ ] `vendor/bin/pint --dirty` — لم يُشغَّل (يتطلب `vendor/` على جهاز الخادم).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** 13 `CREATE SEQUENCE` · **DML:** لا · **لا commit**.
+
+### تكملة — الاختبارات والبذر (2026-11-01)
+
+- [x] اختبارات Pest الأربعة: `StorePolicyTest` · `StoreOrderWriteTest` · `StoreReportTest` ·
+      `StorePermissionTest` ⇒ 20 اختباراً أخضر.
+- [x] اختبارات العميل: `store_models_test` · `report_filter_test` · `stock_sheet_test` ·
+      `order_line_editor_test` · `item_form_validation_test` ⇒ 33 اختباراً أخضر.
+- [x] تحديث `IbacCoreTest` و`TailoringTest` (147 → 173) و`home_catalog_test`/`home_notifier_test`.
+- [x] إصلاح تسلسل الكتالوج (`SEQ_APP_PERMISSIONS` كان 186 أمام `MAX=188`) ثم بذر
+      `02_ibac_seed.php`: 26 إدراجاً + 147 تحديثاً ⇒ `APP_PERMISSIONS` = 173.
+- [x] إصلاح 5 أعطال حقيقية كشفتها الاختبارات: `ORA-00935` في الأرصدة/الجرد ت (ترتيب بـMAX)
+      · `MANUAL_BILL_NO` غير موجود · فلتر نوع الحركة كان يرشّح نوع الصنف · `DISCOUNT_ACC`
+      بدل `DISCOUNT_ACC_NO` + تطبيع مفاتيح OCI8 · انفجار `RenderFlex` في محرر السطور.
+- [x] تحديث سجل `IbacCoreTest` للكتالوج الجديد.
+- [ ] `vendor/bin/pint --dirty` لم يُشغّل (غير مطلوب لإغلاق الوحدة).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** `ALTER SEQUENCE` واحد · **DML:** 26 إدراجاً · **لا commit**.
+
+### تكملة — إغلاق تسلسلات التطبيق وسجل التدقيق (2026-11-01)
+
+- [x] تشخيص جذر فشل `TailoringTest`/`CustomerMeasurementTest`: تسلسل `SEQ_APP_ACTIVITY`
+      متأخر 271 رقماً (840 مقابل 569) ⇒ `ActivityLogger` كان يبتلع `ORA-00001` ولا يكتب شيئاً.
+- [x] مسبار شامل على 6 أزواج (تسلسل ↔ جدول) — كشف أيضاً `SEQ_APP_USERS_PERM` (على الحد)
+      و`SEQ_APP_SETTINGS` (على الحد).
+- [x] إصلاح المتأخرات بنمط 11g (`INCREMENT BY gap` ← `NEXTVAL` ← `INCREMENT BY 1`):
+      `SEQ_APP_ACTIVITY` ⇒ 842 · `SEQ_APP_USERS_PERM` ⇒ 268 · `SEQ_APP_SETTINGS` ⇒ قفزة واحدة.
+- [x] حارس دائم: `kyApp_API/tests/Feature/SequenceIntegrityTest.php` (6 اختبارات dataset +
+      اختبار إدراج فعلي داخل معاملة تُتراجع).
+- [x] `StoreOrderWriteTest` صار يثبت أيضاً صف التدقيق `stores.receiving_created`.
+- [x] حذف سكافيتات مؤقتة من `.zwork/` (3 مسبارات PHP + 4 ملفات مخرجات).
+- [x] البوابات: `php artisan test` (المخازن + حارس التسلسلات) = 27/27 ·
+      `TailoringTest|CustomerMeasurementTest` = 20/20 · `flutter analyze` = No issues ·
+      `flutter test` = All tests passed.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** 3 تسلسلات · **DML:** لا · **لا جدول جديد** · **لا commit**.
+
+### تكملة — جرد الخطة بنداً بنداً وإغلاق ثلاث فجوات (2026-11-01)
+
+- [x] **§7.3 د** — التخطيط الرئيسي-التفصيلي: `ItemDetailScreen.embedded` + `ItemsListScreen._splitBody`
+      عند `splitBreakpoint = 900`، والجوال يبقى `Navigator.push`، واللوحة تُلغى في التحديد المتعدد.
+- [x] **§7.3 ب** — الإجراءات الجماعية: `invertSelection()` · `removeMany()` · `buildStoreOrderListPdf()`
+      + طباعة/تصدير/حذف من شريط التحديد، والحذف خلف تأكيد لأنه فيزيائي.
+- [x] **§7.3 أ + §12** — مؤشر «أصناف برصيد سالب»: `SUM(CASE WHEN SUM_TP < 0 ...)` في الخادم،
+      `StoreModel.negative` · `StoresState.negativeCount` · بطاقة خامسة في لوحة القسم.
+      التحقق الحي: 56 + 36 + 3 = **95** صفاً سالباً.
+- [x] اختبارات جديدة: `items_split_test.dart` (3) · `orders_bulk_test.dart` (4).
+- [x] **§9 بوابة Pint** — `vendor/bin/pint --dirty --format agent` شُغّل على 16 ملفاً، ثم أُعيد
+      تشغيل اختبارات المخازن: 27/27 أخضر.
+- [x] البوابات النهائية: `flutter analyze` = No issues · `flutter test` = **511 passed** ·
+      `php artisan test` (المخازن + حارس التسلسلات) = 27/27.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **لا جدول جديد** · **لا commit**.
+
+### تكملة — تفاصيل §7.3 (ح) الباقية من كشف الجرد (2026-11-01)
+
+- [x] **تصفية رباعية**: `StockCountFilter` = الكل · بفرق فقط · زيادة · نقص · غير معدَّد،
+      في صف شرائح أفقي، مع عدّاد «المعروض/الإجمالي» بجانب البحث.
+- [x] **ملاحظة السطر**: `StockSheetState.notes` + `setNote()` + حوار لكل سطر،
+      والملاحظة تعيش في الحالة فقط مثل الكمية الفعلية (لا تُرسل ولا تُحفظ).
+- [x] **الملاحظة في التصدير**: عمود في XLSX، وعمود في PDF يظهر فقط إن وُجدت ملاحظة.
+- [x] اختبارات: فلاتر الزيادة/النقص/غير المعدَّد/الكل + اختبار أن الملاحظة لا تُعدّ سطراً
+      ولا تحرّك الفرق ⇒ `flutter test test/features/stores/` = **44 اختباراً أخضر**.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **لا جدول جديد** · **لا commit**.
+
+### ملاحظة صدق — أعطال خارجة عن نطاق المخازن
+
+في التشغيل الكامل للخادم (`php artisan test`) ظهرت **3 اختبارات حمراء لا علاقة لها بالمخازن**:
+`AccountTreeExportTest` (اثنان) و`AccountTreeLazyTest` (واحد)، وكلها تفشل بـ
+«101 بدل 95» في عدد الحسابات الفرعية. السبب: عدّادات مثبّتة في الاختبار مقابل بيانات
+`ACCOUNTS` الحية التي زادت 6 حسابات فرعية أثناء التطوير. ملفات الاختبارين لم تُلمس في هذا العمل
+ولا يكتب قسم المخازن في جداول دليل الحسابات إطلاقاً. لم تُعدّل الأرقام المثبتة لأنها خارج
+نطاق المهمة وتعديلها يخفي تغيراً في الدليل المالي يحتاج مراجعة من صاحب النظام.
+
+نتيجة التشغيل الكامل: **213 نجحت · 3 فشلت · 1 تخطّي**.

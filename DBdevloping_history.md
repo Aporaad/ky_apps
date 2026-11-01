@@ -1715,3 +1715,158 @@ L8 الخصرة · L9 طول الجبزور · L10 طول الكبك · **L11 و
   يعيد `ohdid` مع كل قطعة ليكون مفتاح السجل في العميل.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 06:12 · **لا DDL** · **لا DML** (قراءة فقط).
+
+---
+
+## 2026-11-01 — مخطط قسم المخازن: ثلاثة عشر تسلسلاً وبلا جدول واحد
+
+**ملخص:** قسم المخازن لا يملك جدولاً خاصاً في هذا المخطط، والسبب مقصود: الأرصدة كلها
+مشتقة من الـ VIEWs، فإضافة جدول كانت ستخلق مصدر حقيقة ثانياً ينحرف عن الأول.
+
+### سلسلة الاشتقاق المحققة حياً
+
+```
+INVENTORY_RECEIVE(_DETAILES) ──┐
+INVENTORY_SARF(_DETAILES)    ──┤
+INVENTORY_TRANSM/_TRANSD      ──┤
+SALES_BILL / BUY_BILL         ──┼─► ITEM_MOVE_D (VIEW · UNION ALL)
+RETURN_SALES / RETURN_BUY     ──┤        └─► ITEM_MOVEMENT_D (VIEW · يستثني 2/11/12)
+GARD / GARD_DETAILES          ──┘                ├─► LAST_COST (VIEW)
+                                                   └─► AVVG (VIEW · رصيد صنف×مخزن)
+```
+
+### ما أُنشئ (DDL)
+
+13 `CREATE SEQUENCE` فقط — لا `CREATE TABLE` ولا `ALTER TABLE` ولا فهرس جديد:
+`SEQ_STORES_RCV`(536) · `SEQ_STORES_ISS`(302) · `SEQ_STORES_TRNM`(265472) ·
+`SEQ_STORES_TRND`(2641710002) · `SEQ_STORES_ITEM`(2184) · `SEQ_STORES_ITEM_D`(101010001014) ·
+`SEQ_STORES_PSANF`(2188) · `SEQ_STORES_STORE`(13) · `SEQ_STORES_GROUP`(10) ·
+`SEQ_STORES_TYPE`(28) · `SEQ_STORES_UNIT`(12) · `SEQ_STORES_CAT`(19) · `SEQ_STORES_KEEPER`(1).
+
+نقاط البداية = `MAX+1` المقاس على القاعدة الحيّة (INVENTORY_RECEIVE 535 · SARF 301 ·
+TR_INM 265,471 · TR_IN_D 2,641,710,001 · SANF 2,183 · SANF_DNO 1,010,100,010,013 ·
+PARTIAL_SANFS.SEQ_NO 2,187 · STORES 12 · GROUP1 9 · TYPES 27 · UNITS 11 · CATEGORY 18).
+
+### حقائق المخطط التي تحكم كتابة القسم
+
+1. **`AVVG` = 2,856 صفاً على 3 مخازن (1/3/4) وقيمتها 319,310,696** — وفيها 41 صفاً بكمية سالبة.
+2. **`ITEM_MOVEMENT_D` تستثني المخازن 2 · 11 · 12 نصاً**: `store_no NOT IN (11, 12, 2)`.
+   لذلك قسم المخازن يرفض إنشاء/تعديل مستند عليها (وإلا حُفظ الأمر بلا أثر في أي رصيد).
+3. **`FLAG_CANCEL` غير مقروء في أي فرع من الـ VIEW** ⇒ حذف المستند = حذف فيزيائي للصفوف.
+4. **فرع التحويل** يربط `INVENTORY_TRANSD.SIZE_FRM = SANFS_D.LEN` و`SIZE_TO = SANFS_D.WID`،
+   ولذلك كل سطر تحويل ينسخهما من الصنف الفرعي.
+5. **فرعا التوريد/الصرف** يربطان `SANF_DNO` بالصنف الفرعي؛ `INVENTORY_SARF_DETAILES.SANF_DNO`
+   إلزامي في المخطط نفسه.
+6. **المستند يحتاج `TYPENO` صحيحاً**: 12 توريد · 13 صرف · 4 تحويل وارد · 5 تحويل منصرف.
+7. **`GARD_TYPE = 6` يُدرج كحركة موجبة** في `ITEM_MOVE_D` ⇒ لا يُكتب فيه جرد جديد (يضاعف الرصيد).
+8. **`SANFS` يشترط `SANF_NAME` و`PART_NO` فريدين**، و`SANFS_D` يشترط `TYPE_NO` و`SANF_COCE`
+   و`SANF_DNAME` و`WID` و`LEN` و`STYL_NO`، و`INVENTORY_RECEIVE` يشترط `DETAILES` و`CUR_NO`
+   و`CUR_PRICE` و`SELECT1` و`SANF_NUMS` و`PROV_NAME`.
+9. **الربط بـ`STYLE` شرط ظهور**: `ITEM_MOVEMENT_D` تربط `sanfs.styl_no = style.shape_style_no`،
+   فصنف بلا نمط لا يظهر في أي حركة ولا رصيد وإن كان موجوداً في `SANFS`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** 13 تسلسلاً · **DML:** لا · **لا تعديل جداول**.
+
+---
+
+## 2026-11-01 — عطل تسلسل الكتالوج: `SEQ_APP_PERMISSIONS` متأخر عن `MAX(PERMISSION_ID)`
+
+**الحالة المقيسة على قاعدة التطبيق:** `COUNT(*) = 147`، `MAX(PERMISSION_ID) = 188`،
+بينما `SEQ_APP_PERMISSIONS.NEXTVAL = 186`.
+
+**الأثر:** كل إدراج جديد في `APP_PERMISSIONS` (أي كود صلاحية جديد لأي قسم) كان يرمي
+`ORA-00001` على `APP_PERM_PK`. الملاحظ أن `TRG_APP_PERMISSIONS` سليم ومفعّل، والمشكلة في
+قيمة التسلسل نفسها لا في المُشغّل.
+
+**الأصل المقدّر:** إعادة إنشاء/استيراد للكتالوج بمعرّفات صريحة (سكربتات `01` و`03` و`06`)
+دون مزامنة التسلسل مع أعلى معرّف.
+
+**الإصلاح (11g بلا `RESTART`):**
+
+```sql
+ALTER SEQUENCE SEQ_APP_PERMISSIONS INCREMENT BY 2;
+SELECT SEQ_APP_PERMISSIONS.NEXTVAL FROM DUAL;
+ALTER SEQUENCE SEQ_APP_PERMISSIONS INCREMENT BY 1;
+-- بعدها: NEXTVAL = 190 > MAX = 188
+```
+
+**النتيجة:** البذر نجح و`APP_PERMISSIONS` = 173 صفاً (31 لقسم المخازن).
+
+**درس قابل للتطبيق:** أي سكربت يزرع الكتالوج بمعرّفات صريحة يجب أن يُتبعه بمزامنة التسلسل،
+وإلا فُتح باب إضافة الصلاحيات مغلقاً بصمت حتى يكتشفه أول قسم جديد.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** تسلسل واحد · **DML:** 26 إدراجاً · **لا جدول جديد**.
+
+---
+
+## 2026-11-01 — تسلسل سجل النشاط كان متأخراً 271 رقماً: التدقيق كان ميتاً بصمت
+
+**كيف انكشف:** اختبارا `TailoringTest` و`CustomerMeasurementTest` يثبتان أن الطباعة/التصدير
+يتركان صف نشاط واحداً. بعد إصلاح تسلسل الكتالوج بدأا يفشلان، فقاد التحقيق إلى `ActivityLogger`.
+
+**الحالة المقيسة على قاعدة التطبيق:**
+
+```sql
+SELECT COUNT(*) AS C, MAX(ACTIVITY_ID) AS M FROM ACCOUNTS.APP_USER_ACTIVITY;  -- M = 840
+SELECT SEQ_APP_ACTIVITY.NEXTVAL AS N FROM DUAL;                              -- N = 569
+```
+
+**الأثر (الأخطر في هذا العطل):** `ActivityLogger` يلفّ الإدراج في `try/catch` كي لا يُسقط الطلب
+الأصلي، فـ`ORA-00001` على `APP_USER_ACTIVITY_PK` كان **يُبتلع بلا أي تسجيل**. النتيجة أن سجل
+التدقيق كله لم يكتب صفاً منذ أن تجاوز `MAX(ACTIVITY_ID)` قيمة التسلسل، وشاشات «سجل النشاط»
+في الإدارة كانت تعرض صفوفاً قديمة فقط — أي **تدقيق معطّل يبدو سليماً**.
+
+**مسبار شامل** لستة أزواج (تسلسل ↔ جدول) كشف ثلاثة متأخرة إضافة إلى الكتالوج:
+
+| التسلسل | الجدول | MAX(id) | NEXTVAL | الحالة |
+|---|---|---|---|---|
+| `SEQ_APP_ACTIVITY` | `APP_USER_ACTIVITY` | 840 | 569 | متأخر 271 ⇒ أُصلح |
+| `SEQ_APP_USERS_PERM` | `APP_USERS_PERMISSIONS` | 233 | 232 | على الحد ⇒ أُصلح |
+| `SEQ_APP_SETTINGS` | `APP_SETTINGS` | 25 | 25 | على الحد ⇒ أُصلح |
+| `SEQ_APP_USERS_ID` | `APP_USERS` | 107 | 108 | سليم |
+| `SEQ_APP_SUPPORT_TICKETS` | `APP_SUPPORT_TICKETS` | — | — | سليم |
+| `SEQ_APP_PERMISSIONS` | `APP_PERMISSIONS` | 188 | 190 | سليم (بعد الإصلاح السابق) |
+
+> `NEXTVAL` **يتقدم** عند كل قراءة، فالمسبار ليس للقراءة فقط؛ اعتُمدت أول قراءة كمرجع.
+
+**الإصلاح (نمط 11g بلا `RESTART`):** `ALTER SEQUENCE … INCREMENT BY (MAX-NEXT+1)` ثم استدعاء
+`NEXTVAL` واحد ثم `INCREMENT BY 1`. النتيجة: `SEQ_APP_ACTIVITY.NEXTVAL = 842`،
+`SEQ_APP_USERS_PERM = 268`، وأُكّد الإدراج فعلياً.
+
+**حارس دائم:** `kyApp_API/tests/Feature/SequenceIntegrityTest.php` — اختبار لكل تسلسل
+(`NEXTVAL > MAX(id)`) + اختبار إدراج حقيقي في `APP_USER_ACTIVITY` داخل معاملة تُتراجَع.
+
+**درس قابل للتطبيق:** أي طبقة تدقيق "تُسقط" أخطاء الإدراج كي لا تُسقط الطلب الأصلي يجب أن تُبقى
+صحيتها مُثبتة باختبار إدراج فعلي، وإلا فإنها تفشل بصمت تام وتظل تبدو عاملة.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** 3 تسلسلات · **DML:** لا · **لا جدول جديد**.
+
+---
+
+## 2026-11-01 — قياس الأرصدة السالبة: 95 صفاً لا 41
+
+**الاستعلام:** تجميع على `ACCOUNTS.AVVG` بعدد صفوف سالبة لكل مخزن
+(`SUM(CASE WHEN SUM_TP < 0 THEN 1 ELSE 0 END)`).
+
+```
+store 1:  items=572  value=-154,023,387.00  negative=56
+store 2:  items=0    value=0.00             negative=0
+store 3:  items=106  value=61,980,084.00    negative=36
+store 4:  items=36   value=23,985,200.00    negative=3
+store 11: items=0    value=0.00             negative=0
+store 12: items=0    value=0.00             negative=0
+الإجمالي: 95 صفاً سالباً
+```
+
+**تصحيح لحقيقة سابقة:** كان مُسجَّلاً سابقاً أن الأرصدة السالبة «41 صفاً» وهو تجميع على
+تجميع مختلف. القياس على مستوى صنف×مخزن يعطي **95**، وهو ما تعتمده الواجهة.
+
+**دخولها الخادم:** `StoreController::index` صار يرجع `NEGATIVE` لكل مخزن، و`StoreModel.negative`
+يقرأها، و`StoresState.negativeCount` يجمعها على المخازن غير الأرشيفية، ولوحة القسم تعرضها
+كمؤشر إنذار (أحمر عند وجود سالب).
+
+**ملاحظة مهمة:** المخزن 1 قيمته **سالبة** (‎-154,023,387) — أي أن رصيد مخزنه الكلي بالسالب
+حسب `AVVG`، وهذا يعكس كمية سالبة أكثر من القيمة. لا خطأ في الاستعلام: المخازن 2/11/12
+صفر لأن `ITEM_MOVEMENT_D` تستثنيها أصلاً.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **قراءة فقط**.

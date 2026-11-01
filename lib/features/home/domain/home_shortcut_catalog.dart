@@ -29,6 +29,14 @@ import '../../services/presentation/screens/messaging/whatsapp_log_screen.dart';
 import '../../services/presentation/screens/providers/providers_list_screen.dart';
 import '../../my_statement/presentation/screens/my_financial_statement_screen.dart';
 import '../../my_statement/presentation/screens/my_work_statement_screen.dart';
+import '../../stores/data/models/order_model.dart';
+import '../../stores/presentation/screens/catalogs_screen.dart';
+import '../../stores/presentation/screens/items_list_screen.dart';
+import '../../stores/presentation/screens/orders_list_screen.dart';
+import '../../stores/presentation/screens/stock_balances_screen.dart';
+import '../../stores/presentation/screens/stock_sheet_screen.dart';
+import '../../stores/presentation/screens/store_reports_screen.dart';
+import '../../stores/presentation/screens/stores_list_screen.dart';
 import '../presentation/screens/home_customize_screen.dart';
 import 'home_shortcut.dart';
 import 'home_shortcut_flows.dart';
@@ -333,6 +341,10 @@ const List<HomeShortcut> homeShortcutCatalog = [
   ),
 
   // ── المخازن / stores ─────────────────────────────────────
+  // ثمانية اختصارات + بطاقة القسم: كل واحدة محجوبة بكودها الحقيقي، فمن يملك منح قسم
+  // المخازن كاملاً يجدها كلها، ومن يملك رؤية الأرصدة وحده لا يرى أزرار الإنشاء.
+  // Eight operations plus the section card; each carries its real grant, so a user with
+  // balance-only access never sees a create button.
   HomeShortcut(
     id: 'stores.section',
     title: 'المخازن',
@@ -340,7 +352,87 @@ const List<HomeShortcut> homeShortcutCatalog = [
     sectionId: 'stores',
     target: SectionTarget('stores'),
     codes: [Perm.storesView],
-    underDevelopment: true,
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.receiving',
+    title: 'أوامر التوريد',
+    icon: Icons.call_received_rounded,
+    sectionId: 'stores',
+    target: ScreenTarget(_buildStoreReceive),
+    codes: [Perm.storesReceivingView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.issuing',
+    title: 'أوامر الصرف',
+    icon: Icons.call_made_rounded,
+    sectionId: 'stores',
+    target: ScreenTarget(_buildStoreIssue),
+    codes: [Perm.storesIssuingView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.transfer',
+    title: 'أوامر التحويل',
+    icon: Icons.swap_horiz_rounded,
+    sectionId: 'stores',
+    target: ScreenTarget(_buildStoreTransfer),
+    codes: [Perm.storesTransferView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.items',
+    title: 'الأصناف',
+    icon: Icons.category_outlined,
+    sectionId: 'stores',
+    target: ScreenTarget(ItemsListScreen.new),
+    codes: [Perm.storesItemsView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.catalogs',
+    title: 'الوحدات والمجموعات',
+    icon: Icons.account_tree_outlined,
+    sectionId: 'stores',
+    target: ScreenTarget(CatalogsScreen.new),
+    codes: [Perm.storesCatalogsView, Perm.storesCatalogsManage],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.balances',
+    title: 'أرصدة المخازن',
+    icon: Icons.inventory_rounded,
+    sectionId: 'stores',
+    target: ScreenTarget(StockBalancesScreen.new),
+    codes: [Perm.storesReportsView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.reports',
+    title: 'تقارير المخازن',
+    icon: Icons.bar_chart_rounded,
+    sectionId: 'stores',
+    target: ScreenTarget(StoreReportsScreen.new),
+    codes: [Perm.storesReportsView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.stocktake',
+    title: 'كشف الجرد',
+    icon: Icons.fact_check_outlined,
+    sectionId: 'stores',
+    target: ScreenTarget(StockSheetScreen.new),
+    codes: [Perm.storesStocktakeView],
+    defaultOn: true,
+  ),
+  HomeShortcut(
+    id: 'stores.warehouses',
+    title: 'المخازن والأمناء',
+    icon: Icons.warehouse_outlined,
+    sectionId: 'stores',
+    target: ScreenTarget(StoresListScreen.new),
+    codes: [Perm.storesView],
   ),
 
   // ── الإدارة / management ─────────────────────────────────
@@ -555,3 +647,17 @@ List<HomeShortcut> allowedHomeShortcuts({
         shortcut,
   ];
 }
+
+// ── بنّاءات أوامر المخازن الثلاثة ─────────────────────────────
+// الشاشة واحدة وتأخذ النوع معاملاً، و`ScreenTarget` يطلب مرجع دالة بلا معاملات
+// والحفاظ على `const` للكتالوج. هذه المراجع الثلاثة هي الجسر الوحيد.
+// The screen is one widget taking the kind as a parameter while ScreenTarget requires a
+// zero-argument function reference (and the catalog must stay const). These three
+// references are the only bridge.
+Widget _buildStoreReceive() =>
+    const OrdersListScreen(kind: StoreOrderKind.receive);
+
+Widget _buildStoreIssue() => const OrdersListScreen(kind: StoreOrderKind.issue);
+
+Widget _buildStoreTransfer() =>
+    const OrdersListScreen(kind: StoreOrderKind.transfer);

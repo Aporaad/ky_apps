@@ -81,6 +81,48 @@ class ApiConstants {
     int seqNo,
   ) => '${measurementModel(custNo, billNo, year, seqNo)}/activity';
 
+  // ── المخازن / stores ─────────────────────────────────────
+  // كل نوع مستند له مساره الحرفي (receive/issue/transfer) لأن ترقيم المسارات في الخادم
+  // يعتمد على المسارات الحرفية أولاً ثم مسارات {kind} المحصورة.
+  // Every document kind has its literal path (receive/issue/transfer): the server registers
+  // literal paths before the constrained {kind} routes.
+  static const String stores = '/stores';
+  static const String storeKeepers = '/stores/keepers';
+  static const String storeReference = '/stores/reference';
+  static const String storeItems = '/stores/items';
+  static const String storeBalances = '/stores/balances';
+  static const String storeReportMovement = '/stores/reports/movement';
+  static const String storeReportSummary = '/stores/reports/summary';
+  static const String storeReportExportLog = '/stores/reports/export-log';
+  static const String storeStockSheet = '/stores/stock-sheet';
+  static const String storeStockSheetLog = '/stores/stock-sheet/log';
+
+  /// مسار نوع مستند: `receive` · `issue` · `transfer`
+  /// The path of one document kind.
+  static String storeOrders(String kind) => '/stores/$kind';
+
+  /// أمر واحد برقمه / one order by its bill number.
+  static String storeOrder(String kind, int billNo) =>
+      '/stores/$kind/$billNo';
+
+  /// مرجعية واحدة: `groups` · `types` · `categories` · `units`
+  /// One catalog kind.
+  static String storeCatalog(String kind) => '/stores/catalogs/$kind';
+
+  /// صنف واحد / one item.
+  static String storeItem(int sanfNo) => '/stores/items/$sanfNo';
+
+  /// أصناف الصنف الفرعية / the sub items of one item.
+  static String storeItemSubs(int sanfNo) => '/stores/items/$sanfNo/sub';
+
+  /// وحدات الصنف وأسعاره / the units and prices of one item.
+  static String storeItemUnits(int sanfNo) => '/stores/items/$sanfNo/units';
+
+  /// كارت الصنف / the item movement card.
+  static String storeItemMovements(int sanfNo) =>
+      '/stores/items/$sanfNo/movements';
+
+  // المهلات / timeouts
   static const Duration connectTimeout = Duration(seconds: 15);
   static const Duration receiveTimeout = Duration(seconds: 15);
   static const Duration testTimeout = Duration(seconds: 7);

@@ -2512,3 +2512,245 @@ SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
 `localhost:1521/ORCLRD`)، فلم يُنفَّذ الاستعلام حياً هنا؛ يعمل تلقائياً عند عودة الخدمة.
 
 **النموذج:** Qoder · **الوقت:** 2026-10-31 09:38 · **DDL:** لا · **DML:** لا.
+
+---
+
+## 2026-11-01 — قسم المخازن: قراءة المخطط ثم إنشاء تسلسلات الترقيم
+
+### أ) استعلامات القراءة (ORACLE MCP · قراءة فقط)
+
+```sql
+-- هل توجد تسلسلات مخازن سابقة؟
+SELECT COUNT(*) AS C FROM USER_SEQUENCES
+ WHERE SEQUENCE_NAME LIKE 'SEQ\_STORES%' ESCAPE '\';   -- النتيجة: 0
+```
+
+```sql
+-- تعريف الحركة الذي بُنيت عليه السياسة
+SELECT DBMS_METADATA.GET_DDL('VIEW','ITEM_MOVE_D','ACCOUNTS') FROM DUAL;
+SELECT DBMS_METADATA.GET_DDL('VIEW','ITEM_MOVEMENT_D','ACCOUNTS') FROM DUAL;
+SELECT TEXT FROM ALL_VIEWS WHERE OWNER='ACCOUNTS' AND VIEW_NAME='LAST_COST';
+SELECT TEXT FROM ALL_VIEWS WHERE OWNER='ACCOUNTS' AND VIEW_NAME='AVVG';
+
+-- الأرصدة الحالية: 2,856 صفاً · 3 مخازن (1/3/4) · قيمة 319,310,696 · 41 صفاً سالباً
+SELECT COUNT(*) TOTAL, SUM(CASE WHEN SUM_TP>0 THEN 1 ELSE 0 END) POS,
+       SUM(CASE WHEN SUM_TP<0 THEN 1 ELSE 0 END) NEG, ROUND(SUM(SUM_PRICE),0) VAL
+  FROM ACCOUNTS.AVVG;
+
+-- أعلى الأرقام لكل مفتاح (نقطة بداية التسلسلات)
+SELECT (SELECT NVL(MAX(BILL_NO),0) FROM ACCOUNTS.INVENTORY_RECEIVE) MAX_RCV,
+       (SELECT NVL(MAX(BILL_NO),0) FROM ACCOUNTS.INVENTORY_SARF)    MAX_SARF,
+       (SELECT NVL(MAX(TR_INV_M_ID),0) FROM ACCOUNTS.INVENTORY_TRANSM) MAX_TRM,
+       (SELECT NVL(MAX(TR_INV_D_ID),0) FROM ACCOUNTS.INVENTORY_TRANSD) MAX_TRD,
+       (SELECT NVL(MAX(SANF_NO),0) FROM ACCOUNTS.SANFS) MAX_SANF,
+       (SELECT NVL(MAX(SANF_DNO),0) FROM ACCOUNTS.SANFS_D) MAX_SANFD,
+       (SELECT NVL(MAX(SEQ_NO),0) FROM ACCOUNTS.PARTIAL_SANFS) MAX_PSQ,
+       (SELECT NVL(MAX(SEQ),0) FROM ACCOUNTS.CATEGORY) MAX_CATSEQ
+  FROM DUAL;
+
+-- قيود NOT NULL / PK / UQ / FK على جداول القسم (بُنيت عليها أعمدة الإدراج)
+SELECT table_name, constraint_name, constraint_type, search_condition
+  FROM ALL_CONSTRAINTS WHERE OWNER='ACCOUNTS'
+   AND TABLE_NAME IN ('INVENTORY_RECEIVE','INVENTORY_RECEIVE_DETAILES',
+                      'INVENTORY_SARF','INVENTORY_SARF_DETAILES',
+                      'INVENTORY_TRANSM','INVENTORY_TRANSD',
+                      'SANFS','SANFS_D','PARTIAL_SANFS','STORES','STORE_EMP',
+                      'GROUP1','TYPES','CATEGORY','UNITS');
+```
+
+### ب) DDL المنفَّذ (13 تسلسلاً)
+
+```sql
+BEGIN
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_RCV      START WITH 536          INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_ISS      START WITH 302          INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_TRNM     START WITH 265472       INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_TRND     START WITH 2641710002   INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_ITEM     START WITH 2184         INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_ITEM_D   START WITH 101010001014 INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_PSANF    START WITH 2188         INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_STORE    START WITH 13           INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_GROUP    START WITH 10           INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_TYPE     START WITH 28           INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_UNIT     START WITH 12           INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_CAT      START WITH 19           INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+  EXECUTE IMMEDIATE 'CREATE SEQUENCE SEQ_STORES_KEEPER   START WITH 1            INCREMENT BY 1 MINVALUE 1 NOMAXVALUE NOCACHE NOCYCLE';
+END;
+```
+
+**التحقق (بعد التنفيذ):** 13 تسلسلاً موجودة، و`LAST_NUMBER` لكل منها = نقطة البداية أعلاه.
+
+### ج) ما لم يُنفَّذ عمداً
+
+- **لا `CREATE TABLE`** — قرار المستخدم (D13): الجرد كشف حي بلا حفظ.
+- **لا كتابة في `GARD`/`GARD_DETAILES`** — `GARD_TYPE=6` يُدرج كحركة موجبة في `ITEM_MOVE_D`
+  فيُضاعف الرصيد لو تكرر.
+- **لا `02_ibac_seed.php`** في هذه الجولة (يتطلب تشغيله على جهاز الخادم بـ`artisan`/PHP
+  مع اتصال أوراكل) — مطلوب قبل أن يعمل حجب الأكواد الـ26 على الخادم.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** 13 `CREATE SEQUENCE` · **DML:** لا.
+
+---
+
+## 2026-11-01 — إصلاح تسلسل كتالوج الصلاحيات ثم بذر 26 كوداً
+
+### أ) العطل المقيس (قراءة فقط)
+
+```sql
+-- على قاعدة التطبيق (localhost:1521/orcl):
+SELECT COUNT(*) AS C, MAX(PERMISSION_ID) AS M FROM ACCOUNTS.APP_PERMISSIONS;
+-- النتيجة: C = 147 · M = 188
+
+SELECT SEQ_APP_PERMISSIONS.NEXTVAL AS N FROM DUAL;
+-- النتيجة: 186   ← متأخر عن 186/187/188 المستخدمة فعلاً
+```
+
+**الأثر:** كل إدراج جديد في الكتالوج كان يصطدم بـ`ORA-00001: unique constraint
+(ACCOUNTS.APP_PERM_PK) violated` — أي أن إنشاء أي صلاحية جديدة لأي قسم في النظام كان مستحيلاً،
+وليس المخازن وحده. (اكتُشف أثناء بذر أكواد المخازن الـ26.)
+
+### ب) DDL الإصلاح (نمط Oracle 11g بلا RESTART)
+
+```sql
+ALTER SEQUENCE SEQ_APP_PERMISSIONS INCREMENT BY 2;
+SELECT SEQ_APP_PERMISSIONS.NEXTVAL FROM DUAL;   -- قفزة فوق max(id)
+ALTER SEQUENCE SEQ_APP_PERMISSIONS INCREMENT BY 1;
+-- التحقق: NEXTVAL = 190 مقابل MAX(PERMISSION_ID) = 188
+```
+
+### ج) البذر (DML · `02_ibac_seed.php` — idempotent)
+
+```
+PERMISSIONS  catalog=173 inserted=26 updated=147 total=173
+SETTINGS     seeded=23  inserted=0  updated=23  total=25
+```
+
+التحقق بعد البذر: `APP_PERMISSIONS` = 173 صفاً، و`MODULE_CODE='stores'` = **31** صفاً
+(1 منح شامل + 4 أساسية + 26 إضافة).
+
+### د) صفوف مسبار حُذفت
+
+```sql
+-- عبر موصل oracledb (قاعدة التطوير البعيدة) — اختبار الاستجابة للمفتاح الرئيسي
+INSERT INTO ACCOUNTS.APP_PERMISSIONS (...) VALUES (SEQ_APP_PERMISSIONS.NEXTVAL, 'zz_probe', ...);
+DELETE FROM ACCOUNTS.APP_PERMISSIONS WHERE PERMISSION_CODE = 'zz_probe';
+```
+
+لا يبقى أي صف مسبار في الجدول.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** `ALTER SEQUENCE ×2` · **DML:** 26 إدراجاً + 147 تحديثاً في الكتالوج.
+
+---
+
+## 2026-11-01 — إصلاح تسلسلات التطبيق المتأخرة عن بياناتها (سجل النشاط كان ميتاً بصمت)
+
+### أ) كيف اكتُشف
+
+اختباران قائمان (`TailoringTest` و`CustomerMeasurementTest`) يتحققان من أن الطباعة والتصدير
+"يتركان صف نشاط واحداً" بدأا يفشلان بعد إصلاح تسلسل الكتالوج، فقاد التحقيق إلى دالة
+`ActivityLogger` نفسها.
+
+### ب) العطل المقيس (قراءة فقط)
+
+```sql
+SELECT COUNT(*) AS C, MAX(ACTIVITY_ID) AS M FROM ACCOUNTS.APP_USER_ACTIVITY;
+-- النتيجة: M = 840
+
+SELECT SEQ_APP_ACTIVITY.NEXTVAL AS N FROM DUAL;
+-- النتيجة: 569   ← متأخر بـ271 رقماً عن أعلى معرّف موجود
+```
+
+**الأثر — وهو الأخطر في هذا العطل:** `ActivityLogger` يلفّ الإدراج في `try/catch` كي لا يُسقط
+الطلب الأصلي، فـ`ORA-00001` كان **يُبتلع بصمت**. النتيجة: سجل التدقيق كله لم يكتب صفاً واحداً
+منذ أن تجاوز `MAX(ACTIVITY_ID)` التسلسل، بينما كل شاشة "سجل النشاط" في الإدارة تبدو سليمة
+وتعرض صفوفاً قديمة فقط. أي أن **كل تدقيق المشروع كان معطلاً دون أي إشارة خطأ**.
+
+### ج) مسبار شامل لكل تسلسلات التطبيق
+
+فحص ستة أزواج (تسلسل ↔ جدول) كشف أربعة متأخرة:
+
+| التسلسل | الجدول | MAX(id) | NEXTVAL أول قراءة | الحالة |
+|---|---|---|---|---|
+| `SEQ_APP_ACTIVITY` | `APP_USER_ACTIVITY` | 840 | 569 | **متأخر 271 ← أُصلح** |
+| `SEQ_APP_USERS_PERM` | `APP_USERS_PERMISSIONS` | 233 | 232 | **على الحد ← أُصلح** |
+| `SEQ_APP_SETTINGS` | `APP_SETTINGS` | 25 | 25 | **على الحد ← أُصلح** |
+| `SEQ_APP_USERS_ID` | `APP_USERS` | 107 | 108 | سليم |
+| `SEQ_APP_SUPPORT_TICKETS` | `APP_SUPPORT_TICKETS` | — | — | سليم |
+| `SEQ_APP_PERMISSIONS` | `APP_PERMISSIONS` | 188 | 190 | سليم (بعد إصلاح أعلاه) |
+
+> **ملاحظة مهمة عن القياس:** كل استدعاء لـ`NEXTVAL` **يتقدم** التسلسل، فالمسبار نفسه ليس
+> للقراءة فقط. لذلك اعتُمدت أول قراءة فقط كمرجع، وكل ما كان `NEXTVAL` فيه أصغر من الحد
+> الأدنى المطلوب (`MAX(id) + 1`) يُعتبر متأخراً ويُصلح قبل أي إدراج حقيقي.
+
+### د) DDL الإصلاح (نمط Oracle 11g بلا RESTART — نفسه المستخدم مع الكتالوج)
+
+```sql
+-- لكل تسلسل متأخر، بفارق = MAX(id) - NEXTVAL + 1
+ALTER SEQUENCE SEQ_APP_ACTIVITY     INCREMENT BY 269;
+SELECT SEQ_APP_ACTIVITY.NEXTVAL FROM DUAL;        -- قفزة فوق max(id)
+ALTER SEQUENCE SEQ_APP_ACTIVITY     INCREMENT BY 1;
+
+ALTER SEQUENCE SEQ_APP_USERS_PERM   INCREMENT BY 2;
+SELECT SEQ_APP_USERS_PERM.NEXTVAL FROM DUAL;
+ALTER SEQUENCE SEQ_APP_USERS_PERM   INCREMENT BY 1;
+
+ALTER SEQUENCE SEQ_APP_SETTINGS     INCREMENT BY 1;   -- قفزة واحدة فوق max(id)
+SELECT SEQ_APP_SETTINGS.NEXTVAL FROM DUAL;
+ALTER SEQUENCE SEQ_APP_SETTINGS     INCREMENT BY 1;
+```
+
+**التحقق بعد الإصلاح:** `SEQ_APP_ACTIVITY.NEXTVAL = 842` مقابل `MAX = 840`،
+و`SEQ_APP_USERS_PERM.NEXTVAL = 268`، وأُكد الإدراج فعلياً (`insert: OK`) وأنشاء
+`SequenceIntegrityTest` جميع اختباراته.
+
+### هـ) حارس دائم بدل الذاكرة
+
+أُضيف `kyApp_API/tests/Feature/SequenceIntegrityTest.php`:
+
+- اختبار مُعامَل (dataset) لكل تسلسل من الستة: `NEXTVAL > MAX(id)`.
+- اختبار إدراج فعلي في `APP_USER_ACTIVITY` داخل `beginTransaction`/`rollBack` يثبت أن السجل
+  يقبل الكتابة، ثم يعيد العدّ إلى ما كان (لا أثر يُترك).
+
+بهذا لا يمكن أن يتكرر العطل نفسه صامتاً: أي تسلسل يتخلف سيُسقط الاختبار قبل النشر.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** `ALTER SEQUENCE ×3 أزواج` · **DML:** لا (اختبار الإدراج داخل معاملة مُتراجَعة).
+
+---
+
+## 2026-11-01 — قياس عدد الأرصدة السالبة لكل مخزن (قراءة فقط، تمهيداً لمؤشر الشاشة)
+
+### أ) الاستعلام المُنفَّذ
+
+```sql
+SELECT s.STORE_NO, s.STORE_NAME,
+       NVL(st.ITEMS, 0) AS ITEMS, NVL(st.VALUE, 0) AS VALUE,
+       NVL(st.NEGATIVE, 0) AS NEGATIVE
+  FROM ACCOUNTS.STORES s
+  LEFT JOIN (
+        SELECT INV_ID, COUNT(DISTINCT I_CODE) AS ITEMS,
+               SUM(SUM_PRICE) AS VALUE,
+               SUM(CASE WHEN SUM_TP < 0 THEN 1 ELSE 0 END) AS NEGATIVE
+          FROM ACCOUNTS.AVVG
+         GROUP BY INV_ID
+  ) st ON st.INV_ID = s.STORE_NO
+ ORDER BY s.STORE_NO;
+```
+
+### ب) النتيجة
+
+```
+store 1:  items=572  value=-154,023,387.00  negative=56
+store 2:  items=0    value=0.00             negative=0
+store 3:  items=106  value=61,980,084.00    negative=36
+store 4:  items=36   value=23,985,200.00    negative=3
+store 11: items=0    value=0.00             negative=0
+store 12: items=0    value=0.00             negative=0
+negative rows across all stores: 95
+```
+
+**الدلالة:** المخازن 2/11/12 تخرج صفراً كما يتوقع استثناء `ITEM_MOVEMENT_D`، والمخازن الحيّة
+تحمل **95** صفاً سالباً — أي أكثر مما كان معروفاً سابقاً (41). هذا ما يجعل مؤشر «أصناف برصيد
+سالب» في لوحة القسم رقماً حقيقياً لا زينة، وقد دخل في `StoreController::index`
+كـ`SUM(CASE WHEN SUM_TP < 0 THEN 1 ELSE 0 END) AS NEGATIVE`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
