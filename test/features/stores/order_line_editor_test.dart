@@ -54,10 +54,54 @@ void main() {
 
     await tester.pumpWidget(host([draft]));
 
-    // 5 × 100 = 500.00 كما يعرضه تنسيق المبالغ
-    // 5 × 100 = 500.00 in the app's money format.
-    expect(find.text('500.00'), findsOneWidget);
+    // 5 × 100 = 500.00 كما يعرضه تنسيق المبالغ — الخانة صارت «الإجمالي / قطعة» فالحذف
+    // المتوقع نصّ مركّب لا «500.00» وحده.
+    // 5 × 100 = 500.00 in the app's money format. The cell is now "total / pieces", so the
+    // expected text is a compound string, not a bare "500.00".
+    expect(find.textContaining('500.00'), findsOneWidget);
     expect(find.text('الكمية أكبر من المتاح (3)'), findsNothing);
+  });
+
+  testWidgets('pieces are derived from the pack size, not typed', (tester) async {
+    // عبوة 12 × كمية 5 = 60 قطعة — وهي خانتا «عبوة/قطعة» في المستند المطبوع
+    // Pack 12 × quantity 5 = 60 pieces — the two printed pack/pieces boxes.
+    final draft = OrderLineDraft(
+      item: item(),
+      sub: sub(),
+      qty: 5,
+      price: 100,
+      cap: 12,
+    );
+
+    await tester.pumpWidget(host([draft]));
+
+    expect(draft.pcs, 60);
+    expect(find.textContaining('60'), findsWidgets);
+  });
+
+  testWidgets('a zero pack size is refused rather than silently dividing', (
+    tester,
+  ) async {
+    final draft = OrderLineDraft(
+      item: item(),
+      sub: sub(),
+      qty: 5,
+      price: 100,
+      cap: 4,
+    );
+    var latest = <OrderLineDraft>[];
+
+    await tester.pumpWidget(host([draft], onChange: (lines) => latest = lines));
+
+    // ثالث حقل رقمي في السطر هو العبوة (الكمية · السعر · عبوة)
+    // The third numeric field on the line is the pack (qty · price · pack).
+    await tester.enterText(find.byType(TextFormField).at(2), '0');
+    await tester.pump();
+
+    // صفرعبوة يعني قطعة = صفر، أي مستند يفقد كمته عند الطبع — تُرجع 1 بدل القبول
+    // A zero pack would make pieces zero and the document would lose its quantity on print.
+    expect(latest, isNotEmpty);
+    expect(latest.first.cap, 1);
   });
 
   testWidgets('a line over the available quantity is flagged before saving', (tester) async {

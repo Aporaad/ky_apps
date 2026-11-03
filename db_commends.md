@@ -2754,3 +2754,165 @@ negative rows across all stores: 95
 كـ`SUM(CASE WHEN SUM_TP < 0 THEN 1 ELSE 0 END) AS NEGATIVE`.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-02 — اكتشاف مهم: موصل oracledb وقاعدة التطبيق خدمتان مختلفتان
+
+### أ) الدليل القاطع
+
+نفس الاستعلام أعطى نتيجتين مختلفتين على الطرفين لفاتورة 535:
+
+```sql
+-- عبر موصل oracledb (خدمة orcl):
+SELECT (SELECT COUNT(*) FROM ACCOUNTS.INVENTORY_RECEIVE_DETAILES WHERE BILL_NO=535 AND YEAR=2026) AS LINES_535,
+       (SELECT MAX(BILL_NO) FROM ACCOUNTS.INVENTORY_RECEIVE) AS MAX_BILL,
+       (SELECT COUNT(*) FROM ACCOUNTS.INVENTORY_RECEIVE) AS RCV_TOTAL FROM DUAL;
+-- النتيجة: 18 · 536 · 993
+
+-- عبر اتصال التطبيق نفسه (خدمة orcl3):
+-- النتيجة: 36 · 535 · 993
+```
+
+**القطع:** قاعدة التطبيق هي `orcl3` (36 سطراً)، وهي التي يطابقها ملف PDF الذي أعطانا إياه المستخدم
+(36 سطراً والإجمالي 606,200). إذن كل قياس سابق حُسب على الموصل كان على قاعدة أخرى.
+
+### ب) أثر ذلك على تسلسلات المخازن — عطلان حقيقيان
+
+نقاط بداية التسلسلات حُسبت من الموصل، فطلع في قاعدة التطبيق تسلسلان متأخران:
+
+| التسلسل | الجدول | MAX(id) في orcl3 | LAST_NUMBER | الحالة |
+|---|---|---|---|---|
+| `SEQ_STORES_TYPE` | `ACCOUNTS.TYPES` | **801** | 28 | متأخر 773 ⇒ أُصلح |
+| `SEQ_STORES_UNIT` | `ACCOUNTS.UNITS` | **12** | 12 | على الحد ⇒ أُصلح |
+
+(ال عشرة الباقية سليمة في `orcl3`: RCV 535/547 · ISS 301/302 · TRNM 265471/265472 ·
+TRND 2641710001/2641710002 · ITEM 2183/2184 · ITEM_D 101010001013/…1014 · PSANF 2187/2188 ·
+STORE 12/13 · GROUP 9/10 · CAT 18/19.)
+
+**الأثر لو تُركا:** أول إنشاء مجموعة فرعية أو وحدة جديدة من شاشة المرجعيات كان سيرمي
+`ORA-00001` على مفتاح `TYPES` / `UNITS` — عطل في مسار كتابة، لا في عرض.
+
+### ج) DDL الإصلاح (نفس نمط 11g بلا RESTART)
+
+```sql
+ALTER SEQUENCE ACCOUNTS.SEQ_STORES_TYPE INCREMENT BY 774;
+SELECT ACCOUNTS.SEQ_STORES_TYPE.NEXTVAL FROM DUAL;
+ALTER SEQUENCE ACCOUNTS.SEQ_STORES_TYPE INCREMENT BY 1;
+
+ALTER SEQUENCE ACCOUNTS.SEQ_STORES_UNIT INCREMENT BY 1;
+SELECT ACCOUNTS.SEQ_STORES_UNIT.NEXTVAL FROM DUAL;
+ALTER SEQUENCE ACCOUNTS.SEQ_STORES_UNIT INCREMENT BY 1;
+```
+
+**التحقق بعد الإصلاح:** `SEQ_STORES_TYPE max=801 last=802 => ok` ·
+`SEQ_STORES_UNIT max=12 last=13 => ok`، وكل الاثني عشر الآن أمام جداولها في قاعدة التطبيق.
+
+### د) استعلامات جديدة أُضيفت للكود (قراءة فقط)
+
+```sql
+-- بحث الحساب لمُنتقي رأس المستند (GET /stores/accounts)
+SELECT a.ACC_NO, a.ACC_NAME, a.GROUP_ID FROM ACCOUNTS.CHART_ACC a
+ WHERE a.ACC_NAME LIKE :name_ar OR a.ACC_NAME LIKE :name_utf OR a.ACC_NO = :acc_no
+ ORDER BY a.ACC_NO;  -- بحد 30 صفاً
+
+-- عملات وألوان من قاموساتها (تُضاف إلى /stores/reference)
+SELECT CUR_NO, CUR_NAME FROM ACCOUNTS.CURRENCY ORDER BY CUR_NO;          -- يمني · دولار · سعودي
+SELECT COLOR_NO, COLOR_NAME, COLOR_TYPE FROM ACCOUNTS.SANFS_COLOR ORDER BY COLOR_NO;
+```
+
+**حقيقة مُصحَّحة:** جدول الألوان اسمه `SANFS_COLOR` لا `COLORS`، و`COLOR_NO` فيه فريد
+(فحص التكرار أعاد صفراً)، لذلك الربط به لا يُضاعف سطور المستند.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-02 · **DDL:** `ALTER SEQUENCE ×2` · **DML:** لا · **لا جدول جديد**.
+
+---
+
+## 2026-11-02 — استعلامات جرد فروق الأنواع الثلاثة (قراءة فقط)
+
+### أ) جرد الأعمدة
+
+```sql
+-- عبر اتصال التطبيق (orcl3) لكل جدول على حدة
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER = 'ACCOUNTS' AND TABLE_NAME = :table
+ ORDER BY COLUMN_ID;
+```
+
+الجداول المقروءة: `INVENTORY_RECEIVE` · `INVENTORY_SARF` · `INVENTORY_TRANSM` ·
+`INVENTORY_RECEIVE_DETAILES` · `INVENTORY_SARF_DETAILES` · `INVENTORY_TRANSD`.
+
+**النتيجة:** 42 · 42 · 48 للرؤوس، و25 · 23 · 42 للسطور. الفروق الكاملة مسجّلة في
+`DBdevloping_history.md`، وأهمها: `PROV_BILL` للتوريد فقط، و`CURNO/CURPRICE` لسطور التوريد
+فقط، و`TOTALD` بدل `TOTAL` في سطور التحويل.
+
+### ب) قراءات تحقق من البيانات الحيّة
+
+```sql
+SELECT MAX(BILL_NO) AS BILL_NO FROM ACCOUNTS.INVENTORY_RECEIVE;   -- 535
+SELECT MAX(BILL_NO) AS BILL_NO FROM ACCOUNTS.INVENTORY_SARF;      -- 301
+SELECT MAX(BILL_NO) AS BILL_NO FROM ACCOUNTS.INVENTORY_TRANSM;    -- 71
+
+SELECT COUNT(*) AS C, SUM(QTY) AS Q, SUM(TOTAL) AS T
+  FROM ACCOUNTS.INVENTORY_SARF_DETAILES WHERE BILL_NO = 301;
+```
+
+**الغرض:** التأكد أن أعمدة القالب المقروءة (المقاسات/التصنيف/اللون/العبوة/القطعة/متوسط التكلفة)
+تحمل قيماً فعلية لا أصفاراً، قبل بناء الوصف لكل نوع.
+
+### ج) تنظيف توكنات الفحص (DML)
+
+```sql
+-- NAME نوعه CLOB فالمقارنة بـ= ترمي ORA-00932؛ يلزم SUBSTR
+DELETE FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS
+ WHERE DBMS_LOB.SUBSTR(NAME, 4000, 1) LIKE 'zz-livecheck-%'
+    OR DBMS_LOB.SUBSTR(NAME, 4000, 1) LIKE 'probe-%';
+
+-- التحقق: 0 صفاً باقياً
+SELECT COUNT(*) FROM ACCOUNTS.PERSONAL_ACCESS_TOKENS
+ WHERE DBMS_LOB.SUBSTR(NAME, 4000, 1) LIKE 'zz-livecheck-%';
+```
+
+**النتيجة:** `zz-livecheck-% = 1 · deleted = 1`، والباقي **0**. لا توكن فحص في قاعدة العمل.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-02 · **DDL:** لا · **DML:** حذف توكنات فحص (3 صفوف إجمالاً).
+
+---
+
+## 2026-11-03 — استعلامات فحص (قراءة فقط)
+
+**الهدف:** تحديد الاسم الحقيقي لعمود اللون في جدول الأصناف بعد `ORA-00904` على `MAIN_COLOR`.
+**القاعدة:** `orcl3` (قاعدة التطبيق، عبر `DB::connection('oracle')`) — لا `orcl`.
+
+```sql
+-- 1) التأكد من القاعدة المتصلة (كانت النتيجة: orcl3 / orcl3)
+SELECT SYS_CONTEXT('USERENV','DB_UNIQUE_NAME') AS DBNAME,
+       SYS_CONTEXT('USERENV','SERVICE_NAME') AS SVC
+  FROM DUAL;
+```
+
+```sql
+-- 2) الأعمدة الفعلية لجدولي الأصناف — نُفّذ مرتين: (t='SANFS') و (t='SANFS_D')
+SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
+  FROM ALL_TAB_COLUMNS
+ WHERE OWNER = :o          -- 'ACCOUNTS'
+   AND TABLE_NAME = :t
+ ORDER BY COLUMN_ID;
+```
+
+**النتيجة:**
+
+| الجدول | عدد الأعمدة | أعمدة اللون |
+|---|---|---|
+| `ACCOUNTS.SANFS` | 37 | `MCOLOR`, `COLORNO` — **ولا `MAIN_COLOR`** |
+| `ACCOUNTS.SANFS_D` | 41 | `DCOLOR`, `COLOR_NO`, `MCOLOR` |
+
+**الأثر:** `MAIN_COLOR` في ثلاثة مواضع من `StoreItemController` → `MCOLOR`.
+**أعمدة أخرى تحقّقتُ من وجودها في نفس الفحص:** `SANF_CODE`, `SANF_TYPE`, `CAT_NO`, `STYL_NO`,
+`CAP`, `BUY_PRICE`, `CREATED_ON`, `LAST_UPDATED_DATE` (كلها موجودة) · وفي `SANFS_D`:
+`SANF_COCE`, `BARACOCE`, `SANF_DNAME`, `DCOLOR`, `COLOR_NO`, `STORNO` (كلها موجودة).
+
+**ملاحظة:** لم تُنفّذ أي كتابة يدوياً. مسارات `INSERT`/`UPDATE`/`DELETE` جُرّبت عبر
+`tests/Feature/StoreItemTest.php` داخل معاملة أُلغيت في النهاية (`rollBack`)، فلم يبق صف واحد.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-03 · **DDL:** لا · **DML:** لا (اختبارات داخل معاملات مُلغاة).

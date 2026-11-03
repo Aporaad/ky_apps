@@ -1870,3 +1870,85 @@ store 12: items=0    value=0.00             negative=0
 صفر لأن `ITEM_MOVEMENT_D` تستثنيها أصلاً.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-01 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-02 — حقائق مخطط جديدة تحكم مستندات المخازن، وتقسيم قاعدة البيانات
+
+### أ) الاكتشاف الأخطر: موصلان، قاعدتان
+
+`oracledb` MCP متصل بخدمة **orcl**، والتطبيق (Laravel/oracle) متصل بخدمة **orcl3**. نفس الاستعلام
+أعطى لفاتورة 535: **18 سطراً** عند الموصل و**36 سطراً** عند التطبيق.
+
+**الأثر على هذا المشروع:** كل نقطة بداية لتسلسلات المخازن حُسبت سابقاً من `MAX+1` المقاس على
+الموصل، فطلع في قاعدة التطبيق تسلسلان متأخران (`SEQ_STORES_TYPE`: 801 مقابل 28 ·
+`SEQ_STORES_UNIT`: 12 على الحد) — أي أن أول إنشاء مجموعة فرعية أو وحدة كان سيفشل بـ`ORA-00001`.
+أُصلحا بـ`ALTER SEQUENCE … INCREMENT BY gap` (تفصيلهما في `db_commends.md`).
+
+**درس قابل للتطبيق:** أي قياس على «قاعدة البيانات» يجب أن يُؤخذ من اتصال التطبيق نفسه لا من
+موصل جانبي؛ الاختلاف لا يظهر كخطأ، بل كنقطة بداية تسلسل تبدو معقولة.
+
+### ب) حقائق المخطط التي بُني عليها قالب المستند
+
+| الكائن | الحقيقة |
+|---|---|
+| `CURRENCY` | `CUR_NO`, `CUR_NAME` — ثلاثة صفوف: 1 يمني · 2 دولار · 3 سعودي |
+| `SANFS_COLOR` | `COLOR_NO`, `COLOR_NAME`, `COLOR_TYPE` — جدول الألوان، وليس `COLORS`. `COLOR_NO` فريد (فحص التكرار أعاد صفراً) فالربط به لا يُضاعف السطور |
+| `CHART_ACC` | `ACC_NO`, `ACC_NAME` — أسماء الحسابات لخانتَي «حساب المخزن / حساب دائن» |
+| `INVENTORY_RECEIVE_DETAILES` | تحمل `CAP` (عبوة) و`PCS` (قطعة) و`SHELF_NO` (الرف) و`SIZE_FRM/SIZE_TO` (المقاس المخزّن في السطر) و`CATEGORY` (التصنيف نص) و`COLOR_NO` و`STYLE_NO` و`CAT_NO` و`STK_COST/SANF_COST` |
+| `INVENTORY_SARF_DETAILES` | نفس الأعمدة، و`SANF_DNO` إلزامي فيها |
+| `INVENTORY_TRANSD` | نفس الأعمدة + `RCVDONE` و`SQTY/SUNIT_NO` و`TOTALD` و`UNIT_NO` الخاص بها |
+| `BILL_TYPE` | 1 = نقد · 2 = آجل (مُقيس على البيانات الحيّة) |
+| `SELECT1` | 1 أو 2 — خيار «بالعملة المحلية / بعملة الحساب المدين» |
+| `INVENTORY_TRANSM` | لا يحمل `CREATED_BY_NAME`: الأسماء تُقرأ من `APP_USERS` بربط `CREATE_BY` / `UPDATE_BY` |
+| `INVENTORY_SARF` | **لا عمود رقم مرجع** عندها (`PROV_BILL` للتوريد فقط) — فالحقل يُكتب حيث يوجد وحده |
+
+### ج) المقاسات تُقرأ من السطر لا من الصنف
+
+`SIZE_FRM/SIZE_TO` مخزَّنة في جدول السطور نفسها، وهي ما يطبعه المستند. القراءة من `SANFS_D.LEN/WID`
+كانت تجعل المستند التاريخي يتغيّر لو عدّل أحد الصنف الفرعي بعد الحركة.
+
+### د) فاتورة 535: 36 سطراً والإجمالي 606,200 بينما `NET` = 303,100
+
+في قاعدة التطبيق الجدول فيه 36 صفاً مجموعها 606,200، والرأس `TOTAL/NET` = 303,100. الطبعة
+المكتبية تعرض الرقمين معاً (الإجمالي من السطور، والصافي من الرأس). القاعدة المعتمدة في
+التطبيق: **العرض والطباعة يقرآن قيم الرأس المخزّنة كما تفعل الطبعة**، و**النموذج يحسب المجاميع
+من السطور كما يفعل نموذج النظام** — وهما متسقتان في أي مستند يُنشأ من التطبيق.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-02 · **DDL:** تسلسلان · **DML:** لا · **لا جدول جديد**.
+
+---
+
+## 2026-11-02 — جرد فروق المخطط الحقيقية بين الأنواع الثلاثة (أساس اختلافها)
+
+**الطريقة:** قراءة `ALL_TAB_COLUMNS` عبر **اتصال التطبيق** (خدمة orcl3) لا موصل MCP، لأن الموصل خدمة أخرى — وهذا أثبتته أخطاء سابقة.
+
+### أ) الرؤوس (42 · 42 · 48 عموداً)
+
+| النوع | أعمدة يملكها وحده |
+|---|---|
+| `INVENTORY_RECEIVE` | `PROV_NAME` (ويملك `PROV_NO` و`PROV_BILL` أيضاً) |
+| `INVENTORY_SARF` | `CUST_NO`, `CUST_NAME`, `SEQBILL` |
+| `INVENTORY_TRANSM` | `TR_INV_M_ID`, `TYPENO`, `CAT_ID`, `GOV_NO`, `STORE_TO`, `COSTCN_ID`, `RCV_DONE`, `CREATE_BY`, `CREATE_DATE`, `UPDATE_BY`, `UPDATE_DATE` |
+
+**ما ينقص كل نوع:** التوريد والصرف بلا أي عمود تحويلي؛ والتحويل **بلا** `PROV_NAME` و`CREATED_BY` و`CREATED_BY_NAME` و`TR_TYPE_ID` و`LAST_UPDATED_BY_NAME` و`CANCEL_NOTE` و`SEQBIL` و`SEQBILL`.
+
+**الأثر:** `CREATED_BY_NAME` و`LAST_UPDATED_BY_NAME` غير موجودين في جدول التحويل، فقراءتهما من مسار مشترك تُسقط نوعه — ولهذا يُقرأ اسماه من `APP_USERS` عبر `CREATE_BY`/`UPDATE_BY`.
+
+### ب) السطور (25 · 23 · 42 عموداً)
+
+| النوع | ما يخصّه |
+|---|---|
+| `INVENTORY_RECEIVE_DETAILES` | `CURNO`, `CURPRICE` (عملة السطر) + `TOTAL` |
+| `INVENTORY_SARF_DETAILES` | `TOTAL` فقط (بلا عملة سطر) |
+| `INVENTORY_TRANSD` | `TOTALD` **بدل** `TOTAL`، و`TR_INV_D_ID`, `TR_INV_M_ID`, `TYPENO`, `CAT_ID`, `DDATE`, `GOVNO`, `STORENO`, `STORETO`, `DETAILE`, `DIS_RATE1`, `DISCOUNT1`, `RCVDONE`, `CREATEBY`, `CREATEDATE`, `UPDATEBY`, `UPDATEDATE`, `UNIT_NO`, `SUNIT_NO`, `SQTY` |
+
+**الأثر:** كتابة `CURNO/CURPRICE` في مسار مشترك تُسقط إنشاء الصرف وتفصيله؛ و`TOTAL` غير موجود في `INVENTORY_TRANSD` فالمجموع يُقرأ من `TOTALD`.
+
+### ج) ما بُني على هذا الجرد
+
+`StorePolicy::documents()` صار يعلن لكل نوع حقله: `bill_type` · `reference` (والعمود الذي يحمله: `PROV_BILL` للتوريد و`SEQBILL` للصرف و`PROV_BILL` رقمياً للتحويل) · `reference_writable` · `party` · `target_store` · `serials` · `movement_type` · `entry_no` · `discount` · `currency_pair` · `line_currency` · `line_cost` · `line_pack` · `line_available`.
+
+والمتحكمات تقرأ هذه الأعلام بدل شروط `kind == …`، فيستحيل أن يُقرأ عمود في نوع لا يملكه.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-02 · **DDL:** لا · **DML:** لا · **قراءة فقط**.

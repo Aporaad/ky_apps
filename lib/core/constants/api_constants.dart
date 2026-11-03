@@ -89,6 +89,9 @@ class ApiConstants {
   static const String stores = '/stores';
   static const String storeKeepers = '/stores/keepers';
   static const String storeReference = '/stores/reference';
+  // بحث الحساب لمُنتقي رأس المستند — 30 صفاً بالاسم العربي، بلا أرصدة
+  // Account lookup for the document header picker — 30 names, no balances.
+  static const String storeAccounts = '/stores/accounts';
   static const String storeItems = '/stores/items';
   static const String storeBalances = '/stores/balances';
   static const String storeReportMovement = '/stores/reports/movement';

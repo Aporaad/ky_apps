@@ -709,20 +709,20 @@ class _ItemCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Wrap(
-                spacing: 6,
-                runSpacing: 6,
+                spacing: 5,
+                runSpacing: 5,
                 children: [
                   if (item.groupName != null)
                     StoreTag(
                       label: item.groupName!,
                       icon: Icons.folder_outlined,
                     ),
-                  if (item.typeName != null)
-                    StoreTag(
-                      label: item.typeName!,
-                      icon: Icons.subdirectory_arrow_left_rounded,
-                      color: AppColors.info,
-                    ),
+                  // if (item.typeName != null)
+                  //   StoreTag(
+                  //     label: item.typeName!,
+                  //     icon: Icons.subdirectory_arrow_left_rounded,
+                  //     color: AppColors.info,
+                  //   ),
                   if (item.categoryName != null)
                     StoreTag(
                       label: item.categoryName!,
@@ -730,7 +730,7 @@ class _ItemCard extends StatelessWidget {
                       color: AppColors.secondary,
                     ),
                   StoreTag(
-                    label: '${item.subs} فرعي',
+                    label: '${item.subs} الوان',
                     icon: Icons.qr_code_2_rounded,
                     color: AppColors.secondary,
                   ),
@@ -739,11 +739,11 @@ class _ItemCard extends StatelessWidget {
                     icon: Icons.inventory_2_outlined,
                     color: item.isNegative ? AppColors.error : AppColors.success,
                   ),
-                  StoreTag(
-                    label: StoreFormat.money(item.value),
-                    icon: Icons.payments_outlined,
-                    color: AppColors.success,
-                  ),
+                  // StoreTag(
+                  //   label: StoreFormat.money(item.value),
+                  //   icon: Icons.payments_outlined,
+                  //   color: AppColors.success,
+                  // ),
                   if (!item.active)
                     const StoreTag(
                       label: 'معطّل',

@@ -76,13 +76,21 @@ const List<PortalSection> portalSections = [
     showInBottomBar: true,
   ),
   PortalSection(
+    id: 'stores',
+    title: PortalSectionTitles.stores,
+    icon: Icons.inventory_2_outlined,
+    builder: _buildStores,
+    viewCodes: [Perm.storesView],
+    showInBottomBar: true,
+  ),
+  PortalSection(
     id: 'sales',
     title: PortalSectionTitles.sales,
     icon: Icons.point_of_sale_outlined,
     selectedIcon: Icons.point_of_sale_rounded,
     builder: _buildSales,
     viewCodes: [Perm.salesView],
-    showInBottomBar: true,
+    showInBottomBar: false,
   ),
   PortalSection(
     id: 'tailoring',
@@ -123,14 +131,7 @@ const List<PortalSection> portalSections = [
     builder: _buildAccounts,
     viewCodes: [Perm.accountsView],
     showInBottomBar: true,
-  ),
-  PortalSection(
-    id: 'stores',
-    title: PortalSectionTitles.stores,
-    icon: Icons.inventory_2_outlined,
-    builder: _buildStores,
-    viewCodes: [Perm.storesView],
-  ),
+  ),  
   PortalSection(
     id: 'management',
     title: PortalSectionTitles.management,

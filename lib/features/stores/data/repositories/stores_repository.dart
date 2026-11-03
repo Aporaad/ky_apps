@@ -164,6 +164,42 @@ class StoresRepository {
 
   // ── المرجعيات / catalogs ──────────────────────────────────
 
+  /// بحث الحسابات لمُنتقي رأس المستند — لا يعيد أي رصيد، أسماء فقط
+  /// Account lookup for the document header picker — names only, never a balance.
+  ///
+  /// ── لماذا الحد 30؟ لأن المُنتقي يُفتح أثناء إدخال مستند، وقائمة بألف حساب تُبطئ الشاشة
+  ///    دون أن يختار أحد منها؛ البحث هو الطريق الصحيح لا التمرير.
+  /// ── Why 30 rows: the picker opens mid-entry, and a thousand accounts slows the screen while
+  ///    nobody scrolls that far. Searching is the intended path, not scrolling.
+  Future<List<StoreAccountOption>> searchAccounts(
+    String search, {
+    CancelToken? cancelToken,
+  }) async {
+    try {
+      final response = await client.dio.get(
+        ApiConstants.storeAccounts,
+        queryParameters: {
+          if (search.trim().isNotEmpty) 'search': search.trim(),
+          'limit': 30,
+        },
+        cancelToken: cancelToken,
+      );
+
+      final body = response.data as Map<String, dynamic>;
+      final data = body['data'];
+
+      if (body['success'] != true || data is! List) return const [];
+
+      return data
+          .whereType<Map<String, dynamic>>()
+          .map(StoreAccountOption.fromJson)
+          .toList(growable: false);
+    } on DioException catch (error) {
+      if (CancelToken.isCancel(error)) return const [];
+      rethrow;
+    }
+  }
+
   /// جلب مرجعية واحدة كنماذج مطبوعة النوع
   /// Fetch one catalog as typed models.
   Future<List<T>> fetchCatalog<T>(

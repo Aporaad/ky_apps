@@ -16,6 +16,7 @@ import '../../../../core/utils/report_pdf_page.dart';
 import '../../data/models/order_model.dart';
 import '../../data/models/report_model.dart';
 import '../widgets/store_ui.dart';
+import 'store_document_layout.dart';
 
 /// مصدّر قسم المخازن: PDF للطباعة والمشاركة، وXLSX للمشاركة
 /// The stores exporter: PDF for print/share and XLSX for share.
@@ -74,8 +75,17 @@ class StoreExporter {
   }
 }
 
-/// مولّد PDF لمستند مخزني (توريد · صرف · تحويل)
-/// The PDF builder of one stock document (receive · issue · transfer).
+/// مولّد PDF لمستند مخزني — نسخة طبق الأصل من قالب «استعراض التوريد»
+/// The stock-document PDF — a faithful replica of the receive-invoice template.
+///
+/// ── القالب المطلوب حرفياً: عنوان المستند، خانات الرأس (رقم الفاتورة · نوعها · التاريخ ·
+///    المورد/المخزن · الحسابات · العملة)، جدول السطور بكل أعمدة النظام (المقاسات والتصنيف
+///    واللون والرف والعبوة والقطعة)، ثم شريط المجاميع (الإجمالي · نسبة الخصم · مبلغ الخصم ·
+///    صافي المبلغ) مع المبلغ بالحروف، ثم التوقيعات — وكل ذلك فوق ترويسة التطبيق الموحّدة
+///    وتذييله بترقيم الصفحات.
+/// ── The requested template, literally: the document title, the header boxes, the full ERP line
+///    grid (sizes, classification, colour, shelf, pack, pieces), the totals strip with the amount
+///    in words, then signatures — all on the app's unified letterhead and paged footer.
 Future<Uint8List> buildStoreOrderPdf({
   required ReportLetterheadInfo letterhead,
   required StoreOrderKind kind,
@@ -85,24 +95,61 @@ Future<Uint8List> buildStoreOrderPdf({
   final theme = await ReportPdfFonts.theme();
   final doc = pw.Document(theme: theme);
   final logo = await loadPdfLetterheadLogo(height: 46);
+  final columns = storeDocumentColumns(kind);
+  final title = StoreDocProfile.of(kind).title;
 
   doc.addPage(
     pw.MultiPage(
+      // ── طولية A4: الورقة تُطبع على A4 طولية كما يطلب المستخدم؛ الأفقي كان يُصغّر
+      //    المستند عند الطباعة على ورق طولي.
+      // ── Portrait A4: the sheet prints on portrait A4 as requested; landscape shrank the
+      //    document when printed on portrait paper.
       pageFormat: PdfPageFormat.a4,
-      margin: const pw.EdgeInsets.all(24),
+      margin: const pw.EdgeInsets.fromLTRB(22, 20, 22, 18),
       textDirection: pw.TextDirection.rtl,
-      header: (context) => buildReportPdfHeader(
-        letterhead: letterhead,
-        title: '${kind.documentLabel} رقم ${header.reference}',
-        logo: logo,
-        metaSection: _orderMeta(kind, header),
+      // ── الترويسة الكاملة صارت **محتوى** الصفحة الأولى، لا ترويسة متكررة في كل صفحة.
+      //    السبب مقاس: `header` يُقتطع من مساحة الصفحة قبل وضع المحتوى، و`pw.Column` في
+      //    الـ`pdf` يتمدد افتراضياً إلى أقصى ارتفاع متاح — فكانت الترويسة تبتلع الصفحة الأولى،
+      //    ينتهي الجدول في منتصف الورقة وتُدفع بقية السطور إلى صفحة ثالثة. المتكرر الآن سطر رقيق.
+      // ── The full letterhead is now **content** of page one, not a repeated header. The reason
+      //    is measurable: `header` is subtracted from the page before content is placed, and a
+      //    `pw.Column` in `pdf` expands to the maximum available height by default — so the
+      //    header swallowed page one, the table ended mid-sheet and the remaining rows were
+      //    pushed onto a third page. Only a thin title line repeats now.
+      header: (context) => context.pageNumber == 1
+          ? pw.SizedBox.shrink()
+          : pw.Column(
+              mainAxisSize: pw.MainAxisSize.min,
+              crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+              children: [
+                pw.Text(
+                  pdfArabic('$title رقم ${header.reference}'),
+                  style: const pw.TextStyle(fontSize: 10),
+                  textDirection: kPdfShapedTextDirection,
+                ),
+                pw.Divider(thickness: 0.6, color: ReportPdfColors.border),
+              ],
+            ),
+      footer: (context) => buildReportPdfFooter(
+        context,
+        currency: header.curName == null ? null : 'العملة: ${header.curName}',
       ),
-      footer: (context) => buildReportPdfFooter(context),
       build: (context) => [
-        _orderTable(lines),
+        // الصفحة الأولى: الترويسة الرسمية ثم شريط التفاصيل، ثم الجدول مباشرةً
+        // Page one: the official letterhead then the detail strip, then the table at once.
+        buildReportPdfHeader(
+          letterhead: letterhead,
+          title: '$title — رقم ${header.reference}',
+          logo: logo,
+          metaSection: _orderMeta(kind, header),
+        ),
+        // الجدول يُمرَّر كاملاً: `MultiPage` يقسمه ويُملئ كل صفحة قبل الانتقال للتالية
+        // The whole table is handed over: MultiPage splits it and fills each page before
+        // moving on, leaving no gap at the bottom of the sheet.
+        _orderTable(columns, lines),
         pw.SizedBox(height: 10),
-        _orderTotals(header),
-        pw.SizedBox(height: 22),
+        _orderTotals(kind, header),
+        pw.SizedBox(height: 14),
         _signatures(kind),
       ],
     ),
@@ -111,114 +158,225 @@ Future<Uint8List> buildStoreOrderPdf({
   return doc.save();
 }
 
-/// ترويسة معطيات المستند
-/// The document meta block.
+/// شريط تفاصيل المستند في المطبوع — صف واحد ومن نفس مصدر الشاشة
+/// The document meta strip in the printout — one row, from the same source as the screen.
+///
+/// ── جدول لا `Row`: الـ`Row` مع `stretch` يحتاج ارتفاعاً معلوماً، وترويسة `MultiPage` بلا
+///    ارتفاع محدود، فينهار التوليد بـ«height (Infinity) exceed a page height». الجدول يحسب
+///    ارتفاع الصف من أطول خلية فيعطي نفس شكل الشاشة بلا هذا الخطر.
+/// ── A table, not a `Row`: a stretched Row needs a known height, and a `MultiPage` header has
+///    none, so generation dies with "height (Infinity) exceed a page height". A table derives
+///    the row height from its tallest cell and reproduces the on-screen strip safely.
 pw.Widget _orderMeta(StoreOrderKind kind, StoreOrderModel header) {
-  return pw.Column(
-    crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+  final cells = storeDocumentMeta(kind, header);
+
+  return pw.Table(
+    // ── الجدول يرسم من اليسار دائماً، فتُعكس الخانات كي يقع «تاريخ الفاتورة» في أقصى اليمين
+    // ── A table always lays children left-to-right, so the cells are reversed to put the
+    //    invoice date at the far right.
     children: [
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      pw.TableRow(
         children: [
-          pw.Text(
-            pdfArabic('${kind.hasTargetStore ? 'من مخزن' : 'المخزن'}: ${header.storeName ?? header.storeNo}'),
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-          pw.Text(
-            pdfArabic('التاريخ: ${header.dateLabel}'),
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-        ],
-      ),
-      pw.SizedBox(height: 3),
-      pw.Row(
-        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-        children: [
-          pw.Text(
-            pdfArabic(
-              kind.hasTargetStore
-                  ? 'إلى مخزن: ${header.storeToName ?? header.storeTo ?? '—'}'
-                  : '${kind == StoreOrderKind.receive ? 'المورد' : 'الجهة المستلمة'}: ${header.partyName ?? '—'}',
+          for (final cell in cells.reversed)
+            pw.Container(
+              padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+              decoration: pw.BoxDecoration(
+                border: pw.Border.all(
+                  color: ReportPdfColors.border,
+                  width: 0.35,
+                ),
+              ),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                mainAxisAlignment: pw.MainAxisAlignment.center,
+                children: [
+                  pw.Text(
+                    pdfArabic(cell.$1),
+                    style: const pw.TextStyle(
+                      fontSize: 7,
+                      color: ReportPdfColors.subtleText,
+                    ),
+                    textDirection: kPdfShapedTextDirection,
+                  ),
+                  pw.Text(
+                    pdfArabic(cell.$2),
+                    style: const pw.TextStyle(fontSize: 8.5),
+                    textDirection: kPdfShapedTextDirection,
+                  ),
+                ],
+              ),
             ),
-            style: const pw.TextStyle(fontSize: 10),
-          ),
-          pw.Text(
-            pdfArabic('عدد الأصناف: ${header.sanfNums}'),
-            style: const pw.TextStyle(fontSize: 10),
-          ),
         ],
       ),
-      if (header.detailes != null) ...[
-        pw.SizedBox(height: 3),
-        pw.Text(
-          pdfArabic('البيان: ${header.detailes}'),
-          style: pw.TextStyle(
-            fontSize: 9.5,
-            color: ReportPdfColors.subtleText,
-          ),
-        ),
-      ],
     ],
   );
 }
 
-/// جدول سطور المستند — الأعمدة معكوسة لأن `pw.Table` يرسم LTR داخل صفحة RTL
-/// The document lines table — columns are reversed because pw.Table lays out LTR inside
-/// an RTL page.
-pw.Widget _orderTable(List<StoreOrderLineModel> lines) {
-  final headers = [
-    'م',
-    'الكود',
-    'الصنف',
-    'الوحدة',
-    'الكمية',
-    'السعر',
-    'الإجمالي',
-  ];
+/// جدول سطور المستند — الأعمدة من مصدر التخطيط المشترك، ومعكوسة لأن `pw.Table` يرسم LTR
+/// The lines table — columns come from the shared layout and are reversed because pw.Table
+/// always lays children out left-to-right inside an RTL page.
+pw.Widget _orderTable(
+  List<StoreDocColumn> columns,
+  List<StoreOrderLineModel> lines,
+) {
+  // الأعمدة تُعكس لأن `pw.Table` يرسم دائماً يسار←يمين
+  // The columns are reversed because `pw.Table` always draws left→right.
+  final ordered = columns.reversed.toList();
 
   return pw.TableHelper.fromTextArray(
-    border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.5),
+    border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
     headerDecoration: const pw.BoxDecoration(color: ReportPdfColors.headerBg),
-    headerStyle: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
-    cellStyle: const pw.TextStyle(fontSize: 8.5),
-    cellAlignment: pw.Alignment.centerRight,
-    headers: headers.reversed
-        .map((header) => pdfArabic(header))
-        .toList(growable: false),
+    headerStyle: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+    cellStyle: const pw.TextStyle(fontSize: 7),
+    // ── الاتجاه صريح ltr في الخلايا والعناوين: النص يصل مُشكَّلاً ومرتّباً مرئياً من
+    //    `pdfArabic`، فلو ورث اتجاه الصفحة rtl لأعاد المحرك ترتيبه بعكس ثانٍ فتظهر الحروف
+    //    معكوسة («ﻢﺋﺎﻘﻟﺍ» بدل «القائم»). ولذلك تُثبّت المحاذاة يميناً يدوياً لأن ltr
+    //    يُحوّل `topLeft` إلى محاذاة يسار.
+    // ── Explicit ltr in cells and headers: `pdfArabic` hands over already-shaped text in
+    //    visual order; inheriting the page's rtl would make the engine reverse it a second
+    //    time and every word appears mirrored. Alignment is pinned right manually because ltr
+    //    would turn `topLeft` into a left alignment.
+    headerDirection: kPdfShapedTextDirection,
+    tableDirection: kPdfShapedTextDirection,
+    cellAlignment: pw.Alignment.topRight,
+    // ── الحد الأدنى لارتفاع الخلية: صف رقيق كما في الطبعة، لا صف يتضخم بحشوة افتراضية.
+    // ── A small minimum cell height: a thin row as the printout has, not one inflated by
+    //    default padding.
+    cellPadding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 2.5),
+    headerPadding: const pw.EdgeInsets.symmetric(horizontal: 3, vertical: 3),
+    // ── توزيع العرض بنسب المستند: بدونها يعطي `fromTextArray` كل عمود عرضاً متساوياً،
+    //    فتتسطر أسماء الأصناف على أربعة أسطر ويصير الصف ~50 نقطة، فلا تسع الصفحة إلا
+    //    خمسة سطور ويُدفع الباقي إلى صفحات أخرى مع فراغ أسفل الورقة.
+    // ── Widths follow the document weights. Without them `fromTextArray` gives every column
+    //    an equal width, so item names wrap onto four lines and a row becomes ~50pt; the page
+    //    then holds five rows and the rest is pushed to another page with a blank gap.
+    columnWidths: {
+      for (var i = 0; i < ordered.length; i++)
+        i: pw.FlexColumnWidth(ordered[i].weight),
+    },
+    headers: ordered.map((column) => pdfArabic(column.title)).toList(),
     data: [
-      for (var index = 0; index < lines.length; index++)
-        [
-          StoreFormat.money(lines[index].total),
-          StoreFormat.money(lines[index].price),
-          StoreFormat.qty(lines[index].qty),
-          pdfArabic(lines[index].unitName ?? '—'),
-          pdfArabic(lines[index].sanfName ?? '—'),
-          lines[index].partNo ?? '—',
-          '${index + 1}',
-        ],
+      for (final line in lines)
+        ordered.map((column) => pdfArabic(column.value(line))).toList(),
     ],
   );
 }
 
-/// مجاميع المستند
-/// The document totals.
-pw.Widget _orderTotals(StoreOrderModel header) {
+/// شريط المجاميع + المبلغ بالحروف — ذيل القالب، والخصم حيث يوجد فقط
+/// The totals strip plus the amount in words — the template's footer, with the discount only
+/// where the kind actually has one.
+pw.Widget _orderTotals(StoreOrderKind kind, StoreOrderModel header) {
+  final figures = <(String, String, bool)>[
+    ('الإجمالي', StoreFormat.money(header.total), false),
+    ('مبلغ الخصم', storeDiscountText(header), false),
+    ('صافي المبلغ', StoreFormat.money(header.net), true),
+  ];
+
+  return pw.Table(
+    // ── الجدول لا `Row` لنفس السبب: الارتفاع يُحسب من أطول خلية ولا يحتاج `stretch`
+    // ── A table, not a Row, for the same reason: height comes from the tallest cell.
+    columnWidths: const {
+      0: pw.FlexColumnWidth(5),
+      1: pw.FlexColumnWidth(6),
+    },
+    children: [
+      pw.TableRow(
+        children: [
+          // اليسار: الإجمالي · الخصم · الصافي — نفس ترتيب الشاشة
+          // Left: total · discount · net — the same order as the screen.
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+            mainAxisSize: pw.MainAxisSize.min,
+            children: [
+              for (var index = 0; index < figures.length; index++) ...[
+                if (index > 0) pw.SizedBox(height: 4),
+                _orderFigureBox(
+                  figures[index].$1,
+                  figures[index].$2,
+                  figures[index].$3,
+                ),
+              ],
+            ],
+          ),
+          // اليمين: المبلغ كتابةً ثم البيان
+          // Right: the amount in words, then the description.
+          _orderWords(header),
+        ],
+      ),
+    ],
+  );
+}
+
+/// المبلغ كتابةً والبيان في عمود واحد — أطول حقلين، فلهما العمود الأوسع
+/// The amount in words and the description in one column — the two longest fields.
+pw.Widget _orderWords(StoreOrderModel header) {
+  final note = header.detailes;
+
   return pw.Container(
-    alignment: pw.Alignment.centerLeft,
+    padding: const pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(color: ReportPdfColors.border, width: 0.4),
+    ),
     child: pw.Column(
-      crossAxisAlignment: pw.CrossAxisAlignment.end,
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      mainAxisAlignment: pw.MainAxisAlignment.center,
       children: [
         pw.Text(
-          pdfArabic('الإجمالي: ${StoreFormat.money(header.total)}'),
-          style: const pw.TextStyle(fontSize: 10),
+          pdfArabic('المبلغ كتابةً'),
+          style: const pw.TextStyle(fontSize: 7, color: ReportPdfColors.subtleText),
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          pdfArabic('الخصم: ${StoreFormat.money(header.discount)}'),
-          style: const pw.TextStyle(fontSize: 10),
+          pdfArabic(
+            StoreFormat.amountInWords(header.net, currencyName: header.curName),
+          ),
+          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+          textDirection: kPdfShapedTextDirection,
+        ),
+        if (note != null && note.isNotEmpty) ...[
+          pw.SizedBox(height: 4),
+          pw.Text(
+            pdfArabic('البيان'),
+            style: const pw.TextStyle(
+              fontSize: 7,
+              color: ReportPdfColors.subtleText,
+            ),
+            textDirection: kPdfShapedTextDirection,
+          ),
+          pw.Text(
+            pdfArabic(note),
+            style: const pw.TextStyle(fontSize: 8),
+            textDirection: kPdfShapedTextDirection,
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+/// خانة رقم مالي في المطبوع — الاسم ثم القيمة
+/// A money box in the printout — label then figure.
+pw.Widget _orderFigureBox(String label, String value, bool emphasise) {
+  return pw.Container(
+    padding: const pw.EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+    decoration: pw.BoxDecoration(
+      border: pw.Border.all(color: ReportPdfColors.border, width: 0.4),
+    ),
+    child: pw.Column(
+      crossAxisAlignment: pw.CrossAxisAlignment.start,
+      children: [
+        pw.Text(
+          pdfArabic(label),
+          style: const pw.TextStyle(fontSize: 7, color: ReportPdfColors.subtleText),
+          textDirection: kPdfShapedTextDirection,
         ),
         pw.Text(
-          pdfArabic('الصافي: ${StoreFormat.money(header.net)}'),
-          style: pw.TextStyle(fontSize: 11, fontWeight: pw.FontWeight.bold),
+          value,
+          style: pw.TextStyle(
+            fontSize: emphasise ? 9.5 : 8.5,
+            fontWeight: emphasise ? pw.FontWeight.bold : pw.FontWeight.normal,
+          ),
+          textDirection: pw.TextDirection.ltr,
         ),
       ],
     ),
@@ -238,7 +396,11 @@ pw.Widget _signatures(StoreOrderKind kind) {
       for (final label in labels)
         pw.Column(
           children: [
-            pw.Text(pdfArabic(label), style: const pw.TextStyle(fontSize: 9)),
+            pw.Text(
+              pdfArabic(label),
+              style: const pw.TextStyle(fontSize: 9),
+              textDirection: kPdfShapedTextDirection,
+            ),
             pw.SizedBox(height: 22),
             pw.Container(
               width: 100,
@@ -372,6 +534,11 @@ Future<Uint8List> buildStoreOrderListPdf({
             fontWeight: pw.FontWeight.bold,
           ),
           cellStyle: const pw.TextStyle(fontSize: 7.5),
+          // ── اتجاه صريح: النص مُشكَّل مسبقاً بـ`pdfArabic`، ووراثة rtl تعكسه ثانية
+          // ── Explicit direction: the text is pre-shaped by `pdfArabic`; inheriting rtl re-reverses it.
+          headerDirection: kPdfShapedTextDirection,
+          tableDirection: kPdfShapedTextDirection,
+          cellAlignment: pw.Alignment.topRight,
           headers: [
             'المستند',
             'التاريخ',
@@ -434,6 +601,9 @@ pw.Widget _movementTable(List<StockMovementRow> rows) {
     headerDecoration: const pw.BoxDecoration(color: ReportPdfColors.headerBg),
     headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
     cellStyle: const pw.TextStyle(fontSize: 7.5),
+    headerDirection: kPdfShapedTextDirection,
+    tableDirection: kPdfShapedTextDirection,
+    cellAlignment: pw.Alignment.topRight,
     headers: headers.reversed
         .map((header) => pdfArabic(header))
         .toList(growable: false),
@@ -472,6 +642,9 @@ pw.Widget _summaryTable(List<StockSummaryRow> rows) {
     headerDecoration: const pw.BoxDecoration(color: ReportPdfColors.headerBg),
     headerStyle: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
     cellStyle: const pw.TextStyle(fontSize: 8),
+    headerDirection: kPdfShapedTextDirection,
+    tableDirection: kPdfShapedTextDirection,
+    cellAlignment: pw.Alignment.topRight,
     headers: headers.reversed
         .map((header) => pdfArabic(header))
         .toList(growable: false),
@@ -547,6 +720,9 @@ Future<Uint8List> buildStockSheetPdf({
           ),
           headerStyle: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
           cellStyle: const pw.TextStyle(fontSize: 8),
+          headerDirection: kPdfShapedTextDirection,
+          tableDirection: kPdfShapedTextDirection,
+          cellAlignment: pw.Alignment.topRight,
           headers: [
             if (hasNotes) 'ملاحظة السطر',
             'الفرق',

@@ -18,9 +18,12 @@ class AppTheme {
   static ThemeData build() {
     final baseTextTheme = ThemeData.light().textTheme;
     final font = AppPalette.fontFamily;
-    // اسم العائلة الناتج من google_fonts (يحمّل الخط فعلياً عند الطلب)
-    // The resolved google_fonts family name (loads the font on demand).
-    final fontFamily = GoogleFonts.getFont(font).fontFamily;
+    // Cairo أصبح عائلة مضمّنة بأوزانها الحقيقية (400/700) في pubspec، فنستخدمها
+    // مباشرة بلا تنزيل شبكي وبلا «عريض اصطناعي» — وهذا هو جوهر إصلاح تشوّه «و» و«ص»
+    // في العناوين والنصوص العريضة. بقية الخطوط المختارة تبقى عبر google_fonts.
+    // Cairo is now a bundled family with real weights, so we use it directly — no
+    // network download and no synthetic bold (the root cause of the و/ص distortion).
+    final fontFamily = _isBundledCairo(font) ? 'Cairo' : GoogleFonts.getFont(font).fontFamily;
     // تطبيق الخط المختار على كامل الـ TextTheme (Cairo افتراضياً)
     // Apply the selected font across the whole TextTheme (Cairo by default).
     final arabicTextTheme = baseTextTheme.apply(
@@ -47,7 +50,7 @@ class AppTheme {
         centerTitle: false,
         backgroundColor: AppColors.surface,
         foregroundColor: AppColors.textPrimary,
-        titleTextStyle: GoogleFonts.getFont(
+        titleTextStyle: _font(
           font,
           fontSize: 18,
           fontWeight: FontWeight.bold,
@@ -75,12 +78,12 @@ class AppTheme {
           borderRadius: BorderRadius.circular(10),
           borderSide: const BorderSide(color: AppColors.error),
         ),
-        labelStyle: GoogleFonts.getFont(
+        labelStyle: _font(
           font,
           color: AppColors.textSecondary,
           fontSize: 14,
         ),
-        hintStyle: GoogleFonts.getFont(
+        hintStyle: _font(
           font,
           color: AppColors.textMuted,
           fontSize: 13,
@@ -95,7 +98,7 @@ class AppTheme {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(10),
           ),
-          textStyle: GoogleFonts.getFont(
+          textStyle: _font(
             font,
             fontSize: 15,
             fontWeight: FontWeight.bold,
@@ -116,4 +119,43 @@ class AppTheme {
   /// السمة الفاتحة — تفوّض إلى `build()` للتوافق مع الاستدعاءات القائمة
   /// Light theme — delegates to [build] for compatibility with existing call sites.
   static ThemeData get lightTheme => build();
+
+  /// هل الخط المختار هو Cairo المضمّن؟ (مقارنة غير حساسة لحالة الأحرف والمسافات)
+  /// Whether the selected font is the bundled Cairo (case/whitespace-insensitive).
+  static bool _isBundledCairo(String font) =>
+      font.trim().toLowerCase() == 'cairo';
+
+  /// يبني TextStyle لعائلة الخط المختارة: Cairo المضمّن يُستخدم مباشرة بوزنه
+  /// الحقيقي (عائلة Flutter مُسجّلة في pubspec) فيجنّب العريض الاصطناعي والتنزيل
+  /// الشبكي؛ وبقية الخطوط تمرّ عبر google_fonts كما هي.
+  /// Builds a TextStyle for the selected family: bundled Cairo is used directly with
+  /// its real weight (registered in pubspec) — avoiding synthetic bold and network
+  /// download; other fonts still go through google_fonts.
+  static TextStyle _font(
+    String font, {
+    double? fontSize,
+    FontWeight? fontWeight,
+    Color? color,
+    FontStyle? fontStyle,
+    double? letterSpacing,
+  }) {
+    if (_isBundledCairo(font)) {
+      return TextStyle(
+        fontFamily: 'Cairo',
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+        fontStyle: fontStyle,
+        letterSpacing: letterSpacing,
+      );
+    }
+    return GoogleFonts.getFont(
+      font,
+      fontSize: fontSize,
+      fontWeight: fontWeight,
+      color: color,
+      fontStyle: fontStyle,
+      letterSpacing: letterSpacing,
+    );
+  }
 }

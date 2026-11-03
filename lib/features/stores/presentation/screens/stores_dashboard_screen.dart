@@ -176,54 +176,22 @@ class StoresDashboardScreen extends ConsumerWidget {
                     : constraints.maxWidth >= 560
                     ? 2
                     : 2;
-                final spacing = 10.0;
+                final spacing = 7.0;
                 final width =
                     (constraints.maxWidth - spacing * (columns - 1)) / columns;
 
                 return Wrap(
                   spacing: spacing,
                   runSpacing: spacing,
-                  children: [
+                  children: [                    
                     SizedBox(
                       width: width,
-                      child: StoreKpiTile(
-                        icon: Icons.warehouse_rounded,
-                        label: 'مخازن فعّالة',
-                        value: '${activeStores.length}',
-                        hint: storesState.archivedCount > 0
-                            ? '${storesState.archivedCount} أرشيفي'
-                            : 'بلا مخازن أرشيفية',
-                      ),
-                    ),
-                    SizedBox(
-                      width: width,
-                      child: StoreKpiTile(
-                        icon: Icons.payments_outlined,
-                        label: 'قيمة المخزون',
-                        value: StoreFormat.money(storesState.totalValue),
-                        hint: 'من رصيد AVVG',
-                        color: AppColors.success,
-                      ),
-                    ),
-                    SizedBox(
-                      width: width,
-                      child: StoreKpiTile(
-                        icon: Icons.groups_2_outlined,
-                        label: 'أمناء المخازن',
-                        value:
-                            '${activeStores.fold<int>(0, (sum, store) => sum + store.keepers)}',
-                        hint: 'موزّعون على المخازن',
-                        color: AppColors.info,
-                      ),
-                    ),
-                    SizedBox(
-                      width: width,
+                      // height: width / 2,
                       child: StoreKpiTile(
                         icon: Icons.inventory_outlined,
-                        label: 'أصناف في المخازن',
+                        label: 'صنف فعال',
                         value:
-                            '${activeStores.fold<int>(0, (sum, store) => sum + store.items)}',
-                        hint: 'صفوف أرصدة قائمة',
+                            '${activeStores.fold<int>(0, (sum, store) => sum + store.items)}',                        
                         color: AppColors.warning,
                       ),
                     ),
@@ -240,7 +208,7 @@ class StoresDashboardScreen extends ConsumerWidget {
                             : null,
                         child: StoreKpiTile(
                           icon: Icons.trending_down_rounded,
-                          label: 'أصناف برصيد سالب',
+                          label: 'صنف برصيد سالب',
                           value: '${storesState.negativeCount}',
                           hint: storesState.negativeCount > 0
                               ? 'تحتاج مراجعة'
@@ -292,42 +260,7 @@ class StoresDashboardScreen extends ConsumerWidget {
                 );
               },
             ),
-          const SizedBox(height: 16),
-
-          // تذكير بقاعدة الأرشيف — تُعرض دائماً لأن غيابها يجعل الأرقام غير مفهومة
-          // A permanent note about archived stores: without it the numbers mislead.
-          if (storesState.archivedCount > 0)
-            Container(
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color: AppColors.warning.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(
-                  color: AppColors.warning.withValues(alpha: 0.3),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 15,
-                    color: AppColors.warning,
-                  ),
-                  SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      'المخازن الأرشيفية لا تدخل في حساب الأرصدة ولا تُنشأ عليها مستندات، '
-                      'ظهورها في القوائم للتذكير فقط.',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: AppColors.textSecondary,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          const SizedBox(height: 16),          
         ],
       ),
     );

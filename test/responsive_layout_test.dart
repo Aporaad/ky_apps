@@ -33,6 +33,7 @@ import 'package:ky_apps/features/auth/data/models/permission_snapshot_model.dart
 import 'package:ky_apps/features/auth/presentation/providers/auth_notifier.dart';
 import 'package:ky_apps/features/employee_portal/domain/portal_sections.dart';
 import 'package:ky_apps/features/employee_portal/presentation/screens/employee_main_layout.dart';
+import 'package:ky_apps/features/employee_portal/presentation/widgets/floating_nav_bar.dart';
 import 'package:ky_apps/features/employee_portal/presentation/widgets/portal_section_scope.dart';
 import 'package:ky_apps/features/home/data/models/home_layout.dart';
 import 'package:ky_apps/features/home/domain/home_card_size.dart';
@@ -607,7 +608,7 @@ void main() {
         expect(find.text(section.title), findsWidgets, reason: section.id);
       }
 
-      expect(find.byType(NavigationDestination), findsNothing);
+      expect(find.byType(FloatingNavBar), findsNothing);
     });
 
     testWidgets('a system admin gets five destinations on mobile', (
@@ -620,7 +621,9 @@ void main() {
       );
 
       expect(tester.takeException(), isNull);
-      expect(find.byType(NavigationDestination), findsNWidgets(5));
+      // الشريط العائم يرسم خمس خانات أيقونة بنفس ترتيب السجل المفلتر
+      // The floating bar renders five icon slots in registry-filtered order.
+      expect(find.byType(FloatingNavBar), findsOneWidget);
       expect(find.text('الحسابات'), findsWidgets);
     });
 
@@ -648,10 +651,10 @@ void main() {
     });
 
     testWidgets('one bar section leaves no bar at all', (tester) async {
-      // كان هذا شكل الانهيار: واجهة المستخدم بقسمٍ مسموح واحد تبني شريطاً بوجهة واحدة،
-      // و`NavigationBar` تصرّخ عند أقل من اثنتين
-      // This was the crash shape: a user with one allowed bar section built a one-destination bar,
-      // and `NavigationBar` asserts on fewer than two.
+      // كان هذا شكل الانهيار القديم: واجهة المستخدم بقسمٍ مسموح واحد تبني شريطاً بوجهة واحدة،
+      // و`NavigationBar` تصرّخ عند أقل من اثنتين — والقاعدة نفسها باقية مع الشريط العائم
+      // This was the old crash shape: a user with one allowed bar section built a one-destination
+      // bar and `NavigationBar` asserted on fewer than two. The rule stands with the floating bar.
       await pumpLayout(
         tester,
         size: const Size(360, 640),
@@ -660,7 +663,7 @@ void main() {
 
       expect(tester.takeException(), isNull);
       expect(find.text('بوابة الموظف'), findsOneWidget);
-      expect(find.byType(NavigationDestination), findsNothing);
+      expect(find.byType(FloatingNavBar), findsNothing);
     });
 
     testWidgets('the guidance screen explains a portal with no sections', (

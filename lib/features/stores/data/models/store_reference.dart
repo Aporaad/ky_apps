@@ -172,6 +172,57 @@ class StoreMovementTypeModel {
   }
 }
 
+/// عملة من `ACCOUNTS.CURRENCY` — خانتا العملة في رأس المستند
+/// A currency row from ACCOUNTS.CURRENCY — the two currency boxes of the document header.
+class StoreCurrencyModel {
+  const StoreCurrencyModel({required this.curNo, required this.name});
+
+  final int curNo;
+  final String name;
+
+  factory StoreCurrencyModel.fromJson(Map<String, dynamic> json) =>
+      StoreCurrencyModel(
+        curNo: JsonValues.asInt(json['CUR_NO'] ?? json['cur_no']),
+        name: JsonValues.arabicOrEmpty(json['CUR_NAME'] ?? json['cur_name']),
+      );
+}
+
+/// لون صنف من `ACCOUNTS.SANFS_COLOR`
+/// An item colour from ACCOUNTS.SANFS_COLOR.
+class StoreColorModel {
+  const StoreColorModel({
+    required this.colorNo,
+    required this.name,
+    this.colorType = 0,
+  });
+
+  final int colorNo;
+  final String name;
+  final int colorType;
+
+  factory StoreColorModel.fromJson(Map<String, dynamic> json) =>
+      StoreColorModel(
+        colorNo: JsonValues.asInt(json['COLOR_NO'] ?? json['color_no']),
+        name: JsonValues.arabicOrEmpty(json['COLOR_NAME'] ?? json['color_name']),
+        colorType: JsonValues.asInt(json['COLOR_TYPE'] ?? json['color_type']),
+      );
+}
+
+/// حساب من دليل الحسابات — نتيجة مُنتقي «حساب المخزن / حساب دائن»
+/// A chart-of-accounts row — the result of the store/counter account picker.
+class StoreAccountOption {
+  const StoreAccountOption({required this.accNo, required this.name});
+
+  final int accNo;
+  final String name;
+
+  factory StoreAccountOption.fromJson(Map<String, dynamic> json) =>
+      StoreAccountOption(
+        accNo: JsonValues.asInt(json['ACC_NO'] ?? json['acc_no']),
+        name: JsonValues.arabicOrEmpty(json['ACC_NAME'] ?? json['acc_name']),
+      );
+}
+
 /// حزمة المراجع التي تُغذّي كل نوافذ التصفية في القسم — طلب واحد
 /// The reference bundle behind every filter sheet in the module — one round-trip.
 class StoreReference {
@@ -183,6 +234,8 @@ class StoreReference {
     this.units = const [],
     this.movementTypes = const [],
     this.styles = const [],
+    this.currencies = const [],
+    this.colors = const [],
     this.excludedStores = const [],
     this.maxRangeDays = 731,
   });
@@ -194,6 +247,11 @@ class StoreReference {
   final List<StoreUnitModel> units;
   final List<StoreMovementTypeModel> movementTypes;
   final List<StoreStyleModel> styles;
+
+  /// العملات وألوان الأصناف — يحتاجها نموذج المستند لا نافذة التصفية فقط
+  /// Currencies and colours: the document form needs them, not just the filter sheet.
+  final List<StoreCurrencyModel> currencies;
+  final List<StoreColorModel> colors;
 
   /// المخازن الأرشيفية التي لا تدخل في الأرصدة
   /// Archived stores that never carry a balance.
@@ -251,6 +309,8 @@ class StoreReference {
       units: list('units', StoreUnitModel.fromJson),
       movementTypes: list('movement_types', StoreMovementTypeModel.fromJson),
       styles: list('styles', StoreStyleModel.fromJson),
+      currencies: list('currencies', StoreCurrencyModel.fromJson),
+      colors: list('colors', StoreColorModel.fromJson),
       excludedStores: JsonValues.asIntList(json['excluded_stores']),
       maxRangeDays: JsonValues.asInt(json['max_range_days'], fallback: 731),
     );

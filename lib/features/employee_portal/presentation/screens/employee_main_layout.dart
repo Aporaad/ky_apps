@@ -6,6 +6,7 @@ import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../../auth/presentation/providers/permissions_notifier.dart';
 import '../../domain/portal_sections.dart';
 import '../widgets/collapsible_side_drawer.dart';
+import '../widgets/floating_nav_bar.dart';
 import '../widgets/portal_section_scope.dart';
 
 /// الهيكل الرئيسي لبوابة الموظف المتجاوب بالكامل مع مختلف أحجام الشاشات
@@ -332,13 +333,13 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
         // The bar lists only the sections that are both allowed and flagged for it. Previously its
         // fifth destination indexed the fourth of nine children, so «الحسابات» opened «جاري العاملين».
         //
-        // ويغيب تحت وجهتين: `NavigationBar` نفسها تصرخ على أقل من اثنتين، وموظفٌ بمنح قسم واحد
+        // ويغيب تحت وجهتين: الشريط العائم بلا معنى مع وجهة واحدة، وموظفٌ بمنح قسم واحد
         // في الشريط لا يحتاج شريطاً — الواجهة التي تنهار أسوأ من الواجهة الفارغة.
-        // It also disappears below two destinations: `NavigationBar` asserts on fewer than two, and
+        // It also disappears below two destinations: a floating bar with one tab is pointless, and
         // a worker whose grants open one bar section gains nothing from a bar anyway.
         bottomNavigationBar: barSections.length < 2
             ? null
-            : NavigationBar(
+            : FloatingNavBar(
                 selectedIndex: _barIndexFor(
                   barSections,
                   visible[currentIndex].id,
@@ -349,14 +350,7 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                     _currentSectionId = barSections[idx].id;
                   });
                 },
-                destinations: [
-                  for (final section in barSections)
-                    NavigationDestination(
-                      icon: Icon(section.icon),
-                      selectedIcon: Icon(section.selectedIcon ?? section.icon),
-                      label: section.title,
-                    ),
-                ],
+                sections: barSections,
               ),
       );
     }

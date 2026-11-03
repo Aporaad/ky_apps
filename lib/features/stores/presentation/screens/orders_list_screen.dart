@@ -654,8 +654,16 @@ class _OrdersListScreenState extends ConsumerState<OrdersListScreen> {
   }
 }
 
-/// بطاقة مستند في القائمة
-/// One document card in the list.
+/// بطاقة مستند في القائمة — قالب رسمي واحد للأوامر الثلاثة
+/// A document card in the list — one formal template shared by the three order kinds.
+///
+/// ── لماذا شبكة مُساواة لا رصّ شرائح حر؟ لأن القائمة تُقرأ عمودياً: المستخدم يقارن أرقام
+///    المخازن والمبالغ سطراً بسطر. الرصّ الحر (Wrap) يجعل كل بطاقة بارتفاع مختلف فتتفكك
+///    المقارنة. هنا خانات متساوية بحدود، وشريط مبالغ بثلاث خانات محاذية، وذيل تدقيق.
+/// ── Why an aligned grid rather than a free-flowing chip wrap? A list is read vertically: the
+///    user compares stores and figures line against line. A free wrap gives every card a
+///    different height and breaks that comparison. Here: equal bordered cells, a three-cell
+///    money strip, and an audit footer.
 class _OrderCard extends StatelessWidget {
   const _OrderCard({
     required this.order,
@@ -679,6 +687,14 @@ class _OrderCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
+  /// لون التمييز لكل نوع مستند — يبقى النوع متعرَّفاً بلمحة حتى بعد التمرير السريع
+  /// The kind's accent, so the document type stays recognisable at a glance.
+  Color get _accent => switch (kind) {
+    StoreOrderKind.receive => AppColors.success,
+    StoreOrderKind.issue => AppColors.warning,
+    StoreOrderKind.transfer => AppColors.info,
+  };
+
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -688,152 +704,396 @@ class _OrderCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
               color: selected ? AppColors.primary : AppColors.border,
+              width: selected ? 1.4 : 1,
             ),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  if (selectionMode)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Icon(
-                        selected
-                            ? Icons.check_circle_rounded
-                            : Icons.radio_button_unchecked_rounded,
-                        size: 19,
-                        color: selected ? AppColors.primary : AppColors.textMuted,
-                      ),
-                    ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.09),
-                      borderRadius: BorderRadius.circular(7),
-                    ),
-                    child: Text(
-                      order.reference,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      order.dateLabel,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        color: AppColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    StoreFormat.money(order.net),
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.success,
-                    ),
-                  ),
-                  if (!selectionMode && (canUpdate || canDelete))
-                    PopupMenuButton<String>(
-                      tooltip: 'إجراءات',
-                      onSelected: (value) {
-                        if (value == 'view') onTap();
-                        if (value == 'edit') onEdit();
-                        if (value == 'delete') onDelete();
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'view',
-                          child: ListTile(
-                            dense: true,
-                            contentPadding: EdgeInsets.zero,
-                            leading: Icon(Icons.visibility_outlined, size: 18),
-                            title: Text('عرض'),
-                          ),
-                        ),
-                        if (canUpdate)
-                          const PopupMenuItem(
-                            value: 'edit',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(Icons.edit_outlined, size: 18),
-                              title: Text('تعديل'),
-                            ),
-                          ),
-                        if (canDelete)
-                          const PopupMenuItem(
-                            value: 'delete',
-                            child: ListTile(
-                              dense: true,
-                              contentPadding: EdgeInsets.zero,
-                              leading: Icon(
-                                Icons.delete_outline_rounded,
-                                size: 18,
-                                color: AppColors.error,
-                              ),
-                              title: Text(
-                                'حذف',
-                                style: TextStyle(color: AppColors.error),
-                              ),
-                            ),
-                          ),
+          clipBehavior: Clip.antiAlias,
+          // ── IntrinsicHeight ضروري هنا: `Row` بـ`CrossAxisAlignment.stretch` داخل قائمة بارتفاع
+          //    غير محدود يطلب ارتفاعاً لا نهائياً لشريط النوع، فيرمي
+          //    «BoxConstraints forces an infinite height» وتملأ الشاشة خطأً أحمر.
+          // ── IntrinsicHeight is required: a stretched Row inside an unbounded-height list asks
+          //    for an infinite height for the kind rail, throwing "BoxConstraints forces an
+          //    infinite height" and filling the screen with a red error box.
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // شريط النوع على حافة البطاقة (يظهر يميناً في RTL)
+                // The kind rail on the card edge — it lands on the right under RTL.
+                Container(width: 4, color: _accent),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _titleRow(),
+                        const SizedBox(height: 8),
+                        _infoRow(),
+                        const SizedBox(height: 8),
+                        _moneyRow(),
+                        if (order.detailes != null &&
+                            order.detailes!.isNotEmpty) ...[
+                          const SizedBox(height: 7),
+                          _noteLine(order.detailes!),
+                        ],
+                        const SizedBox(height: 6),
+                        _auditLine(),
                       ],
                     ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                kind.hasParty
-                    ? (order.partyName ?? '—')
-                    : 'إلى: ${order.storeToName ?? '—'}',
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
+                  ),
                 ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  StoreTag(
-                    label: order.storeName ?? 'مخزن ${order.storeNo}',
-                    icon: Icons.warehouse_outlined,
-                  ),
-                  StoreTag(
-                    label: '${order.lines} سطر',
-                    icon: Icons.list_alt_rounded,
-                    color: AppColors.info,
-                  ),
-                  if (order.detailes != null)
-                    StoreTag(
-                      label: order.detailes!,
-                      icon: Icons.notes_rounded,
-                      color: AppColors.secondary,
-                    ),
-                ],
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
+
+  /// سطر العنوان: المربع المحدّد (إن كان وضع التحديد) + أيقونة النوع + الرقم + الإجراءات
+  /// Title line: selection box, kind icon, reference, and the per-row actions.
+  Widget _titleRow() {
+    return Row(
+      children: [
+        if (selectionMode)
+          Padding(
+            padding: const EdgeInsets.only(left: 6),
+            child: Icon(
+              selected
+                  ? Icons.check_circle_rounded
+                  : Icons.radio_button_unchecked_rounded,
+              size: 20,
+              color: selected ? AppColors.primary : AppColors.textMuted,
+            ),
+          ),
+        Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: _accent.withValues(alpha: 0.12),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(kind.icon, size: 17, color: _accent),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${kind.documentLabel} رقم ${order.billNo}',
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+              Text(
+                '${order.dateLabel} · ${order.reference}',
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  color: AppColors.textMuted,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        // نوع الفاتورة كما في النظام المكتبي: نقد / آجل
+        // The bill type as the desktop prints it: cash or credit.
+        _pill(
+          label: order.billTypeLabel,
+          icon: order.billType == 2
+              ? Icons.schedule_rounded
+              : Icons.payments_outlined,
+          color: order.billType == 2 ? AppColors.warning : AppColors.success,
+        ),
+        if (!selectionMode) _actions(),
+      ],
+    );
+  }
+
+  /// خانات البيانات المتساوية: المخزن · الطرف/الهدف · الأصناف والكمية
+  /// Equal data cells: store · party or destination · item and quantity count.
+  Widget _infoRow() {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: _cell(
+              label: kind.hasTargetStore ? 'من مخزن' : 'المخزن',
+              value: order.storeName ?? 'مخزن ${order.storeNo}',
+              icon: Icons.warehouse_outlined,
+            ),
+          ),
+          _vDivider(),
+          Expanded(
+            child: _cell(
+              label: kind.hasTargetStore
+                  ? 'إلى مخزن'
+                  : kind == StoreOrderKind.receive
+                  ? 'المورد'
+                  : 'الجهة المستلمة',
+              value: order.partyLabel(kind),
+              icon: kind.hasTargetStore
+                  ? Icons.call_made_rounded
+                  : Icons.badge_outlined,
+            ),
+          ),
+          _vDivider(),
+          Expanded(
+            child: _cell(
+              label: 'السطور / الكمية',
+              value: '${order.lines} · ${StoreFormat.qty(order.qtySum)}',
+              icon: Icons.list_alt_rounded,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// شريط المبالغ: الإجمالي · الخصم · الصافي في ثلاث خانات محاذية
+  /// The money strip: total, discount and net in three aligned cells.
+  Widget _moneyRow() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(9),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: _moneyCell(
+                label: 'الإجمالي',
+                value: StoreFormat.money(order.total),
+              ),
+            ),
+            _vDivider(),
+            Expanded(
+              child: _moneyCell(
+                label: 'الخصم${order.discountRate > 0 ? ' (${StoreFormat.qty(order.discountRate)}%)' : ''}',
+                value: StoreFormat.money(order.discount),
+              ),
+            ),
+            _vDivider(),
+            Expanded(
+              child: _moneyCell(
+                label: 'الصافي',
+                value: StoreFormat.money(order.net),
+                emphasis: true,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// البيان — سطر واحد مقصوص، لأن البطاقة ليست شاشة تفصيل
+  /// The description — one clipped line; the card is not a detail screen.
+  Widget _noteLine(String note) {
+    return Row(
+      children: [
+        const Icon(Icons.notes_rounded, size: 14, color: AppColors.textMuted),
+        const SizedBox(width: 5),
+        Expanded(
+          child: Text(
+            note,
+            style: TextStyle(
+              fontSize: 10.5,
+              color: AppColors.textSecondary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// ذيل التدقيق: من أدخل المستند ومتى، ومن عدّله آخر مرة إن وُجد
+  /// Audit footer: who entered the document and when, plus the last edit when there is one.
+  Widget _auditLine() {
+    final editor = order.lastUpdatedByName;
+
+    return Row(
+      children: [
+        const Icon(Icons.person_outline_rounded, size: 13, color: AppColors.textMuted),
+        const SizedBox(width: 4),
+        Expanded(
+          child: Text(
+            editor == null
+                ? 'أدخلة: ${order.createdByName ?? '—'} · ${order.createdStamp}'
+                : 'أدخلة: ${order.createdByName ?? '—'} · عُدّل بواسطة $editor',
+            style: const TextStyle(
+              fontSize: 9.5,
+              color: AppColors.textMuted,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// إجراءات ظاهرة بجانب كل أمر (عرض · تعديل · حذف) بدل قائمة مخفية
+  /// Actions visible beside every document (view · edit · delete), not hidden in a menu.
+  Widget _actions() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: 'عرض',
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+          onPressed: onTap,
+          icon: const Icon(Icons.visibility_outlined, size: 18),
+        ),
+        if (canUpdate)
+          IconButton(
+            tooltip: 'تعديل',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            onPressed: onEdit,
+            icon: const Icon(Icons.edit_outlined, size: 18),
+          ),
+        if (canDelete)
+          IconButton(
+            tooltip: 'حذف',
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+            onPressed: onDelete,
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              size: 18,
+              color: AppColors.error,
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _cell({
+    required String label,
+    required String value,
+    required IconData icon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 12, color: AppColors.textMuted),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    color: AppColors.textMuted,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _moneyCell({
+    required String label,
+    required String value,
+    bool emphasis = false,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9.5, color: AppColors.textMuted),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 1),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: emphasis ? 12.5 : 11.5,
+              fontWeight: emphasis ? FontWeight.w800 : FontWeight.w600,
+              color: emphasis ? AppColors.primary : AppColors.textPrimary,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _pill({
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(left: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: color),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9.5,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _vDivider() =>
+      Container(width: 1, margin: const EdgeInsets.symmetric(vertical: 2), color: AppColors.border);
 }

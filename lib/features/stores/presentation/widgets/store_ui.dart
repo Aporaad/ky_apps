@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
+import '../../../../core/utils/arabic_number_words.dart';
 
 /// أدوات عرض مشتركة لكل شاشات المخازن: تنسيق الأرقام وحالات التحميل/الفراغ/الخطأ
 /// Shared display helpers for every stores screen: number formatting and the
@@ -39,6 +40,21 @@ class StoreFormat {
 
     return '$grouped.${parts.last}';
   }
+
+  /// تفقيط الصافي بالحروف — السطر الذي يطبعه المستند المكتبي تحت خانة الصافي
+  /// The net figure spelled in words — the line the desktop prints under the net box.
+  ///
+  /// يُمرَّر اسم العملة فعلياً لأن المستند قد يكون بدولار أو ريال سعودي، وطباعة «﷼ يمني»
+  /// تحت مبلغ بالدولار خطأ مالي لا تجميلي.
+  /// The currency name is passed through: printing "Yemeni Rial" under a dollar amount is a
+  /// factual error, not a cosmetic one.
+  static String amountInWords(double value, {String? currencyName}) =>
+      ArabicNumberWords.amount(
+        value,
+        currency: currencyName == null || currencyName.isEmpty
+            ? '﷼ يمني'
+            : currencyName,
+      );
 
   /// تاريخ بصيغة `YYYY-MM-DD`
   /// A date as `YYYY-MM-DD`.
@@ -230,12 +246,20 @@ class StoreKpiTile extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(7),
+                padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
                   color: tint.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(icon, size: 16, color: tint),
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
+                    color: tint == AppColors.primary ? AppColors.textPrimary : tint,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
               const SizedBox(width: 8),
               Expanded(
@@ -250,24 +274,6 @@ class StoreKpiTile extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.bold,
-              color: tint == AppColors.primary ? AppColors.textPrimary : tint,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (hint != null) ...[
-            const SizedBox(height: 2),
-            Text(
-              hint!,
-              style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
         ],
       ),
     );

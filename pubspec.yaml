@@ -94,6 +94,20 @@ flutter:
      # Bundled Cairo TTF for PDF reports — removes the runtime Google-Fonts download that
      # failed on an offline LAN and made every Arabic string render as symbols.
      - assets/fonts/
+
+  # عائلة Cairo كخط مضمّن حقيقي بأوزانه (عادي 400 + عريض 700). الإعلان هنا يجعل
+  # Flutter يملك وزن Cairo العريض فعلياً، فلا يلجأ إلى «العريض الاصطناعي» (synthetic
+  # bold) الذي كان يدمج الحروف المتصلة ويشوّه حروفاً مثل «و» و«ص» في العناوين والنصوص
+  # العريضة. يُستخدم هذا العائلة نفسها في السمة عند اختيار Cairo (بدون تنزيل شبكي).
+  # Cairo declared as a real bundled family with its weights so Flutter has an actual
+  # bold face and never synthesises bold (which distorted و/ص in titles & bold text).
+  fonts:
+    - family: Cairo
+      fonts:
+        - asset: assets/fonts/Cairo-Regular.ttf
+          weight: 400
+        - asset: assets/fonts/Cairo-Bold.ttf
+          weight: 700
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see

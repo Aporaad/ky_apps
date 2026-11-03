@@ -86,7 +86,16 @@ class ItemModel {
       buyPrice:
           JsonValues.asDoubleOrNull(json['BUY_PRICE'] ?? json['buy_price']) ?? 0,
       cap: JsonValues.asDoubleOrNull(json['CAP'] ?? json['cap']) ?? 0,
-      mainColor: JsonValues.asArabic(json['MAIN_COLOR'] ?? json['main_color']),
+      // ── العمود الحقيقي في `ACCOUNTS.SANFS` هو `MCOLOR` (لا `MAIN_COLOR`).
+      //    نقرأ الجديد أولاً ونُبقي القديم كاحتياط لخادم أقدم.
+      // ── The real column on `ACCOUNTS.SANFS` is `MCOLOR` (not `MAIN_COLOR`).
+      //    Read the real one first and keep the old key as a fallback.
+      mainColor: JsonValues.asArabic(
+        json['MCOLOR'] ??
+            json['mcolor'] ??
+            json['MAIN_COLOR'] ??
+            json['main_color'],
+      ),
       styleNo: JsonValues.asIntOrNull(json['STYL_NO'] ?? json['styl_no']),
       styleName: JsonValues.asArabic(json['STYLE_NAME'] ?? json['style_name']),
       active: JsonValues.asFlag(json['ACTIVE'] ?? json['active'], fallback: true),
@@ -113,6 +122,9 @@ class ItemSubModel {
     this.colorNo = 0,
     this.price = 0,
     this.unitNo,
+    this.cap = 0,
+    this.category,
+    this.colorName,
     this.active = true,
   });
 
@@ -127,6 +139,15 @@ class ItemSubModel {
   final int colorNo;
   final double price;
   final int? unitNo;
+
+  /// عبوة الصنف الفرعي (`SANFS_D.CAP`) — منها تبدأ خانتا «عبوة/قطعة» في السطر
+  /// The sub item's pack size, which seeds the line's pack and pieces boxes.
+  final double cap;
+
+  /// التصنيف والنص اللوني كما يخزّنهما الصنف الفرعي — عمودان في المستند المطبوع
+  /// Classification and colour text carried by the sub item — two document columns.
+  final String? category;
+  final String? colorName;
   final bool active;
 
   /// المقاس بصيغة `الطول×العرض` كما يعرضه النظام القديم
@@ -152,12 +173,15 @@ class ItemSubModel {
       name: JsonValues.asArabic(json['SANF_DNAME'] ?? json['sanf_dname']) ??
           JsonValues.asArabic(json['SANF_NAME'] ?? json['sanf_name']),
       code: JsonValues.asText(json['SANF_COCE'] ?? json['sanf_coce']),
-      barcode: JsonValues.asText(json['BARACOCE']),
+      barcode: JsonValues.asText(json['BARACOCE'] ?? json['baracoce']),
       len: JsonValues.asDoubleOrNull(json['LEN'] ?? json['len']) ?? 0,
       wid: JsonValues.asDoubleOrNull(json['WID'] ?? json['wid']) ?? 0,
       colorNo: JsonValues.asInt(json['COLOR_NO'] ?? json['color_no']),
+      colorName: JsonValues.asArabic(json['COLOR_NAME'] ?? json['color_name']),
+      category: JsonValues.asArabic(json['CATEGORY'] ?? json['category']),
       price: JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ?? 0,
       unitNo: JsonValues.asIntOrNull(json['UNIT_NO'] ?? json['unit_no']),
+      cap: JsonValues.asDoubleOrNull(json['CAP'] ?? json['cap']) ?? 0,
       active: JsonValues.asFlag(json['ACTIVE'] ?? json['active'], fallback: true),
     );
   }

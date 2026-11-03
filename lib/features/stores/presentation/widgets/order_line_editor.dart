@@ -15,6 +15,13 @@ class OrderLineDraft {
     required this.qty,
     required this.price,
     this.available,
+    this.unitName,
+    this.subPartNo,
+    this.category,
+    this.colorName,
+    this.cap = 1,
+    this.shelfNo = 0,
+    this.colorNo = 0,
   });
 
   final ItemModel item;
@@ -22,11 +29,32 @@ class OrderLineDraft {
   double qty;
   double price;
 
+  /// الوحدة والتصنيف واللون: خانات يطبعها المستند، وبعضها قابل للتحرير كما في النظام المكتبي
+  /// Unit, classification and colour are document boxes; some of them are editable there.
+  final String? unitName;
+  final String? subPartNo;
+  String? category;
+  final String? colorName;
+
   /// المتاح في المخزن المختار لحظة الإضافة — للتحقق الفوري
   /// The available quantity in the chosen store at insert time, for instant validation.
   double? available;
 
+  /// عبوة (كمية القطع في العبوة) — منها تُحسب القطعة
+  /// Pack size, from which the piece count is derived.
+  double cap;
+  int shelfNo;
+  int colorNo;
+
   double get total => qty * price;
+
+  /// قطعة = الكمية × العبوة، وهو ما يظهر في عمود «قطعة» بالمستند
+  /// Pieces = quantity × pack, the document's «قطعة» column.
+  double get pcs => qty * cap;
+
+  String get sizeLabel => sub.sizeLabel;
+
+  String get unitLabel => unitName ?? item.unitName ?? '—';
 
   String get key => '${item.sanfNo}|${sub.sanfDno}';
 }
@@ -112,6 +140,12 @@ class OrderLineEditor extends ConsumerWidget {
                 onQtyChanged: (value) => _mutate(index, (line) => line.qty = value),
                 onPriceChanged: (value) =>
                     _mutate(index, (line) => line.price = value),
+                // العبوة تتغيّر يدوياً كما في خانتها في النموذج المكتبي، والقطعة تُشتق منها
+                // Pack is edited by hand exactly as the desktop box allows; pieces derive from it.
+                onCapChanged: (value) => _mutate(
+                  index,
+                  (line) => line.cap = value > 0 ? value : 1,
+                ),
                 onRemove: () {
                   final updated = [...lines]..removeAt(index);
                   onChanged(updated);
@@ -159,6 +193,14 @@ class OrderLineEditor extends ConsumerWidget {
         qty: picked.qty,
         price: picked.price,
         available: picked.available,
+        // العبوة الافتراضية من الصنف نفسه: 1 إن لم يُسجّل، فلا يبقى عمود «عبوة» فارغاً
+        // The pack size defaults to the item's own, or 1, so the pack column is never blank.
+        cap: picked.sub.cap > 0 ? picked.sub.cap : 1,
+        unitName: picked.item.unitName,
+        subPartNo: picked.sub.partNo,
+        colorNo: picked.sub.colorNo,
+        category: picked.sub.category,
+        colorName: picked.sub.colorName,
       ),
     ]);
   }
@@ -170,6 +212,7 @@ class _LineCard extends StatelessWidget {
     required this.priceLabel,
     required this.onQtyChanged,
     required this.onPriceChanged,
+    required this.onCapChanged,
     required this.onRemove,
   });
 
@@ -177,6 +220,7 @@ class _LineCard extends StatelessWidget {
   final String priceLabel;
   final ValueChanged<double> onQtyChanged;
   final ValueChanged<double> onPriceChanged;
+  final ValueChanged<double> onCapChanged;
   final VoidCallback onRemove;
 
   @override
@@ -199,7 +243,10 @@ class _LineCard extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  line.item.name,
+                  // اسم الصنف الفرعي أولاً: هو ما يطبعه المستند، والرئيسي يُذكر تحته بالكود
+                  // The sub-item name first: that is what the document prints; the main item
+                  // is identified by its code beneath.
+                  line.sub.name ?? line.item.name,
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.bold,
@@ -220,12 +267,7 @@ class _LineCard extends StatelessWidget {
               ),
             ],
           ),
-          Text(
-            'كود ${line.item.partNo} · مقاس ${line.sub.sizeLabel}'
-            ' · لون ${line.sub.colorNo}',
-            style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-            overflow: TextOverflow.ellipsis,
-          ),
+          _attributeStrip(line),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -246,22 +288,31 @@ class _LineCard extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               Expanded(
+                child: _number(
+                  label: 'عبوة',
+                  value: line.cap,
+                  onChanged: onCapChanged,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     const Text(
-                      'الإجمالي',
+                      'الإجمالي / قطعة',
                       style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      StoreFormat.money(line.total),
+                      '${StoreFormat.money(line.total)} · ${StoreFormat.qty(line.pcs)}',
                       style: const TextStyle(
-                        fontSize: 12.5,
+                        fontSize: 11.5,
                         fontWeight: FontWeight.bold,
                         color: AppColors.success,
                       ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -282,6 +333,55 @@ class _LineCard extends StatelessWidget {
           ],
         ],
       ),
+    );
+  }
+
+  /// شريط خواص الصنف الفرعي — نفس أعمدة جدول النظام: الوحدة · طول · عرض · التصنيف · اللون · الرف
+  /// The sub-item attribute strip — the legacy grid's own columns, shelf included.
+  ///
+  /// يُعرض ولا يُحرَّر إلا حيث يحرره النظام: الرف والتصنيف قابلان للتعديل هنا لأن المستند
+  /// يخزّنهما في السطر نفسه، فتركهما للقراءة فقط يعني أن المستخدم لا يستطيع تصحيحهما.
+  /// Only what the desktop lets you edit here is editable: shelf and classification live on the
+  /// line itself, so locking them would leave the user unable to correct a document.
+  static Widget _attributeStrip(OrderLineDraft line) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceSubtle,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        spacing: 12,
+        runSpacing: 4,
+        children: [
+          _chip('الوحدة', line.unitLabel),
+          _chip('طول', StoreFormat.qty(line.sub.len)),
+          _chip('عرض', StoreFormat.qty(line.sub.wid)),
+          _chip('الفرعي', line.subPartNo ?? '${line.sub.sanfDno}'),
+          _chip('اللون', line.colorName ?? '${line.colorNo}'),
+        ],
+      ),
+    );
+  }
+
+  static Widget _chip(String label, String value) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          '$label: ',
+          style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
     );
   }
 
