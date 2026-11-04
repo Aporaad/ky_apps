@@ -189,6 +189,8 @@ class StockMovementRow {
     this.groupName,
     this.typeNameDetail,
     this.category,
+    this.subName,
+    this.colorName,
   });
 
   final DateTime? date;
@@ -210,6 +212,23 @@ class StockMovementRow {
   final String? groupName;
   final String? typeNameDetail;
   final String? category;
+
+  /// اسم الفرع الذي حرّك السطر — كشف حركة الصنف الرئيسي «بكامل فروعه» يحتاج تمييز السطر
+  /// The branch that moved the line — the main item's statement must name its branches.
+  final String? subName;
+  final String? colorName;
+
+  /// وصف الفرع كما يُعرض: الاسم أو المقاس، ثم اللون إن وُجد
+  /// The branch label: its name or size, then its colour when present.
+  String get subLabel {
+    final name = subName?.trim();
+
+    if (name != null && name.isNotEmpty) return name;
+
+    if (sanfDno != null) return 'فرع $sanfDno';
+
+    return '—';
+  }
 
   String get dateLabel => JsonValues.formatDate(date, withTime: false);
 
@@ -235,6 +254,12 @@ class StockMovementRow {
       groupName: JsonValues.asArabic(json['GROUP_NAME'] ?? json['group_name']),
       typeNameDetail: JsonValues.asArabic(json['TYPE_NAME'] ?? json['type_name']),
       category: JsonValues.asArabic(json['CAT_NAME'] ?? json['cat_name']),
+      subName: JsonValues.asArabic(
+        json['SUB_NAME'] ?? json['sub_name'] ?? json['SANF_DNAME'] ?? json['sanf_dname'],
+      ),
+      colorName: JsonValues.asArabic(
+        json['COLOR_NAME'] ?? json['color_name'],
+      ),
     );
   }
 }

@@ -780,6 +780,113 @@ Future<Uint8List> buildStockSheetPdf({
   return doc.save();
 }
 
+/// مولّد PDF لكشف حركة صنف (الصنف الرئيسي بكامل فروعه أو فرع واحد)
+/// The PDF builder of an item movement statement (the main item with all branches, or one branch).
+///
+/// ── الأعمدة تشمل «الفرع» دائماً: كشف الصنف الرئيسي يجمع حركات كل فروعه، وبلا هذا العمود
+///    يصبح السطر بلا هوية ويسأل المراجع «أي فرع تحرّك؟».
+/// ── The branch column is always present: a main item's statement merges all its branches, and
+///    without it a line has no identity, leaving the reviewer asking which branch moved.
+Future<Uint8List> buildItemStatementPdf({
+  required ReportLetterheadInfo letterhead,
+  required String itemName,
+  required String branchLabel,
+  required String rangeText,
+  required List<StockMovementRow> rows,
+  required double qtyIn,
+  required double qtyOut,
+  required double netQty,
+  required double totalValue,
+}) async {
+  final theme = await ReportPdfFonts.theme();
+  final doc = pw.Document(theme: theme);
+  final logo = await loadPdfLetterheadLogo(height: 46);
+
+  doc.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4.landscape,
+      margin: const pw.EdgeInsets.all(20),
+      textDirection: pw.TextDirection.rtl,
+      header: (context) => buildReportPdfHeader(
+        letterhead: letterhead,
+        title: 'كشف حركة صنف — $itemName',
+        logo: logo,
+        metaSection: pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.stretch,
+          children: [
+            pw.Text(
+              pdfArabic('الفرع: $branchLabel'),
+              style: const pw.TextStyle(fontSize: 10),
+            ),
+            pw.Text(
+              pdfArabic(rangeText),
+              style: const pw.TextStyle(fontSize: 9.5),
+            ),
+          ],
+        ),
+      ),
+      footer: (context) => buildReportPdfFooter(context),
+      build: (context) => [
+        pw.TableHelper.fromTextArray(
+          border: pw.TableBorder.all(
+            color: ReportPdfColors.border,
+            width: 0.4,
+          ),
+          headerDecoration: const pw.BoxDecoration(
+            color: ReportPdfColors.headerBg,
+          ),
+          headerStyle: pw.TextStyle(
+            fontSize: 8,
+            fontWeight: pw.FontWeight.bold,
+          ),
+          cellStyle: const pw.TextStyle(fontSize: 7.5),
+          headers: [
+            'التاريخ',
+            'المستند',
+            'نوع الحركة',
+            'المخزن',
+            'الفرع',
+            'وارد',
+            'صادر',
+            'التكلفة',
+            'القيمة',
+          ]
+              .reversed
+              .map((header) => pdfArabic(header))
+              .toList(growable: false),
+          data: [
+            for (final row in rows)
+              [
+                row.dateLabel,
+                '${row.docNo ?? ''}',
+                row.typeName ?? '—',
+                row.storeName ?? '${row.storeNo}',
+                row.subLabel,
+                row.qtyIn == 0 ? '' : StoreFormat.qty(row.qtyIn),
+                row.qtyOut == 0 ? '' : StoreFormat.qty(row.qtyOut),
+                StoreFormat.money(row.cost),
+                StoreFormat.money(row.lineValue),
+              ].reversed.map((cell) => pdfArabic(cell)).toList(growable: false),
+          ],
+        ),
+        pw.SizedBox(height: 8),
+        pw.Text(
+          pdfArabic(
+            'الأسطر ${rows.length} · '
+            'وارد ${StoreFormat.qty(qtyIn)} · '
+            'صادر ${StoreFormat.qty(qtyOut)} · '
+            'الصافي ${StoreFormat.qty(netQty)} · '
+            'القيمة ${StoreFormat.money(totalValue)}',
+          ),
+          style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold),
+        ),
+      ],
+    ),
+  );
+
+  return doc.save();
+}
+
 /// مولّد XLSX لتقارير المخازن والأرصدة
 /// The XLSX builder of the stores reports and balances.
 List<int> buildStoreRowsXlsx({

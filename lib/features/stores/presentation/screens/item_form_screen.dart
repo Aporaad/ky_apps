@@ -64,6 +64,10 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
   bool _saving = false;
   String? _formError;
 
+  /// هل زُرعت الافتراضيات؟ تُزرع مرة واحدة بعد وصول المراجع، لا في كل بناء
+  /// Were the defaults seeded? Seeded once after the reference arrives, never on every build.
+  bool _seeded = false;
+
   bool get _isEdit => widget.item != null;
 
   @override
@@ -114,21 +118,38 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
           ),
         ),
         data: (refs) {
-          // الافتراضيات عند الإنشاء: أول مجموعة ثم أول نوع تحتها ثم أول نمط تابع للنوع
-          // Creation defaults: the first group, its first type, then the first style of it.
-          if (!_isEdit && _groupNo == null && refs.groups.isNotEmpty) {
-            _groupNo = refs.groups.first.groupNo;
-            final types = refs.typesOfGroup(_groupNo);
+          // ── الافتراضيات تُزرع مرة واحدة فقط: إعادة زرعها في كل بناء تلغي ما اختاره المستخدم
+          //    وتجعل القوائم تقفز من تحت يده.
+          // ── Defaults are seeded exactly once: reseeding on every build would overwrite the
+          //    user's own choices and make the lists jump underneath them.
+          if (!_seeded) {
+            _seeded = true;
 
-            if (types.isNotEmpty) _typeNo = types.first.typeNo;
-          }
+            if (!_isEdit) {
+              if (_groupNo == null && refs.groups.isNotEmpty) {
+                _groupNo = refs.groups.first.groupNo;
+              }
 
-          if (!_isEdit && _unitNo == null && refs.units.isNotEmpty) {
-            _unitNo = refs.units.first.unitNo;
-          }
+              if (_typeNo == null) {
+                final groupTypes = refs.typesOfGroup(_groupNo);
 
-          if (!_isEdit && _catNo == null && refs.categories.isNotEmpty) {
-            _catNo = refs.categories.first.id;
+                if (groupTypes.isNotEmpty) _typeNo = groupTypes.first.typeNo;
+              }
+
+              if (_styleNo == null) {
+                final typeStyles = refs.stylesOfType(_typeNo);
+
+                if (typeStyles.isNotEmpty) _styleNo = typeStyles.first.id;
+              }
+
+              if (_unitNo == null && refs.units.isNotEmpty) {
+                _unitNo = refs.units.first.unitNo;
+              }
+
+              if (_catNo == null && refs.categories.isNotEmpty) {
+                _catNo = refs.categories.first.id;
+              }
+            }
           }
 
           final types = refs.typesOfGroup(_groupNo);
@@ -174,8 +195,13 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                 ],
                 onChanged: (value) => setState(() {
                   _groupNo = value;
-                  _typeNo = null;
-                  _styleNo = null;
+                  // التغيير يُسلسل افتراضاته: أول نوع ثم أول نمط تحته
+                  // A change cascades its own defaults: the first type, then its first style.
+                  final groupTypes = refs.typesOfGroup(value);
+                  _typeNo = groupTypes.isEmpty ? null : groupTypes.first.typeNo;
+
+                  final typeStyles = refs.stylesOfType(_typeNo);
+                  _styleNo = typeStyles.isEmpty ? null : typeStyles.first.id;
                 }),
               ),
               const SizedBox(height: 10),
@@ -191,7 +217,8 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
                 ],
                 onChanged: (value) => setState(() {
                   _typeNo = value;
-                  _styleNo = null;
+                  final typeStyles = refs.stylesOfType(value);
+                  _styleNo = typeStyles.isEmpty ? null : typeStyles.first.id;
                 }),
               ),
               const SizedBox(height: 10),
@@ -373,14 +400,26 @@ class _ItemFormScreenState extends ConsumerState<ItemFormScreen> {
     );
   }
 
+  /// القائمة المنسدلة الآمنة — قيمة غير موجودة بين العناصر تُعامل كغير مختارة
+  /// The safe dropdown — a value absent from the items is treated as unselected.
+  ///
+  /// ── هذا هو سبب انهيار شاشة «صنف جديد»: `DropdownButtonFormField` يتحقق في `assert` بأن
+  ///    القيمة موجودة **مرة واحدة بالضبط** بين عناصره. أي قيمة من بيانات قديمة أو من مجموعة
+  ///    لم تعد تُرجع أنواعاً كانت تُسقط الـ assert فيظهر خطأ فوري وتخرج الشاشة.
+  /// ── This is what crashed the "new item" screen: DropdownButtonFormField asserts its value
+  ///    appears *exactly once* among its items. Any stale value — or a group that returns no
+  ///    types — tripped the assert, so the screen threw immediately on open.
   Widget _dropdown<T>({
     required String label,
     required T? value,
     required List<DropdownMenuItem<T>> items,
     required ValueChanged<T?> onChanged,
   }) {
+    final matched = value != null &&
+        items.where((item) => item.value == value).length == 1;
+
     return DropdownButtonFormField<T>(
-      value: value,
+      value: matched ? value : null,
       isExpanded: true,
       decoration: InputDecoration(
         labelText: label,

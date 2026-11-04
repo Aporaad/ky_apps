@@ -51,9 +51,19 @@ class StoreGroupModel {
 
   factory StoreGroupModel.fromJson(Map<String, dynamic> json) {
     return StoreGroupModel(
-      groupNo: JsonValues.asInt(json['GROUP_NO'] ?? json['ID'] ?? json['id']),
+      // قراءة مزدوجة الحالة: الخادم قد يُرجع `group_no` صغيرة من منتقي OCI8، وبلا هذا الاحتياط
+      // تُقرأ كل مجموعة 0 فتظهر القوائم وكأنها فارغة وتُطلب أصناف المجموعة صفر.
+      // Dual-case read: the server may return lowercase `group_no` from the OCI8 driver; without
+      // this fallback every group parsed as 0, the dropdowns looked empty and items of group 0
+      // (none) were requested.
+      groupNo: JsonValues.asInt(
+        json['GROUP_NO'] ?? json['group_no'] ?? json['ID'] ?? json['id'],
+      ),
       groupName: JsonValues.arabicOrEmpty(
-        json['GROUP_NAME'] ?? json['NAME'] ?? json['name'],
+        json['GROUP_NAME'] ??
+            json['group_name'] ??
+            json['NAME'] ??
+            json['name'],
       ),
       types: JsonValues.asInt(json['TYPES'] ?? json['types']),
       items: JsonValues.asInt(json['ITEMS'] ?? json['items']),
@@ -81,9 +91,14 @@ class StoreTypeModel {
 
   factory StoreTypeModel.fromJson(Map<String, dynamic> json) {
     return StoreTypeModel(
-      typeNo: JsonValues.asInt(json['TYPE_NO'] ?? json['ID'] ?? json['id']),
+      typeNo: JsonValues.asInt(
+        json['TYPE_NO'] ?? json['type_no'] ?? json['ID'] ?? json['id'],
+      ),
       typeName: JsonValues.arabicOrEmpty(
-        json['TYPE_NAME'] ?? json['NAME'] ?? json['name'],
+        json['TYPE_NAME'] ??
+            json['type_name'] ??
+            json['NAME'] ??
+            json['name'],
       ),
       groupNo: JsonValues.asInt(json['GROUP_NO'] ?? json['group_no']),
       groupName: JsonValues.asArabic(json['GROUP_NAME'] ?? json['group_name']),
@@ -136,9 +151,14 @@ class StoreUnitModel {
 
   factory StoreUnitModel.fromJson(Map<String, dynamic> json) {
     return StoreUnitModel(
-      unitNo: JsonValues.asInt(json['UNIT_NO'] ?? json['ID'] ?? json['id']),
+      unitNo: JsonValues.asInt(
+        json['UNIT_NO'] ?? json['unit_no'] ?? json['ID'] ?? json['id'],
+      ),
       unitName: JsonValues.arabicOrEmpty(
-        json['UNIT_NAME'] ?? json['NAME'] ?? json['name'],
+        json['UNIT_NAME'] ??
+            json['unit_name'] ??
+            json['NAME'] ??
+            json['name'],
       ),
       items: JsonValues.asInt(json['ITEMS'] ?? json['items']),
     );

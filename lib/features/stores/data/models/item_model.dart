@@ -57,12 +57,16 @@ class ItemModel {
   /// عدد الأصناف الفرعية — يُعرض كشارة على الصف
   /// Sub-item count, shown as a chip on the row.
   final int subs;
+
+  /// ── الرصيد هنا **مجموع أرصدة فروعه**، وهو تعريف المستخدم للرصيد ومصدره `ITEM_MOVEMENT_D`.
+  /// ── The balance here is the sum of its branches — the user's own definition, sourced from
+  ///    ITEM_MOVEMENT_D.
   final double qty;
   final double value;
   final double cost;
 
-  /// هل الصنف برصيد سالب؟ (41 صفاً في القاعدة الحالية)
-  /// Is the item under a negative balance? (41 rows in the live data.)
+  /// هل الصنف برصيد سالب؟ (95 صفاً سالباً في القاعدة الحالية)
+  /// Is the item under a negative balance? (95 such rows in the live data.)
   bool get isNegative => qty < 0;
 
   factory ItemModel.fromJson(Map<String, dynamic> json) {
@@ -82,9 +86,11 @@ class ItemModel {
       unitNo: JsonValues.asIntOrNull(json['UNIT_NO'] ?? json['unit_no']),
       unitName: JsonValues.asArabic(json['UNIT_NAME'] ?? json['unit_name']),
       salePrice:
-          JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ?? 0,
+          JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ??
+          0,
       buyPrice:
-          JsonValues.asDoubleOrNull(json['BUY_PRICE'] ?? json['buy_price']) ?? 0,
+          JsonValues.asDoubleOrNull(json['BUY_PRICE'] ?? json['buy_price']) ??
+          0,
       cap: JsonValues.asDoubleOrNull(json['CAP'] ?? json['cap']) ?? 0,
       // ── العمود الحقيقي في `ACCOUNTS.SANFS` هو `MCOLOR` (لا `MAIN_COLOR`).
       //    نقرأ الجديد أولاً ونُبقي القديم كاحتياط لخادم أقدم.
@@ -98,7 +104,10 @@ class ItemModel {
       ),
       styleNo: JsonValues.asIntOrNull(json['STYL_NO'] ?? json['styl_no']),
       styleName: JsonValues.asArabic(json['STYLE_NAME'] ?? json['style_name']),
-      active: JsonValues.asFlag(json['ACTIVE'] ?? json['active'], fallback: true),
+      active: JsonValues.asFlag(
+        json['ACTIVE'] ?? json['active'],
+        fallback: true,
+      ),
       subs: JsonValues.asInt(json['SUBS'] ?? json['subs']),
       qty: JsonValues.asDoubleOrNull(json['QTY'] ?? json['qty']) ?? 0,
       value: JsonValues.asDoubleOrNull(json['VALUE'] ?? json['value']) ?? 0,
@@ -122,10 +131,19 @@ class ItemSubModel {
     this.colorNo = 0,
     this.price = 0,
     this.unitNo,
+    this.unitName,
     this.cap = 0,
     this.category,
     this.colorName,
     this.active = true,
+    this.qty = 0,
+    this.value = 0,
+    this.parentName,
+    this.parentPartNo,
+    this.groupNo,
+    this.typeNo,
+    this.groupName,
+    this.typeName,
   });
 
   final int sanfDno;
@@ -140,6 +158,10 @@ class ItemSubModel {
   final double price;
   final int? unitNo;
 
+  /// اسم الوحدة — بدونه يعرض تفصيل الفرع رقم وحدة غامضاً مثل `3`
+  /// The unit name; without it the branch detail shows an opaque unit number like `3`.
+  final String? unitName;
+
   /// عبوة الصنف الفرعي (`SANFS_D.CAP`) — منها تبدأ خانتا «عبوة/قطعة» في السطر
   /// The sub item's pack size, which seeds the line's pack and pieces boxes.
   final double cap;
@@ -149,6 +171,36 @@ class ItemSubModel {
   final String? category;
   final String? colorName;
   final bool active;
+
+  /// رصيد الفرع وقيمته — من `ITEM_MOVEMENT_D` عبر `P_CODE` لأن `AVVG` لا تعرف الأصناف الفرعية،
+  /// وهو نفس المصدر الذي يُبنى منه رصيد الصنف الأب فتتطابق اللائحتان.
+  /// The branch's balance and value, from ITEM_MOVEMENT_D via P_CODE — AVVG has no branch
+  /// dimension. It is the same source the parent's balance rolls up from, so both lists agree.
+  final double qty;
+  final double value;
+
+  /// بيانات الصنف الرئيسي الحاضن — لازمة لتبويب «الأصناف الفرعية» الذي يعرض كل الفروع معاً
+  /// The hosting main item — needed by the sub-items tab, which lists every branch at once.
+  final String? parentName;
+  final String? parentPartNo;
+  final int? groupNo;
+  final int? typeNo;
+  final String? groupName;
+  final String? typeName;
+
+  /// هل الفرع برصيد سالب؟ يُعرض بلون تحذيري كما في قائمة الأصناف
+  /// Is the branch under a negative balance? Shown in the warning colour, like the item list.
+  bool get isNegative => qty < 0;
+
+  /// وصف اللون مع بديل نصي: `COLOR_NO = 0` شائع في البيانات فيُعرض النص المخزَّن
+  /// The colour label with a text fallback: COLOR_NO = 0 is common, so the stored text is used.
+  String get colorLabel {
+    final name = colorName?.trim();
+
+    if (name != null && name.isNotEmpty) return name;
+
+    return colorNo == 0 ? '1' : 'لون $colorNo';
+  }
 
   /// المقاس بصيغة `الطول×العرض` كما يعرضه النظام القديم
   /// The size as `length×width`, the way the legacy system prints it.
@@ -170,7 +222,8 @@ class ItemSubModel {
       sanfDno: JsonValues.asInt(json['SANF_DNO'] ?? json['sanf_dno']),
       sanfNo: JsonValues.asInt(json['SANF_NO'] ?? json['sanf_no']),
       partNo: JsonValues.asText(json['PART_NO'] ?? json['part_no']),
-      name: JsonValues.asArabic(json['SANF_DNAME'] ?? json['sanf_dname']) ??
+      name:
+          JsonValues.asArabic(json['SANF_DNAME'] ?? json['sanf_dname']) ??
           JsonValues.asArabic(json['SANF_NAME'] ?? json['sanf_name']),
       code: JsonValues.asText(json['SANF_COCE'] ?? json['sanf_coce']),
       barcode: JsonValues.asText(json['BARACOCE'] ?? json['baracoce']),
@@ -179,10 +232,35 @@ class ItemSubModel {
       colorNo: JsonValues.asInt(json['COLOR_NO'] ?? json['color_no']),
       colorName: JsonValues.asArabic(json['COLOR_NAME'] ?? json['color_name']),
       category: JsonValues.asArabic(json['CATEGORY'] ?? json['category']),
-      price: JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ?? 0,
+      price:
+          JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ??
+          0,
       unitNo: JsonValues.asIntOrNull(json['UNIT_NO'] ?? json['unit_no']),
+      unitName: JsonValues.asArabic(json['UNIT_NAME'] ?? json['unit_name']),
       cap: JsonValues.asDoubleOrNull(json['CAP'] ?? json['cap']) ?? 0,
-      active: JsonValues.asFlag(json['ACTIVE'] ?? json['active'], fallback: true),
+      active: JsonValues.asFlag(
+        json['ACTIVE'] ?? json['active'],
+        fallback: true,
+      ),
+      qty: JsonValues.asDoubleOrNull(json['QTY'] ?? json['qty']) ?? 0,
+      value: JsonValues.asDoubleOrNull(json['VALUE'] ?? json['value']) ?? 0,
+      // `SANFS_D.SANF_NAME` اسم الفرع نفسه، والأب يأتي موسوماً بـ`PARENT_NAME` — قراءته من
+      // `SANF_NAME` كان يجعل تفصيل الفرع يعرض اسم أبيه كأنه اسمه
+      // SANFS_D.SANF_NAME is the branch's own name and the parent arrives tagged as PARENT_NAME;
+      // reading SANF_NAME made the branch detail show its parent's name as its own.
+      parentName: JsonValues.asArabic(
+        json['PARENT_NAME'] ??
+            json['parent_name'] ??
+            json['SANF_NAME'] ??
+            json['sanf_name'],
+      ),
+      parentPartNo: JsonValues.asText(
+        json['ITEM_PART_NO'] ?? json['item_part_no'],
+      ),
+      groupNo: JsonValues.asIntOrNull(json['GROUPNO'] ?? json['groupno']),
+      typeNo: JsonValues.asIntOrNull(json['TYPE_NO'] ?? json['type_no']),
+      groupName: JsonValues.asArabic(json['GROUP_NAME'] ?? json['group_name']),
+      typeName: JsonValues.asArabic(json['TYPE_NAME'] ?? json['type_name']),
     );
   }
 }
@@ -214,39 +292,11 @@ class ItemUnitModel {
       seqNo: JsonValues.asInt(json['SEQ_NO'] ?? json['seq_no']),
       sanfNo: JsonValues.asInt(json['SANF_NO'] ?? json['sanf_no']),
       cap: JsonValues.asDoubleOrNull(json['CAP'] ?? json['cap']) ?? 0,
-      price: JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ?? 0,
+      price:
+          JsonValues.asDoubleOrNull(json['SANF_PRICE'] ?? json['sanf_price']) ??
+          0,
       unitNo: JsonValues.asIntOrNull(json['UNIT_NO'] ?? json['unit_no']),
       unitName: JsonValues.asArabic(json['UNIT_NAME'] ?? json['unit_name']),
-    );
-  }
-}
-
-/// رصيد صنف في مخزن — صف `AVVG` مجمّع
-/// An item balance in one store — an aggregated AVVG row.
-class ItemBalanceModel {
-  const ItemBalanceModel({
-    required this.storeNo,
-    required this.storeName,
-    this.qty = 0,
-    this.cost = 0,
-    this.value = 0,
-  });
-
-  final int storeNo;
-  final String storeName;
-  final double qty;
-  final double cost;
-  final double value;
-
-  factory ItemBalanceModel.fromJson(Map<String, dynamic> json) {
-    return ItemBalanceModel(
-      storeNo: JsonValues.asInt(json['INV_ID'] ?? json['inv_id']),
-      storeName: JsonValues.arabicOrEmpty(
-        json['INVNAME'] ?? json['invname'] ?? json['INV_NAME'] ?? json['inv_name'],
-      ),
-      qty: JsonValues.asDoubleOrNull(json['QTY'] ?? json['qty']) ?? 0,
-      cost: JsonValues.asDoubleOrNull(json['COST'] ?? json['cost']) ?? 0,
-      value: JsonValues.asDoubleOrNull(json['VALUE'] ?? json['value']) ?? 0,
     );
   }
 }

@@ -93,6 +93,8 @@ class ApiConstants {
   // Account lookup for the document header picker — 30 names, no balances.
   static const String storeAccounts = '/stores/accounts';
   static const String storeItems = '/stores/items';
+    /// تبويب الأصناف الفرعية على مستوى كل الأصناف / the sub-items tab across every item.
+    static const String storeSubItems = '/stores/items/sub';
   static const String storeBalances = '/stores/balances';
   static const String storeReportMovement = '/stores/reports/movement';
   static const String storeReportSummary = '/stores/reports/summary';

@@ -2916,3 +2916,267 @@ SELECT COLUMN_NAME, DATA_TYPE, DATA_LENGTH, NULLABLE
 `tests/Feature/StoreItemTest.php` داخل معاملة أُلغيت في النهاية (`rollBack`)، فلم يبق صف واحد.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-03 · **DDL:** لا · **DML:** لا (اختبارات داخل معاملات مُلغاة).
+
+---
+
+## 2026-11-03 — استعلامات تشخيص تبويب الأصناف وكشف الحركة (قراءة فقط)
+
+جميع الاستعلامات أدناه نُفِّذت عبر موصل `oracledb` أو عبر اختبارات `php artisan test`، ولم تُنفَّذ
+أي كتابة.
+
+### أ) بنية العرض والجداول
+
+```sql
+SELECT column_name, data_type FROM all_tab_columns
+ WHERE owner = 'ACCOUNTS' AND table_name = 'ITEM_MOVEMENT_D' ORDER BY column_id;
+-- النتيجة: 78 عموداً، ومنها P_CODE · WID · LEN · COLOR_NO · P_QTY · STK_COST · BILL_DOC_TYPE
+
+SELECT column_name, data_type, nullable FROM all_tab_columns
+ WHERE owner = 'ACCOUNTS' AND table_name = 'SANFS_D' ORDER BY column_id;
+-- النتيجة: 41 عموداً، ومنها SANF_DNO (N) · SANF_NO (N) · PART_NO (Y) · COLOR_NO (Y) · ACTIVE (Y)
+```
+
+### ب) إثبات أن `P_CODE` هو الصنف الفرعي
+
+```sql
+SELECT m.I_CODE, m.P_CODE, COUNT(*) AS CNT, SUM(m.P_QTY) AS QTY,
+       MAX(m.WID) AS W, MAX(m.LEN) AS L, MAX(m.COLOR_NO) AS CLR
+  FROM ACCOUNTS.ITEM_MOVEMENT_D m
+ WHERE m.I_CODE = (SELECT MIN(I_CODE) FROM ACCOUNTS.ITEM_MOVEMENT_D)
+ GROUP BY m.I_CODE, m.P_CODE ORDER BY m.P_CODE;
+-- النتيجة: I_CODE=11 · P_CODE=10101001002 · QTY=0 — أي أن P_CODE هو رقم الفرع لا الصنف
+```
+
+### ج) اختيار حالات الاختبار
+
+```sql
+SELECT * FROM (
+    SELECT I_CODE, COUNT(*) AS CNT, COUNT(DISTINCT P_CODE) AS SUBS
+      FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY I_CODE ORDER BY COUNT(*) DESC
+) WHERE ROWNUM <= 3;
+-- 1990: 7,322 حركة / فرع واحد · 1985: 1,631 · 567: 1,157 حركة / 115 فرعاً  ← حالة الاختبار
+```
+
+### د) كمية الفرع (الاستعلام المعتمد داخل `fetchSubs`)
+
+```sql
+SELECT d.SANF_DNO, d.PART_NO, d.COLOR_NO, NVL(q.QTY, 0) AS QTY
+  FROM ACCOUNTS.SANFS_D d
+  LEFT JOIN (
+        SELECT m.P_CODE, SUM(m.P_QTY) AS QTY
+          FROM ACCOUNTS.ITEM_MOVEMENT_D m
+         WHERE m.I_CODE = 567
+         GROUP BY m.P_CODE
+  ) q ON q.P_CODE = d.SANF_DNO
+ WHERE d.SANF_NO = 567
+ ORDER BY d.SANF_DNO;
+-- النتيجة: 115+ فرعاً بكميات حقيقية (9 · 5 · 4 · 20 · 33 …) لا أصفاراً
+```
+
+### هـ) التصفية الافتراضية (أول مجموعة وأول فرعية منها)
+
+```sql
+SELECT g.GROUP_NO, g.GROUP_NAME,
+       (SELECT COUNT(*) FROM ACCOUNTS.TYPES t WHERE t.GROUP_NO = g.GROUP_NO) AS TYPES,
+       (SELECT COUNT(*) FROM ACCOUNTS.SANFS s WHERE s.GROUPNO = g.GROUP_NO) AS ITEMS
+  FROM ACCOUNTS.GROUP1 g ORDER BY g.GROUP_NO;
+-- 1 = «الأقمشة والمواد الخام» (5 أنواع · 999 صنفاً) ← المجموعة الافتراضية
+
+SELECT t.TYPE_NO, t.TYPE_NAME, COUNT(s.SANF_NO) AS ITEMS,
+       SUM(CASE WHEN NVL(s.ACTIVE,1) = 1 THEN 1 ELSE 0 END) AS ACTIVE_ITEMS
+  FROM ACCOUNTS.TYPES t
+  LEFT JOIN ACCOUNTS.SANFS s ON s.TYPE_NO = t.TYPE_NO AND s.GROUPNO = t.GROUP_NO
+ WHERE t.GROUP_NO = 1 GROUP BY t.TYPE_NO, t.TYPE_NAME ORDER BY t.TYPE_NO;
+-- 101 = «الأقمشة» (735 صنفاً · 724 نشطاً) ← المجموعة الفرعية الافتراضية
+```
+
+> **ملاحظة على القياس:** العمود `ACTIVE_ITEMS` في الاستعلام الأخير يحسب صف `NULL` الناتج عن
+> `LEFT JOIN` كصنف نشط عندما لا يوجد مطابق؛ الرقم الصحيح هو `ITEMS` (735/724 من الاستعلام
+> الصحيح)، وقد أُخذت الافتراضيات من `GROUP_NO`/`TYPE_NO` لا من هذا العمود.
+
+### و) ما نُفِّذ فعلياً على المسارات الجديدة
+
+عبر `php artisan test --filter=StoreItemReadTest` (4 اختبارات / 288 تأكيداً):
+`GET /stores/items/sub` · `GET /stores/items/567` · `GET /stores/items/567/movements?limit=20` ·
+`GET /stores/items/567/movements?sub_dno=<فرع>`. كلها قراءة فقط.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-03 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-03 — استعلامات قياس أداء الأصناف (قراءة فقط)
+
+نُفِّذت عبر مسبار PHP على اتصال `oracle`، والغرض تحديد أي جزء يستهلك المهلة.
+
+```sql
+-- ١) التجميع الكامل على العرض
+SELECT I_CODE, SUM(SUM_TP) AS QTY, SUM(SUM_PRICE) AS VALUE, MAX(STK_COST) AS COST
+  FROM ACCOUNTS.AVVG GROUP BY I_CODE;
+-- النتيجة: 580 صفاً · 14,628 مللي
+
+-- ٢) نفس التجميع مقيَّداً بمعرّفات صفحة واحدة (٥٠ صنفاً)
+SELECT I_CODE, SUM(SUM_TP) AS QTY, SUM(SUM_PRICE) AS VALUE, MAX(STK_COST) AS COST
+  FROM ACCOUNTS.AVVG WHERE I_CODE IN (…) GROUP BY I_CODE;
+-- النتيجة: 20 صفاً · 12,780 مللي  ← التقييد لا يُدفع إلى فروع UNION ALL
+
+-- ٣) عدّ السطور مع التصفية الافتراضية
+SELECT COUNT(*) AS TOTAL FROM ACCOUNTS.SANFS s
+ WHERE s.GROUPNO = 1 AND s.TYPE_NO = 101 AND NVL(s.ACTIVE, 1) = 1;
+-- النتيجة: 1 صف · 2 مللي
+
+-- ٤) تجميع الفروع
+SELECT SANF_NO, COUNT(*) AS SUBS FROM ACCOUNTS.SANFS_D GROUP BY SANF_NO;
+-- النتيجة: 1,431 صفاً · 14 مللي
+
+-- ٥) استعلام الصفحة كاملاً بلا AVVG
+SELECT * FROM (SELECT q.*, ROWNUM AS RN FROM (
+    SELECT s.SANF_NO, s.PART_NO, s.SANF_NAME, c.CATEGORY AS CATEGORY_NAME, NVL(sd.SUBS, 0) AS SUBS
+      FROM ACCOUNTS.SANFS s
+      LEFT JOIN ACCOUNTS.GROUP1 g ON g.GROUP_NO = s.GROUPNO
+      LEFT JOIN ACCOUNTS.TYPES t ON t.TYPE_NO = s.TYPE_NO
+      LEFT JOIN ACCOUNTS.UNITS u ON u.UNIT_NO = s.UNIT_NO
+      LEFT JOIN ACCOUNTS.STYLE st ON st.SHAPE_STYLE_NO = s.STYL_NO
+      LEFT JOIN (SELECT SANF_NO, COUNT(*) AS SUBS FROM ACCOUNTS.SANFS_D GROUP BY SANF_NO) sd
+             ON sd.SANF_NO = s.SANF_NO
+      LEFT JOIN (SELECT CAT_NO, MAX(CATEGORY) AS CATEGORY FROM ACCOUNTS.CATEGORY GROUP BY CAT_NO) c
+             ON c.CAT_NO = s.CAT_NO
+     WHERE s.GROUPNO = 1 AND s.TYPE_NO = 101 AND NVL(s.ACTIVE, 1) = 1
+     ORDER BY s.SANF_NAME ASC, s.SANF_NO
+) q WHERE ROWNUM <= 50) WHERE RN > 0;
+-- النتيجة: 50 صفاً · 12 مللي
+```
+
+**الخلاصة المعتمدة في الكود:** لا تُوضع `AVVG` في مسار القوائم. تبقى في شاشة الأرصدة والتقارير
+حيث الأرصدة هي موضوع الشاشة، وتُطلب في قائمة الأصناف فقط عند `with_stock=1`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-03 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-04 — استعلامات تشخيص الرصيد والتكرار (قراءة فقط)
+
+```sql
+-- ١) هل `SANFS_COLOR` فريد المعرّف؟ (سبب محتمل لتكرار الفرع في أي رابط)
+SELECT COUNT(*) AS ROWS_ALL, COUNT(DISTINCT COLOR_NO) AS DISTINCT_NO FROM ACCOUNTS.SANFS_COLOR;
+-- النتيجة: 27 / 27 ⇒ لا تكرار، فالرابط لا يضاعف الصفوف
+
+-- ٢) هل تتكرر بيانات الفرع نفسه تحت معرّفين مختلفين؟
+SELECT COUNT(*) AS DUP_GROUPS, NVL(SUM(COPIES), 0) AS DUP_ROWS
+  FROM (SELECT SANF_NO, PART_NO, LEN, WID, COLOR_NO, COUNT(*) AS COPIES
+          FROM ACCOUNTS.SANFS_D
+         GROUP BY SANF_NO, PART_NO, LEN, WID, COLOR_NO
+        HAVING COUNT(*) > 1);
+-- النتيجة: 0 / 0 ⇒ التكرار المبلَّغ ليس من البيانات
+
+-- ٣) هل يستعلام تبويب الفروع يُرجع فرعاً مرتين؟
+SELECT COUNT(*) AS ROWS_RETURNED, COUNT(DISTINCT SANF_DNO) AS DISTINCT_BRANCHES
+  FROM (… استعلام الصفحة بترقيم ROWNUM …);
+-- النتيجة: 50 / 50 ⇒ الاستعلام سليم أيضاً، فالتكرار عرضي لا بياناتي
+
+-- ٤) كم يكلّف رصيد الصنف من مصدر الحركة بدل AVVG؟
+SELECT I_CODE, SUM(P_QTY) AS QTY FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY I_CODE;
+-- النتيجة: 583 صفاً · 1,700 مللي (مقابل 14,589 مللي لتجميع AVVG)
+
+-- ٥) وقيمة كل فرع؟
+SELECT P_CODE, SUM(P_QTY) AS QTY, SUM(P_QTY * STK_COST) AS VALUE
+  FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY P_CODE;
+-- النتيجة: 2,316 فرعاً · 1,552 مللي
+```
+
+لم تُنفَّذ أي كتابة: كل ما سبق `SELECT`. المسبار المؤقت `probe_stock_timing.php` حُذف بعد الاستخدام.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-04 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-04 — استعلامات قراءة تفاصيل الفرع (قراءة فقط)
+
+### أ) استعلام الفروع داخل تفصيل الصنف — بعد إضافة أعمدة الفرع
+
+```sql
+SELECT d.SANF_DNO, d.PART_NO, d.SANF_NAME, d.SANF_DNAME, d.SANF_COCE, d.BARACOCE,
+       d.LEN, d.WID, d.COLOR_NO, d.SANF_PRICE, d.UNIT_NO, d.CAP, d.ACTIVE,
+       d.CATEGORY, d.DCOLOR, d.MCOLOR, sc.COLOR_NAME,
+       u.UNIT_NAME, s.SANF_NAME AS PARENT_NAME, s.PART_NO AS ITEM_PART_NO,
+       NVL(q.QTY, 0) AS QTY, NVL(q.VALUE, 0) AS VALUE
+  FROM ACCOUNTS.SANFS_D d
+  LEFT JOIN ACCOUNTS.SANFS_COLOR sc ON sc.COLOR_NO = d.COLOR_NO
+  LEFT JOIN ACCOUNTS.UNITS u ON u.UNIT_NO = d.UNIT_NO
+  LEFT JOIN ACCOUNTS.SANFS s ON s.SANF_NO = d.SANF_NO
+  LEFT JOIN (SELECT P_CODE, SUM(P_QTY) AS QTY, SUM(P_QTY * STK_COST) AS VALUE
+               FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY P_CODE) q ON q.P_CODE = d.SANF_DNO
+ WHERE d.SANF_NO = :sanf_no
+ ORDER BY d.LEN, d.WID, d.COLOR_NO, d.SANF_DNO;
+```
+
+### ب) تبويب الفروع — التجميع الذي يمنع المضاعفة
+
+```sql
+SELECT d.SANF_DNO, d.SANF_NO,
+       MAX(d.SANF_PRICE) AS SANF_PRICE, MAX(d.UNIT_NO) AS UNIT_NO,
+       MAX(d.CAP) AS CAP, MAX(u.UNIT_NAME) AS UNIT_NAME, …
+  FROM ACCOUNTS.SANFS_D d
+  JOIN ACCOUNTS.SANFS s ON s.SANF_NO = d.SANF_NO
+  LEFT JOIN ACCOUNTS.GROUP1 g ON g.GROUP_NO = s.GROUPNO
+  LEFT JOIN ACCOUNTS.TYPES t ON t.TYPE_NO = s.TYPE_NO
+  LEFT JOIN ACCOUNTS.UNITS u ON u.UNIT_NO = d.UNIT_NO
+  LEFT JOIN ACCOUNTS.SANFS_COLOR sc ON sc.COLOR_NO = d.COLOR_NO
+  LEFT JOIN (SELECT P_CODE, SUM(P_QTY) AS QTY, SUM(P_QTY * STK_COST) AS VALUE
+               FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY P_CODE) bt ON bt.P_CODE = d.SANF_DNO
+ WHERE …
+ GROUP BY d.SANF_DNO, d.SANF_NO
+ ORDER BY SANF_NAME, LEN, WID, SANF_DNO;      -- بالأسماء المستعارة: MAX() داخل كتلة ملفوفة
+                                              -- بـROWNUM يرمي ORA-00935
+```
+
+**ملاحظة على `MAX(u.UNIT_NAME)`:** شرط الرابط `u.UNIT_NO = d.UNIT_NO` يُقيَّم قبل التجميع، فالتجميع
+بعده لا يغيّر دلالة العمود؛ والمجمّع يضمن صفاً واحداً لكل فرع مهما كان الرابط 1:N.
+
+### ج) ما نُفِّذ عبر الاختبارات
+
+`php artisan test --filter=StoreItemReadTest` ⇒ **7 ناجحة / 321 تأكيداً** على
+`/stores/items/sub` · `/stores/items/{sanfNo}` · `/stores/items/{sanfNo}/movements` ·
+`/stores/reference` · `/stores/items` بالتصفية الافتراضية. كلها قراءة فقط، ولا سطر كُتب أو حُذف.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-04 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## 2026-11-04 — استعلامات تشخيص التكرار على قاعدة التطبيق (قراءة فقط)
+
+جرى كل هذا داخل اختبار Laravel على اتصال `oracle` نفسه الذي يستعمله التطبيق، لأن الفحص عبر
+موصل MCP جرى على قاعدة أخرى وأعطى نتيجة مضللة.
+
+```sql
+-- ١) فريدة معرّف اللون
+SELECT COUNT(*) AS R, COUNT(DISTINCT COLOR_NO) AS D FROM ACCOUNTS.SANFS_COLOR;
+-- R=54  D=27
+
+-- ٢) فريدة الوحدة ومفتاح الصنف
+SELECT COUNT(*) AS R, COUNT(DISTINCT UNIT_NO) AS D FROM ACCOUNTS.UNITS;   -- 12 / 12
+SELECT COUNT(*) AS C FROM ACCOUNTS.SANFS WHERE SANF_NO = 109;             -- 1
+
+-- ٣) أي رابط يضاعف الفروع؟
+SELECT COUNT(*) FROM ACCOUNTS.SANFS_D d
+  LEFT JOIN ACCOUNTS.SANFS_COLOR sc ON sc.COLOR_NO = d.COLOR_NO WHERE d.SANF_NO = 109;  -- 10
+SELECT COUNT(*) FROM ACCOUNTS.SANFS_D d
+  LEFT JOIN ACCOUNTS.UNITS u ON u.UNIT_NO = d.UNIT_NO WHERE d.SANF_NO = 109;            -- 5
+SELECT COUNT(*) FROM ACCOUNTS.SANFS_D d
+  LEFT JOIN ACCOUNTS.SANFS s ON s.SANF_NO = d.SANF_NO WHERE d.SANF_NO = 109;            -- 5
+
+-- ٤) الرصيد: تجميع الفروع المميزة مقابل AVVG لكل صنف
+SELECT NVL(SUM(b.QTY),0) FROM (SELECT DISTINCT SANF_NO, SANF_DNO FROM ACCOUNTS.SANFS_D) dd
+  JOIN (SELECT P_CODE, SUM(P_QTY) AS QTY FROM ACCOUNTS.ITEM_MOVEMENT_D GROUP BY P_CODE) b
+    ON b.P_CODE = dd.SANF_DNO WHERE dd.SANF_NO = 1991;                    -- 1503.27
+SELECT NVL(SUM(SUM_TP),0) FROM ACCOUNTS.AVVG WHERE I_CODE = 1991;         -- 1504 (ROUND داخل العرض)
+
+-- ٥) هل للصنف حركة أصلاً؟ (تفسير «كشف الحركة لا يظهر شيئاً»)
+SELECT COUNT(*) FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE I_CODE = 109;   -- 0   ⇒ رصيده صفر فعلاً
+SELECT COUNT(*) FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE I_CODE = 1991;  -- 156 ⇒ كشفه يعرض 50/50
+```
+
+لم تُنفَّذ أي كتابة. حُذفت ملفات المسبار (`ProbeTest.php` والمساند) بعد الاستخدام، وبقي الدليل
+في اختبار دائم: `the item detail never repeats a branch and its balance equals the sum of branches`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-04 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+

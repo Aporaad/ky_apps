@@ -1,5 +1,34 @@
 import 'package:dio/dio.dart';
 
+import '../models/report_model.dart';
+
+/// كشف حركة صنف: السطور + المجاميع كما يحسبها الخادم
+/// An item movement statement: the rows plus the totals the server computed.
+///
+/// ── لماذا كائن لا مجرد قائمة صفوف؟ لأن الشاشة تُظهر «وارد / صادر / الصافي / القيمة»، وجمعُها
+///    من السطور المعروضة يعطي رصيداً كاذباً حين تُقصّ السطور بحدّ أقصى.
+/// ── Why an object rather than a row list? The screen shows in/out/net/value, and summing the
+///    visible rows lies as soon as the rows are capped by a limit.
+class MovementStatement {
+  const MovementStatement({
+    this.rows = const [],
+    this.qtyIn = 0,
+    this.qtyOut = 0,
+    this.netQty = 0,
+    this.value = 0,
+    this.lines = 0,
+  });
+
+  final List<StockMovementRow> rows;
+  final double qtyIn;
+  final double qtyOut;
+  final double netQty;
+  final double value;
+  final int lines;
+
+  bool get isEmpty => rows.isEmpty;
+}
+
 /// نتيجة موحّدة لكل عمليات الكتابة في قسم المخازن
 /// One uniform result for every write operation in the stores module.
 ///

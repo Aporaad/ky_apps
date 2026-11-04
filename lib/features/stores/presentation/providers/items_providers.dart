@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/item_model.dart';
 import '../../data/models/report_model.dart';
+import '../../data/models/store_reference.dart';
 import '../../data/repositories/store_items_repository.dart';
 import '../../data/repositories/store_result.dart';
 
@@ -120,6 +121,10 @@ class ItemsListState {
 class ItemsListNotifier extends Notifier<ItemsListState> {
   CancelToken? _cancelToken;
   int _searchVersion = 0;
+
+  /// هل طُبّقت التصفية الافتراضية؟ تُطبَّق مرة واحدة لكل جلسة شاشة
+  /// Whether the default filter was applied — once per screen session.
+  bool _defaultsApplied = false;
 
   @override
   ItemsListState build() {
@@ -256,6 +261,53 @@ class ItemsListNotifier extends Notifier<ItemsListState> {
   /// إعادة جلب الصنف المحدد فقط بعد تعديله — بدل إعادة تحميل الصفحة كاملة
   /// Refresh a single edited item instead of reloading the whole page.
   Future<void> refreshCurrent() => load(keepPage: true);
+
+  /// التصفية الافتراضية: النشط فقط · أول مجموعة رئيسية · أول مجموعة فرعية منها · كل الفئات
+  /// The default filter: active only, the first main group, its first sub group, all categories.
+  ///
+  /// ── لماذا مرة واحدة فقط؟ لأن المستخدم قد يمسح التصفية عمداً؛ إعادة فرضها بعد كل بناء تجعل
+  ///    زر «مسح التصفية» بلا أثر ويوهمه أن التطبيق لا يستجيب.
+  /// ── Why exactly once? The user may deliberately clear the filter; re-imposing it on every
+  ///    build would make "clear filter" a no-op and look like the app ignores them.
+  Future<void> applyDefaults(StoreReference reference) async {
+    if (_defaultsApplied) return;
+
+    _defaultsApplied = true;
+
+    // ── لا نُطبّق تصفية على مجموعة برقم غير صالح: المجموعة 0 تعني «لا نتائج» دائماً، فيظهر
+    //    التطبيق كأنه لا يملك أصنافاً. عند غياب مجموعة صالحة نُحمّل بلا تصفية بدل قائمة فارغة.
+    // ── Never filter on an invalid group number: group 0 always means "no rows", which makes the
+    //    app look like it has no items at all. With no usable group we load unfiltered instead.
+    final usable = reference.groups
+        .where((group) => group.groupNo > 0)
+        .toList(growable: false);
+
+    if (usable.isEmpty) {
+      await load();
+
+      return;
+    }
+
+    final group = usable.first;
+    final types = reference
+        .typesOfGroup(group.groupNo)
+        .where((type) => type.typeNo > 0)
+        .toList(growable: false);
+
+    state = state.copyWith(
+      active: '1',
+      groupNo: group.groupNo,
+      typeNo: types.isEmpty ? null : types.first.typeNo,
+      // الفئات: لا قيد — المستخدم طلب عرض كل الفئات افتراضياً
+      // Categories: unconstrained — every category is shown by default.
+      clearCat: true,
+      clearUnit: true,
+      clearError: true,
+      selected: const {},
+    );
+
+    await load();
+  }
 }
 
 final itemsListProvider = NotifierProvider<ItemsListNotifier, ItemsListState>(
@@ -279,3 +331,226 @@ final itemMovementsProvider =
 
       return ref.watch(storeItemsRepositoryProvider).fetchMovements(sanfNo);
     });
+
+// ================================================================
+// كشف حركة الصنف (تقرير)
+// The item movement statement (a report)
+// ================================================================
+
+/// مفتاح كشف الحركة: صنف + فرع اختياري + مدى تاريخي + مخزن
+/// The movement statement key: an item, an optional branch, a date range and a store.
+typedef ItemStatementKey = ({
+  int sanfNo,
+  int? subDno,
+  DateTime? from,
+  DateTime? to,
+  int? storeNo,
+});
+
+/// كشف حركة صنف — عائلة لأن كل تركيبة معطيات تقرير مستقل
+/// An item's movement statement — a family, because each parameter set is its own report.
+final itemStatementProvider =
+    FutureProvider.family<MovementStatement, ItemStatementKey>((ref, key) async {
+      return ref
+          .watch(storeItemsRepositoryProvider)
+          .fetchMovementStatement(
+            key.sanfNo,
+            subDno: key.subDno,
+            from: key.from,
+            to: key.to,
+            storeNo: key.storeNo,
+          );
+    });
+
+// ================================================================
+// تبويب الأصناف الفرعية
+// The sub-items tab
+// ================================================================
+
+class SubItemsListState {
+  const SubItemsListState({
+    this.rows = const [],
+    this.isLoading = false,
+    this.error,
+    this.search = '',
+    this.groupNo,
+    this.typeNo,
+    this.active = 'all',
+    this.page = 1,
+    this.pages = 1,
+    this.total = 0,
+  });
+
+  final List<ItemSubModel> rows;
+  final bool isLoading;
+  final String? error;
+  final String search;
+  final int? groupNo;
+  final int? typeNo;
+  final String active;
+  final int page;
+  final int pages;
+  final int total;
+
+  int get filtersCount {
+    var count = 0;
+    if (groupNo != null) count++;
+    if (typeNo != null) count++;
+    if (active != 'all') count++;
+
+    return count;
+  }
+
+  SubItemsListState copyWith({
+    List<ItemSubModel>? rows,
+    bool? isLoading,
+    String? error,
+    String? search,
+    int? groupNo,
+    int? typeNo,
+    String? active,
+    int? page,
+    int? pages,
+    int? total,
+    bool clearError = false,
+    bool clearGroup = false,
+    bool clearType = false,
+  }) {
+    return SubItemsListState(
+      rows: rows ?? this.rows,
+      isLoading: isLoading ?? this.isLoading,
+      error: clearError ? null : error ?? this.error,
+      search: search ?? this.search,
+      groupNo: clearGroup ? null : groupNo ?? this.groupNo,
+      typeNo: clearType ? null : typeNo ?? this.typeNo,
+      active: active ?? this.active,
+      page: page ?? this.page,
+      pages: pages ?? this.pages,
+      total: total ?? this.total,
+    );
+  }
+}
+
+class SubItemsListNotifier extends Notifier<SubItemsListState> {
+  CancelToken? _cancelToken;
+  int _searchVersion = 0;
+
+  /// التصفية الافتراضية تُطبَّق مرة واحدة، كما في تبويب الأصناف الرئيسية
+  /// The default filter applies once, exactly like the main items tab.
+  bool _defaultsApplied = false;
+
+  @override
+  SubItemsListState build() {
+    ref.onDispose(() => _cancelToken?.cancel());
+
+    return const SubItemsListState();
+  }
+
+  StoreItemsRepository get _repository =>
+      ref.read(storeItemsRepositoryProvider);
+
+  Future<void> load({bool keepPage = false}) async {
+    _cancelToken?.cancel();
+    _cancelToken = CancelToken();
+    final version = ++_searchVersion;
+
+    final page = keepPage ? state.page : 1;
+    state = state.copyWith(isLoading: true, clearError: true, page: page);
+
+    try {
+      final result = await _repository.fetchSubItems(
+        search: state.search,
+        page: page,
+        groupNo: state.groupNo,
+        typeNo: state.typeNo,
+        active: state.active,
+        cancelToken: _cancelToken,
+      );
+
+      if (!ref.mounted || version != _searchVersion) return;
+
+      state = state.copyWith(
+        rows: result.items,
+        total: result.total,
+        pages: result.pages,
+        isLoading: false,
+      );
+    } catch (error) {
+      if (!ref.mounted || version != _searchVersion) return;
+
+      state = state.copyWith(isLoading: false, error: error.toString());
+    }
+  }
+
+  Future<void> search(String value) async {
+    state = state.copyWith(search: value.trim());
+
+    return load();
+  }
+
+  Future<void> applyFilters({
+    int? groupNo,
+    int? typeNo,
+    String? active,
+    bool clearGroup = false,
+    bool clearType = false,
+  }) async {
+    // تغيير المجموعة الرئيسية يُبطل الفرعية التابعة لها
+    // Changing the main group invalidates its sub group.
+    state = state.copyWith(
+      groupNo: groupNo,
+      typeNo: clearGroup ? null : typeNo,
+      active: active,
+      clearGroup: clearGroup,
+      clearType: clearGroup ? true : clearType,
+    );
+
+    return load();
+  }
+
+  Future<void> goToPage(int page) async {
+    state = state.copyWith(page: page);
+
+    return load(keepPage: true);
+  }
+
+  /// التصفية الافتراضية: النشط فقط · أول مجموعة · أول فرعية منها
+  /// The default filter: active only, the first group and its first sub group.
+  Future<void> applyDefaults(StoreReference reference) async {
+    if (_defaultsApplied) return;
+
+    _defaultsApplied = true;
+
+    // نفس حارس تبويب الرئيسية: لا تصفية على مجموعة برقم غير صالح
+    // The same guard as the main tab: never filter on an invalid group number.
+    final usable = reference.groups
+        .where((group) => group.groupNo > 0)
+        .toList(growable: false);
+
+    if (usable.isEmpty) {
+      await load();
+
+      return;
+    }
+
+    final group = usable.first;
+    final types = reference
+        .typesOfGroup(group.groupNo)
+        .where((type) => type.typeNo > 0)
+        .toList(growable: false);
+
+    state = state.copyWith(
+      active: '1',
+      groupNo: group.groupNo,
+      typeNo: types.isEmpty ? null : types.first.typeNo,
+      clearError: true,
+    );
+
+    await load();
+  }
+}
+
+final subItemsListProvider =
+    NotifierProvider<SubItemsListNotifier, SubItemsListState>(
+      SubItemsListNotifier.new,
+    );

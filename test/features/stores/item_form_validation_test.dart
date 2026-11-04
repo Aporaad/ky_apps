@@ -37,10 +37,10 @@ void main() {
     ],
   );
 
-  Widget host() {
+  Widget host({StoreReference? override}) {
     return ProviderScope(
       overrides: [
-        storeReferenceProvider.overrideWith((ref) async => reference),
+        storeReferenceProvider.overrideWith((ref) async => override ?? reference),
       ],
       child: const MaterialApp(home: ItemFormScreen()),
     );
@@ -77,7 +77,17 @@ void main() {
 
   testWidgets('an item without a style is refused before reaching the server', (tester) async {
     useTallSurface(tester);
-    await tester.pumpWidget(host());
+
+    // مرجع بلا أنماط: النموذج لا يستطيع اختيار نمط افتراضي، فيجب أن يرفض الحفظ
+    // A reference without styles: the form cannot seed a default, so saving must be refused.
+    const noStyles = StoreReference(
+      groups: [StoreGroupModel(groupNo: 1, groupName: 'الأقمشة والمواد الخام')],
+      types: [StoreTypeModel(typeNo: 101, typeName: 'الأقمشة', groupNo: 1)],
+      categories: [StoreCategoryModel(id: 4, name: 'صيني', catNo: 4)],
+      units: [StoreUnitModel(unitNo: 3, unitName: 'ثوب')],
+    );
+
+    await tester.pumpWidget(host(override: noStyles));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField).at(0), 'قماش اختبار');
@@ -88,10 +98,56 @@ void main() {
 
     // النمط ما زال غير مختار ⇒ رسالة تشرح أن النمط شرط ظهور
     // The style is still unset ⇒ the message explains it is the visibility condition.
-    expect(
-      find.textContaining('النمط مطلوبة'),
-      findsOneWidget,
+    expect(find.textContaining('النمط مطلوبة'), findsOneWidget);
+  });
+
+  testWidgets('the form seeds the first group, type and style', (tester) async {
+    useTallSurface(tester);
+    await tester.pumpWidget(host());
+    await tester.pumpAndSettle();
+
+    // ── لا نضغط «حفظ» هنا: الحفظ يطلب الخادم فعلياً، والمطلوب إثبات أن القوائم اختارت
+    //    افتراضياتها من المرجع لا أن الطلب يمرّ.
+    // ── We do not press save: saving hits the real server, and what matters is that the lists
+    //    seeded their defaults from the reference — not that the request goes through.
+    expect(find.text('الأقمشة'), findsWidgets);
+    expect(find.text('قماش عرض 58'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('an empty reference opens the form instead of crashing', (tester) async {
+    // ── حارس عطل حقيقي: كانت الشاشة تُسقط الـ assert لأن قيمة القائمة لم تعد بين عناصرها،
+    //    فيظهر خطأ فوري عند الضغط على «صنف جديد». المراجع الفارغة هي أسوأ حالة ممكنة.
+    // ── A real-defect guard: the screen tripped the dropdown assert when a value was no longer
+    //    among its items, throwing the moment "new item" was pressed. An empty reference is the
+    //    worst possible case and must still open.
+    useTallSurface(tester);
+    await tester.pumpWidget(host(override: const StoreReference()));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('صنف جديد'), findsOneWidget);
+  });
+
+  testWidgets('a group with no sub groups leaves the form usable', (tester) async {
+    // مجموعة رئيسية بلا أنواع: يجب ألا تبقى القيمة القديمة في القائمة الفرعية
+    // A main group with no types: the stale value must not survive in the sub-group list.
+    const lonelyGroup = StoreReference(
+      groups: [
+        StoreGroupModel(groupNo: 5, groupName: 'طلبات تفصيل'),
+        StoreGroupModel(groupNo: 6, groupName: 'ثياب العملاء'),
+      ],
+      types: [StoreTypeModel(typeNo: 601, typeName: 'ثياب', groupNo: 6)],
+      styles: [StoreStyleModel(id: 60101, name: 'قميص', typeNo: 601, groupNo: 6)],
+      units: [StoreUnitModel(unitNo: 3, unitName: 'ثوب')],
+      categories: [StoreCategoryModel(id: 4, name: 'صيني', catNo: 4)],
     );
+
+    useTallSurface(tester);
+    await tester.pumpWidget(host(override: lonelyGroup));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
   });
 
   test('the style list offers only the styles of the selected sub group', () {

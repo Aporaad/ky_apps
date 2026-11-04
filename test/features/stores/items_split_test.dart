@@ -34,6 +34,22 @@ class _SeededItemsList extends ItemsListNotifier {
 
   @override
   Future<void> load({bool keepPage = false}) async {}
+
+  @override
+  Future<void> applyDefaults(StoreReference reference) async {}
+}
+
+/// تبويب الفروع لا يُحمّل شيئاً هنا: الاختبار يخصّ تخطيط الرئيسية
+/// The branches tab loads nothing here: this test is about the main tab layout.
+class _SeededSubItems extends SubItemsListNotifier {
+  @override
+  SubItemsListState build() => const SubItemsListState();
+
+  @override
+  Future<void> load({bool keepPage = false}) async {}
+
+  @override
+  Future<void> applyDefaults(StoreReference reference) async {}
 }
 
 void main() {
@@ -41,6 +57,7 @@ void main() {
     return ProviderScope(
       overrides: [
         itemsListProvider.overrideWith(_SeededItemsList.new),
+        subItemsListProvider.overrideWith(_SeededSubItems.new),
         storeReferenceProvider.overrideWith((ref) async => const StoreReference()),
       ],
       child: const MaterialApp(home: ItemsListScreen()),
