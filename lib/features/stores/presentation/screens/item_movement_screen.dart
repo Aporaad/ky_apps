@@ -58,21 +58,19 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
   /// Visible columns: null until the user changes them, then the template defaults apply.
   Set<String>? _columns;
 
-  /// كشف الفرع لا يُعقل أن يُطبع بلا فرع: عمود الفرع ملزم هنا وإن غاب من الافتراضي
-  /// A branch statement without its branch column is nonsense: the branch is mandatory here
-  /// even though the generic defaults may leave it out.
+  /// الأعمدة الأساسية للكشف = أعمدة تقرير الحركة نفسها، فلا يختلف الكشف عن التقرير
+  /// The statement's basic columns are the movement report's basics: a statement must not
+  /// disagree with the report it came from.
   static const List<String> _statementDefaults = <String>[
-    'no',
+    'type',
     'date',
     'doc',
-    'type',
-    'store',
-    'branch',
-    'in',
-    'out',
-    'net',
+    'qty',
     'cost',
     'value',
+    'balance',
+    'branch',
+    'store',
   ];
 
   String get _branchLabel => widget.subDno == null

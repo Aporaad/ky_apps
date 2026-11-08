@@ -209,6 +209,8 @@ class StoreReportState {
     this.totalIn = 0,
     this.totalOut = 0,
     this.totalValue = 0,
+    this.stats = const ReportStats(),
+    this.sections = const [],
     this.truncated = false,
     this.hasRun = false,
   });
@@ -223,6 +225,14 @@ class StoreReportState {
   final double totalIn;
   final double totalOut;
   final double totalValue;
+
+  /// الإحصاءات الكاملة للتقرير: السابق والوارد والمنصرف والصافي والحالي كمية وقيمة
+  /// The report's full statistics: opening, in, out, net and closing, quantity and value.
+  final ReportStats stats;
+
+  /// أقسام التقرير الموسّع — عنوان وإحصاء لكل قسم بترتيبه
+  /// The sections of a scoped report — a label and statistics per section, in order.
+  final List<ReportSectionHeader> sections;
   final bool truncated;
 
   /// هل نُفِّذ تقرير واحد على الأقل؟ (يميّز «لم يعرض بعد» عن «لا نتائج»)
@@ -243,6 +253,8 @@ class StoreReportState {
     double? totalIn,
     double? totalOut,
     double? totalValue,
+    ReportStats? stats,
+    List<ReportSectionHeader>? sections,
     bool? truncated,
     bool? hasRun,
     bool clearError = false,
@@ -256,10 +268,21 @@ class StoreReportState {
       totalIn: totalIn ?? this.totalIn,
       totalOut: totalOut ?? this.totalOut,
       totalValue: totalValue ?? this.totalValue,
+      stats: stats ?? this.stats,
+      sections: sections ?? this.sections,
       truncated: truncated ?? this.truncated,
       hasRun: hasRun ?? this.hasRun,
     );
   }
+}
+
+/// عنوان قسم وإحصاؤه — يقرّرهما الخادم لا الشاشة
+/// A section's label and statistics — decided by the server, not the screen.
+class ReportSectionHeader {
+  const ReportSectionHeader({required this.label, required this.stats});
+
+  final String label;
+  final ReportStats stats;
 }
 
 class StoreReportNotifier extends Notifier<StoreReportState> {
@@ -316,6 +339,14 @@ class StoreReportNotifier extends Notifier<StoreReportState> {
           totalIn: result.totalIn,
           totalOut: result.totalOut,
           totalValue: result.totalValue,
+          stats: result.stats,
+          sections: [
+            for (var i = 0; i < result.sectionLabels.length; i++)
+              ReportSectionHeader(
+                label: result.sectionLabels[i],
+                stats: result.sectionStats[i],
+              ),
+          ],
           truncated: result.truncated,
         );
 
@@ -337,6 +368,7 @@ class StoreReportNotifier extends Notifier<StoreReportState> {
         totalIn: result.totalIn,
         totalOut: result.totalOut,
         totalValue: result.totalValue,
+        stats: result.stats,
         truncated: result.truncated,
       );
     } catch (error) {

@@ -16,6 +16,7 @@ import '../providers/reports_providers.dart';
 import '../providers/stores_providers.dart';
 import '../utils/report_columns.dart';
 import '../utils/report_parameters.dart';
+import '../utils/report_templates.dart';
 import '../utils/store_export.dart';
 import '../widgets/report_columns_sheet.dart';
 import '../widgets/report_data_table.dart';
@@ -170,26 +171,49 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     );
 
     final isMovement = filter.kind == StoreReportKind.movement;
+    final template = ReportTemplates.of(filter);
 
     // نوعان حقيقيان لا نوع محاك واحد: قارئ العمود دالة تستقبل صفها بعينه، وإمحاؤه
     // بـ`Object` يرمي `is not a subtype` عند أول خلية تُرسم
     // Two real types, never one erased type: a column's reader takes its own row, and erasing
     // it to Object throws "is not a subtype" on the first cell drawn.
-    final table = isMovement
-        ? ReportDataTable<StockMovementRow>(
-            columns: ReportColumns.visible(
-              ReportColumns.movement(),
-              _movementChosen,
-            ),
-            rows: state.movementRows,
-          )
-        : ReportDataTable<StockSummaryRow>(
-            columns: ReportColumns.visible(
-              ReportColumns.summary(filter.groupBy),
-              _summaryChosen(filter.groupBy),
-            ),
-            rows: state.summaryRows,
-          );
+    final movementColumns = ReportColumns.visible(
+      ReportColumns.movement(),
+      _chosenFor(template, _movementColumns),
+    );
+
+    final body = <Widget>[];
+
+    // ── التقارير الموسّعة تُعرض أقساماً متتابعة: فرع بعد فرع، وصنف بعد صنف — لأن المراجع
+    //    الذي يرى كل الفروع في جدول واحد لا يرى رصيد أي فرع منها على حدة.
+    // ── Scoped reports render as successive sections, branch after branch and item after
+    //    item: a reviewer looking at every branch in one table sees no branch's balance.
+    if (isMovement && template.sectioned && state.sections.length > 1) {
+      for (final block in _movementBlocks(template, state, movementColumns)) {
+        body.add(block);
+      }
+    } else if (isMovement) {
+      body.add(
+        ReportDataTable<StockMovementRow>(
+          columns: movementColumns,
+          rows: state.movementRows,
+        ),
+      );
+    } else {
+      body.add(
+        ReportDataTable<StockSummaryRow>(
+          columns: ReportColumns.visible(
+            ReportColumns.summary(filter.groupBy),
+            _chosenFor(template, _summaryColumns),
+          ),
+          rows: state.summaryRows,
+        ),
+      );
+    }
+
+    // إحصاءات نهاية التقرير — totals الخادم لا مجموع ما على الشاشة
+    // The closing statistics are the server's totals, never a sum of what is on screen.
+    body.add(_statsBand(state.stats, title: 'إحصاءات التقرير'));
 
     return ReportZoomView(
       child: SingleChildScrollView(
@@ -206,9 +230,7 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              table,
-              const SizedBox(height: 10),
-              _summaryBand(state),
+              ...body,
               if (state.truncated) ...[
                 const SizedBox(height: 6),
                 Text(
@@ -226,6 +248,94 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
           // 5) التذييل الرسمي
           footer: const ReportSignatureFooter(),
         ),
+      ),
+    );
+  }
+
+  /// أقسام حركة صنف: عنوان القسم ثم جدول ثم إحصاء ذلك القسم
+  /// A movement section: its heading, its table, and that section's own statistics.
+  List<Widget> _movementBlocks(
+    ReportTemplate template,
+    StoreReportState state,
+    List<ReportColumn<StockMovementRow>> columns,
+  ) {
+    final order = <String>[];
+    final buckets = <String, List<StockMovementRow>>{};
+
+    // الترتيب من الخادم لا من الشاشة: السطور مرتّبة بقسمها ثم بتاريخها أصلاً
+    // The order comes from the server: rows already arrive section-major, then by date.
+    for (final row in state.movementRows) {
+      final key = row.sectionKey.isEmpty ? '__all__' : row.sectionKey;
+
+      if (!buckets.containsKey(key)) {
+        order.add(key);
+        buckets[key] = <StockMovementRow>[];
+      }
+
+      buckets[key]!.add(row);
+    }
+
+    return [
+      for (int i = 0; i < order.length; i++) ...[
+        _sectionHeading(order[i], buckets[order[i]]!, state, i),
+        ReportDataTable<StockMovementRow>(
+          columns: columns,
+          rows: buckets[order[i]]!,
+        ),
+        const SizedBox(height: 8),
+        _statsBand(
+          i < state.sections.length ? state.sections[i].stats : const ReportStats(),
+          title: 'إحصاءات القسم',
+        ),
+        const SizedBox(height: 16),
+      ],
+    ];
+  }
+
+  Widget _sectionHeading(
+    String key,
+    List<StockMovementRow> rows,
+    StoreReportState state,
+    int index,
+  ) {
+    final fromRow = rows.first.sectionLabel.trim();
+    final fromMeta = index < state.sections.length
+        ? state.sections[index].label.trim()
+        : '';
+    final label = fromRow.isNotEmpty
+        ? fromRow
+        : fromMeta.isNotEmpty
+        ? fromMeta
+        : state.filter!.scope.label;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${state.filter!.scope == StoreReportScope.item ? 'الفرع' : 'القسم'}: $label',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.primary,
+              ),
+            ),
+          ),
+          Text(
+            '${rows.length} حركة',
+            style: const TextStyle(
+              fontSize: 10,
+              color: AppColors.textMuted,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -278,20 +388,32 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     );
   }
 
-  /// ملخص الجدول — الرقم والقيمة من الخادم لا من المرئي
-  /// The table summary — server figures, never the visible slice.
-  Widget _summaryBand(StoreReportState state) {
-    final isMovement = state.kind == StoreReportKind.movement;
-    final count = isMovement
-        ? state.movementRows.length
-        : state.summaryRows.length;
-
-    final cells = <(String, String, Color)>[
-      ('عدد السطور', '$count', AppColors.textPrimary),
-      ('وارد', StoreFormat.qty(state.totalIn), AppColors.success),
-      ('صادر', StoreFormat.qty(state.totalOut), AppColors.error),
-      ('الصافي', StoreFormat.qty(state.totalIn - state.totalOut), AppColors.textPrimary),
-      ('القيمة', StoreFormat.money(state.totalValue), AppColors.primary),
+  /// شريط الإحصاءات — السابق والوارد والمنصرف والصافي والحالي، كمية وقيمة
+  /// The statistics band: opening, inbound, outbound, net and closing, quantity and value.
+  ///
+  /// ── الأرقام من الخادم وحده: الرصيد السابق لا يُعرف من السطور المعروضة، ولو حُسب هنا
+  ///    لكان رقمًا من تأليف الواجهة.
+  /// ── Every figure comes from the server: the opening balance cannot be known from the
+  ///    visible rows, so computing it here would be the screen inventing a number.
+  Widget _statsBand(ReportStats stats, {required String title}) {
+    final cells = <(String, String, Color)>[      
+      ('الرصيد السابق', StoreFormat.qty(stats.openingQty), AppColors.textPrimary),
+      ('إجمالي الوارد', StoreFormat.qty(stats.qtyIn), AppColors.success),
+      (
+        'قيمة الوارد',
+        stats.qtyInValue == 0 ? '—' : StoreFormat.money(stats.qtyInValue),
+        AppColors.success,
+      ),
+      ('إجمالي المنصرف', StoreFormat.qty(stats.qtyOut), AppColors.error),
+      (
+        'قيمة المنصرف',
+        stats.qtyOutValue == 0 ? '—' : StoreFormat.money(stats.qtyOutValue),
+        AppColors.error,
+      ),
+      ('صافي الفترة', StoreFormat.qty(stats.netQty), AppColors.textPrimary),
+      ('الرصيد الحالي', StoreFormat.qty(stats.closingQty), AppColors.primary),
+      if (stats.closingValue != 0)
+        ('قيمة الرصيد', StoreFormat.money(stats.closingValue), AppColors.primary),
     ];
 
     return Container(
@@ -301,102 +423,125 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: AppColors.border),
       ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 4,
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final cell in cells)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              textDirection: TextDirection.rtl,
-              children: [
-                Text(
-                  '${cell.$1}: ',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  cell.$2,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: cell.$3,
-                  ),
-                ),
-              ],
+          Text(
+            title,
+            // لا const: `primary` قيمة مشتقة من لوحة الألوان لا ثابت
+            // No const: primary is a derived palette value, not a literal.
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primary,
             ),
+          ),
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 16,
+            runSpacing: 4,
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              for (final cell in cells)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  textDirection: TextDirection.rtl,
+                  children: [
+                    Text(
+                      '${cell.$1}: ',
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Text(
+                      cell.$2,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: cell.$3,
+                      ),
+                    ),
+                  ],
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 
-  /// الأعمدة المختارة لنوع الحركة — الافتراضي ما لم يلمس المستخدم شيئاً
-  /// The chosen movement columns: the defaults until the user touches anything.
-  Set<String> get _movementChosen {
-    final template = ReportColumns.movement();
-
-    return _movementColumns ?? ReportColumns.defaultIds(template).toSet();
-  }
-
-  /// الأعمدة المختارة للخلاصة — تتبع مستوى التجميع لأن عنوان العمود الأول يتبدّل
-  /// The chosen summary columns: they follow the aggregation level, since the first column's
-  /// caption changes with it.
-  Set<String> _summaryChosen(StoreReportGroupBy level) {
-    final template = ReportColumns.summary(level);
-
-    return _summaryColumns ?? ReportColumns.defaultIds(template).toSet();
+  /// الأعمدة الظاهرة لقالب: الأساسية دائماً + ما اختاره المستخدم من الاختيارية
+  /// The columns a template shows: the basics always, plus whatever the user picked.
+  ///
+  /// ── الأساسية لا تُخفى: إخفاء «الرصيد» من تقرير حركة يترك مستنداً لا يقول أين انتهى
+  ///    الأمر، والقالب هو من يحدّد ماذا يبقى لا المستخدم.
+  /// ── The basics cannot be hidden: hiding "balance" from a movement report leaves a document
+  ///    that never says where things ended up. The template decides what stays, not the user.
+  Set<String> _chosenFor(ReportTemplate template, Set<String>? chosen) {
+    return {
+      ...template.basic,
+      if (chosen != null)
+        for (final id in chosen)
+          if (template.optional.contains(id)) id,
+    };
   }
 
   /// معرّفات الأعمدة الظاهرة — تُمرَّرة للتصدير فيطابق المطبوع ما على الشاشة
   /// The visible column ids, passed to the exporters so the print matches the screen.
   List<String> _columnIds(StoreReportFilter filter) {
-    if (filter.kind == StoreReportKind.movement) {
-      return [
-        for (final column in ReportColumns.visible(
-          ReportColumns.movement(),
-          _movementChosen,
-        ))
-          column.id,
-      ];
-    }
+    final template = ReportTemplates.of(filter);
+
+    final columns = filter.kind == StoreReportKind.movement
+        ? ReportColumns.visible(
+            ReportColumns.movement(),
+            _chosenFor(template, _movementColumns),
+          )
+        : ReportColumns.visible(
+            ReportColumns.summary(filter.groupBy),
+            _chosenFor(template, _summaryColumns),
+          );
 
     return [
-      for (final column in ReportColumns.visible(
-        ReportColumns.summary(filter.groupBy),
-        _summaryChosen(filter.groupBy),
-      ))
+      for (final column in columns)
         column.id,
     ];
   }
 
   // ─────────────────────────── الأعمدة ───────────────────────────
   Future<void> _openColumns() async {
-    final state = ref.read(storeReportProvider);
-    final filter = state.filter;
+    final filter = ref.read(storeReportProvider).filter;
 
     if (filter == null) return;
 
+    final report = ReportTemplates.of(filter);
     final isMovement = filter.kind == StoreReportKind.movement;
-    final template = isMovement
+    final all = isMovement
         ? ReportColumns.movement()
         : ReportColumns.summary(filter.groupBy);
-    final chosen = Set<String>.from(
-      (isMovement ? _movementColumns : _summaryColumns) ??
-          ReportColumns.defaultIds(template),
-    );
+
+    // الأساسية تُعرض موصولة دائماً: القالب هو من يحدّدها لا القائمة المنسدلة
+    // The basics are always shown and always on: the template defines them, not the sheet.
+    // لا `cast<Object>` هنا: الأعمدة أنواعها الحقيقية، ولو مُحيَت لانفجر القارئ وقت الرسم.
+    // No `cast<Object>` here: columns keep their real types — erasing them explodes at paint.
+    final labels = <(String, String)>[
+      for (final column in all)
+        if (report.basic.contains(column.id) ||
+            report.optional.contains(column.id))
+          (column.id, column.label),
+    ];
 
     final next = await ReportColumnsSheet.show(
       context,
-      labels: [for (final column in template) (column.id, column.label)],
-      defaults: ReportColumns.defaultIds(template),
-      initial: chosen,
+      labels: labels,
+      locked: report.basic,
+      defaults: report.basic,
+      initial: _chosenFor(report, isMovement ? _movementColumns : _summaryColumns),
     );
 
     if (next == null) return;

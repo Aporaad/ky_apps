@@ -9,6 +9,7 @@ import '../../data/models/item_model.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/store_reference.dart';
 import '../providers/items_providers.dart';
+import '../utils/report_templates.dart';
 import '../widgets/store_ui.dart';
 import 'multi_select_field.dart';
 
@@ -62,6 +63,11 @@ class _ReportFilterSheetState extends ConsumerState<ReportFilterSheet> {
   static const String _none = 'لاشي';
 
   late StoreReportKind _kind = widget.initial.kind;
+
+  /// نطاق التقرير: ثمانية قوالب = أربعة نطاقات × نوعين — القالب يحدّد الأعمدة والإحصاءات
+  /// The report scope: eight templates = four scopes × two kinds. The template decides the
+  /// columns, the sections and the statistics.
+  late StoreReportScope _scope = widget.initial.scope;
   late DateTime _from = widget.initial.from;
   late DateTime _to = widget.initial.to;
   late StoreReportGroupBy _groupBy = widget.initial.groupBy;
@@ -149,6 +155,41 @@ class _ReportFilterSheetState extends ConsumerState<ReportFilterSheet> {
                     selected: {_kind},
                     onSelectionChanged: (value) =>
                         setState(() => _kind = value.first),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // ── أي تقرير بالضبط: النطاق لا التفاصيل — حركة صنف فرعي غير خلاصة مجموعة
+                  // ── Which report exactly: the scope, not the details. Choosing between these
+                  //    by guessing from the filters is how users ended up with the wrong document.
+                  Text(
+                    'التقرير: ${_kind == StoreReportKind.movement ? 'حركة' : 'خلاصة'} ${_scope.label}',
+                    // لا const: `primary` قيمة مشتقة من لوحة الألوان لا ثابت
+                    // No const: primary is a derived palette value, not a literal.
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 3,
+                    runSpacing: 3,
+                    alignment: WrapAlignment.start,
+                    children: [
+                      for (final scope in StoreReportScope.values)
+                        ChoiceChip(
+                          label: Text(scope.label, style: const TextStyle(fontSize: 10)),
+                          selected: _scope == scope,
+                          visualDensity: VisualDensity.compact,
+                          onSelected: (_) => setState(() {
+                            _scope = scope;
+                            // مستوى التجميع يجب أن يكون مما يطرحه القالب الجديد، لا مما تبقى
+                            // The grouping must be one the new template offers, not a leftover.
+                            _groupBy = _groupingOptions.first;
+                          }),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   _dateRow(),
@@ -311,6 +352,7 @@ class _ReportFilterSheetState extends ConsumerState<ReportFilterSheet> {
       ('أسبوع', 6),
       ('شهر', 29),
       ('ثلاثة أشهر', 91),
+      ('سنة كاملة', 365),
     ];
 
     return Wrap(
@@ -415,24 +457,48 @@ class _ReportFilterSheetState extends ConsumerState<ReportFilterSheet> {
     );
   }
 
+  /// مستويات التجميع المتاحة لهذا القالب — لا كل المستويات الممكنة في النظام
+  /// The grouping levels this template offers — not every level the system knows.
+  List<StoreReportGroupBy> get _groupingOptions {
+    final template = ReportTemplates.of(
+      StoreReportFilter(
+        kind: _kind,
+        scope: _scope,
+        from: _from,
+        to: _to,
+        groupBy: _groupBy,
+      ),
+    );
+
+    return template.groupings.isEmpty
+        ? const [StoreReportGroupBy.itemStore]
+        : template.groupings;
+  }
+
   Widget _groupByField() {
+    final options = _groupingOptions;
+
+    // مستوى محفوظ من قالب آخر يبقى معروضاً وإلا ضاع اختيار المستخدم بصمت
+    // A level carried over from another template stays listed rather than silently vanishing.
+    final current = options.contains(_groupBy) ? _groupBy : options.first;
+
     return DropdownButtonFormField<StoreReportGroupBy>(
-      value: _groupBy,
+      value: current,
       isExpanded: true,
       decoration: const InputDecoration(
-        labelText: 'مستوى التجميع',
+        labelText: 'خيارات التجميع',
         isDense: true,
         border: OutlineInputBorder(),
       ),
       items: [
-        for (final level in StoreReportGroupBy.values)
+        for (final level in options)
           DropdownMenuItem(
             value: level,
             child: Text(level.label, style: const TextStyle(fontSize: 12.5)),
           ),
       ],
       onChanged: (value) =>
-          setState(() => _groupBy = value ?? StoreReportGroupBy.item),
+          setState(() => _groupBy = value ?? options.first),
     );
   }
 
@@ -579,6 +645,7 @@ class _ReportFilterSheetState extends ConsumerState<ReportFilterSheet> {
       context,
       StoreReportFilter(
         kind: _kind,
+        scope: _scope,
         from: _from,
         to: _to,
         storeNos: _storeNos,

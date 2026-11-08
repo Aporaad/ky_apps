@@ -128,7 +128,7 @@ void main() {
         kind: StoreReportKind.summary,
         from: from,
         to: to,
-        groupBy: StoreReportGroupBy.group,
+        groupBy: StoreReportGroupBy.mainGroup,
       );
 
       expect(summary.toQuery()['group_by'], 'group');

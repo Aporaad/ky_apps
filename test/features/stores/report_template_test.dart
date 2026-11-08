@@ -6,8 +6,10 @@ import 'package:ky_apps/core/widgets/report_zoom_view.dart';
 import 'package:ky_apps/features/stores/data/models/report_model.dart';
 import 'package:ky_apps/features/stores/data/models/store_model.dart';
 import 'package:ky_apps/features/stores/data/models/store_reference.dart';
+import 'package:ky_apps/features/stores/data/repositories/store_reports_repository.dart';
 import 'package:ky_apps/features/stores/presentation/utils/report_columns.dart';
 import 'package:ky_apps/features/stores/presentation/utils/report_parameters.dart';
+import 'package:ky_apps/features/stores/presentation/utils/report_templates.dart';
 import 'package:ky_apps/features/stores/presentation/widgets/multi_select_field.dart';
 import 'package:ky_apps/features/stores/presentation/widgets/report_data_table.dart';
 
@@ -102,7 +104,7 @@ void main() {
       expect(label.read(StockSummaryRow(storeNo: 7, storeName: 'المخزن الرئيسي'), 0),
           'المخزن الرئيسي');
 
-      final byGroup = ReportColumns.summary(StoreReportGroupBy.group);
+      final byGroup = ReportColumns.summary(StoreReportGroupBy.mainGroup);
 
       expect(
         byGroup.firstWhere((column) => column.id == 'label').label,
@@ -118,10 +120,19 @@ void main() {
     });
 
     test('keep the store column on when the level is item × store', () {
-      final columns = ReportColumns.summary(StoreReportGroupBy.item);
+      final columns = ReportColumns.summary(StoreReportGroupBy.itemStore);
       final store = columns.firstWhere((column) => column.id == 'store');
 
       expect(store.defaultOn, isTrue);
+
+      // صنف رئيسي وحده بلا مخزن في المفتاح: عمود المخزن اختياري لا أساسي
+      // A bare main item has no store in its key: the store column is optional there.
+      final byItem = ReportColumns.summary(StoreReportGroupBy.item);
+
+      expect(
+        byItem.firstWhere((column) => column.id == 'store').defaultOn,
+        isFalse,
+      );
 
       // الخلاصة بالمخزن وحده لا تحتاج عمود مخزن يكرر عمود العنوان
       // A store-level summary does not need a store column repeating its own label column.
@@ -129,6 +140,22 @@ void main() {
 
       expect(
         byStore.firstWhere((column) => column.id == 'store').defaultOn,
+        isFalse,
+      );
+    });
+
+    test('offer a branch column only where the branch is the grouping key', () {
+      final bySub = ReportColumns.summary(StoreReportGroupBy.sub);
+
+      expect(
+        bySub.firstWhere((column) => column.id == 'sub').defaultOn,
+        isTrue,
+      );
+
+      final byItemStore = ReportColumns.summary(StoreReportGroupBy.itemStore);
+
+      expect(
+        byItemStore.firstWhere((column) => column.id == 'sub').defaultOn,
         isFalse,
       );
     });
@@ -227,7 +254,7 @@ void main() {
             kind: StoreReportKind.summary,
             from: from,
             to: to,
-            groupBy: StoreReportGroupBy.subgroup,
+            groupBy: StoreReportGroupBy.subGroup,
           ),
         ).any((p) => p.label == 'مستوى التجميع'),
         isTrue,
@@ -403,6 +430,236 @@ void main() {
       await tester.pump();
 
       expect(emitted, hasLength(options.length));
+    });
+  });
+
+  group('report templates', () {
+    test('offers exactly the eight reports the user listed', () {
+      expect(ReportTemplates.all, hasLength(8));
+
+      final keys = {
+        for (final t in ReportTemplates.all)
+          '${t.scope.code}/${t.kind.code}',
+      };
+
+      // قالب واحد لكل نطاق وكل نوع: لا تكرار ولا نقص
+      // One template per scope and kind: nothing repeated, nothing missing.
+      expect(keys, hasLength(8));
+    });
+
+    test('the movement reports are titled by scope, in the words of the floor', () {
+      expect(
+        ReportTemplates.of(
+          StoreReportFilter(
+            scope: StoreReportScope.branch,
+            from: from,
+            to: to,
+          ),
+        ).title,
+        'تقرير حركة صنف فرعي',
+      );
+
+      expect(
+        ReportTemplates.of(
+          StoreReportFilter(
+            scope: StoreReportScope.mainGroup,
+            kind: StoreReportKind.summary,
+            from: from,
+            to: to,
+          ),
+        ).title,
+        'تقرير خلاصة مجموعة رئيسية',
+      );
+    });
+
+    test('movement basics are the seven columns the floor reads', () {
+      for (final template in ReportTemplates.all) {
+        if (template.kind != StoreReportKind.movement) continue;
+
+        expect(
+          template.basic,
+          containsAll(<String>['type', 'date', 'doc', 'qty', 'cost', 'value', 'balance']),
+        );
+      }
+    });
+
+    test('basics cannot be hidden and optional never repeats a basic', () {
+      for (final template in ReportTemplates.all) {
+        // لا عمود أساسي في القائمة الاختيارية: وإلا ظن المستخدم أنه يستطيع إخفاءه
+        // No basic column may hide in the optional list, or the user would think it optional.
+        expect(
+          template.optional.toSet().intersection(template.basic.toSet()),
+          isEmpty,
+        );
+
+        final visible = ReportTemplates.visibleIds(template, chosen: const {'no'});
+
+        for (final id in template.basic) {
+          expect(visible, contains(id));
+        }
+      }
+    });
+
+    test('only the wider movement reports split into sections', () {
+      final branch = ReportTemplates.of(
+        StoreReportFilter(from: from, to: to),
+      );
+      final item = ReportTemplates.of(
+        StoreReportFilter(scope: StoreReportScope.item, from: from, to: to),
+      );
+
+      expect(branch.sectioned, isFalse);
+      expect(item.sectioned, isTrue);
+
+      // الخلاصة لا تُقسَّم أبداً: هي أصلاً أرقام مجمّعة لا سطور حركة
+      // A summary is never sectioned: it is aggregated figures, not movement lines.
+      for (final template in ReportTemplates.all) {
+        if (template.kind == StoreReportKind.summary) {
+          expect(template.sectioned, isFalse);
+        }
+      }
+    });
+
+    test('each summary offers only the groupings that make sense for it', () {
+      StoreReportGroupBy first(StoreReportScope scope) => ReportTemplates.of(
+        StoreReportFilter(
+          kind: StoreReportKind.summary,
+          scope: scope,
+          from: from,
+          to: to,
+        ),
+      ).groupings.first;
+
+      expect(first(StoreReportScope.branch), StoreReportGroupBy.itemStore);
+      expect(first(StoreReportScope.item), StoreReportGroupBy.sub);
+      expect(first(StoreReportScope.subGroup), StoreReportGroupBy.item);
+      expect(first(StoreReportScope.mainGroup), StoreReportGroupBy.subGroup);
+
+      // خلاصة المجموعة الرئيسية تعرض أوسع قائمة تجميع: هي أعلى هرم الأسئلة
+      // The main-group summary offers the widest list: it sits at the top of the question tree.
+      expect(
+        ReportTemplates.of(
+          StoreReportFilter(
+            kind: StoreReportKind.summary,
+            scope: StoreReportScope.mainGroup,
+            from: from,
+            to: to,
+          ),
+        ).groupings,
+        hasLength(8),
+      );
+    });
+
+    test('grouping codes are the server whitelist tokens joined by a star', () {
+      // الوسيط الذي يرسله العميل يجب أن يفكّه الخادم بالترميز نفسه، بلا ترجمة وسطى
+      // What the client sends must decode on the server with the same tokens, no mapping layer.
+      expect(StoreReportGroupBy.itemStore.code, 'item*store');
+      expect(StoreReportGroupBy.subGroupItem.code, 'subgroup*item');
+      expect(StoreReportGroupBy.groupSubGroup.code, 'group*subgroup');
+
+      for (final level in StoreReportGroupBy.values) {
+        for (final token in level.code.split('*')) {
+          expect(
+            <String>['item', 'sub', 'store', 'subgroup', 'group', 'category'],
+            contains(token),
+          );
+        }
+      }
+    });
+  });
+
+  group('statistics from the server', () {
+    test('a movement row carries its running balance and section', () {
+      final row = StockMovementRow.fromJson(const <String, dynamic>{
+        'I_CODE': '1991',
+        'P_CODE': '10101052301',
+        'P_QTY': '-3.28',
+        'BALANCE_QTY': '120.5',
+        'BALANCE_VALUE': '162340.5',
+        'SECTION_KEY': '10101052301',
+        'SECTION_LABEL': 'ابها ملون 11-1',
+      });
+
+      expect(row.balanceQty, 120.5);
+      expect(row.balanceValue, 162340.5);
+      expect(row.sectionKey, '10101052301');
+      expect(row.sectionLabel, 'ابها ملون 11-1');
+    });
+
+    test('a summary row closes where it opened plus the period net', () {
+      final row = StockSummaryRow.fromJson(const <String, dynamic>{
+        'I_CODE': '1991',
+        'OPENING_QTY': '10',
+        'NET_QTY': '-2.5',
+        'CLOSING_QTY': '7.5',
+        'IN_VALUE': '1000',
+        'OUT_VALUE': '250',
+        'P_CODE': '201',
+        'SUB_NAME': 'ازرق',
+      });
+
+      expect(row.openingQty, 10);
+      expect(row.closingQty, 7.5);
+
+      // الحالي = السابق + الصافي: مطابقة حسابية بلا اعتماد على مكتبة
+      // Closing equals opening plus net: an arithmetic identity with no library needed.
+      final drift = row.openingQty + row.netQty - row.closingQty;
+
+      expect(drift > -0.0001 && drift < 0.0001, isTrue);
+      expect(row.inValue, 1000);
+      expect(row.subName, 'ازرق');
+    });
+
+    test('statistics parse the server meta for sections and totals', () {
+      final result = StoreReportResult<StockMovementRow>(
+        meta: <String, dynamic>{
+          'scope': 'item',
+          'totals': <String, dynamic>{
+            'opening_qty': 100,
+            'qty_in': 40,
+            'qty_in_value': 12000,
+            'qty_out': 15,
+            'qty_out_value': 4500,
+            'net_qty': 25,
+            'closing_qty': 125,
+            'closing_value': 7500,
+            'rows': 17,
+          },
+          'sections': <dynamic>[
+            <String, dynamic>{
+              'key': '201',
+              'label': 'فرع اول',
+              'opening_qty': 60,
+              'qty_in': 25,
+              'qty_out': 5,
+              'net_qty': 20,
+              'closing_qty': 80,
+              'rows': 9,
+            },
+            <String, dynamic>{
+              'key': '202',
+              'label': 'فرع ثاني',
+              'opening_qty': 40,
+              'qty_in': 15,
+              'qty_out': 10,
+              'net_qty': 5,
+              'closing_qty': 45,
+              'rows': 8,
+            },
+          ],
+        },
+      );
+
+      expect(result.scope, 'item');
+      expect(result.stats.closingQty, 125);
+      expect(result.stats.qtyInValue, 12000);
+      expect(result.sectionStats, hasLength(2));
+      expect(result.sectionLabels, ['فرع اول', 'فرع ثاني']);
+
+      // الإحصاءات تُقرأ من نفس القائمة: لا انفصال بين العنوان والرقم
+      // Labels and stats come from one list: they can never drift apart.
+      expect(result.sectionStats.first.closingQty, 80);
+      expect(result.sectionStats.last.rows, 8);
     });
   });
 

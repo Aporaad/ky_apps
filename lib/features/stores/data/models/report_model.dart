@@ -1,5 +1,36 @@
 import '../../../../core/utils/json_value_utils.dart';
 
+/// نطاق التقرير — بأي شيء يسأل المستخدم بالضبط
+/// The report scope: what exactly the user is asking about.
+///
+/// ── النطاق يقرّر كل شيء بعده: حركة صنف فرعي جدول واحد، وحركة صنف رئيسي قسم لكل فرع،
+///    وحركة مجموعة فرعية قسم لكل صنف رئيسي، وحركة مجموعة رئيسية قسم لكل مجموعة فرعية.
+/// ── The scope decides everything after it: a branch statement is one table, an item statement
+///    sections per branch, a sub-group statement per main item, a main-group one per sub group.
+enum StoreReportScope {
+  branch('branch', 'صنف فرعي', false),
+  item('item', 'صنف رئيسي', true),
+  subGroup('subgroup', 'مجموعة فرعية', true),
+  mainGroup('group', 'مجموعة رئيسية', true);
+
+  const StoreReportScope(this.code, this.label, this.sectioned);
+
+  final String code;
+  final String label;
+
+  /// هل يُعرض هذا النطاق كأقسام متتابعة برصيد لكل قسم؟
+  /// Whether this report renders as successive sections with a balance per section.
+  final bool sectioned;
+
+  static StoreReportScope fromCode(String? code) {
+    for (final scope in values) {
+      if (scope.code == code) return scope;
+    }
+
+    return branch;
+  }
+}
+
 /// نوع التقرير: عرض حركة تفصيلي أو خلاصة مجمّعة
 /// The report kind: a detailed movement view or an aggregated summary.
 enum StoreReportKind {
@@ -12,24 +43,66 @@ enum StoreReportKind {
   final String label;
 }
 
-/// مستوى التجميع في الخلاصة
-/// The aggregation level of a summary report.
+/// مستوى التجميع في الخلاصة — تركيب مركّب من الرموز التي يعرفها الخادم
+/// The summary's aggregation level: a composite of the tokens the server recognises.
 ///
-/// ── «خلاصة» سؤال واحد بصيغتين: ما تحرك لكل صنف في كل مخزن؟ أم ما تحرك لمجموعة كاملة؟
-///    الاختيار صريح الآن بدل أن يكون قراراً ثابتاً في الكود.
-/// ── "Summary" is one question in two forms: what moved per item per store, or what moved
-///    across a whole group? The level is now chosen, not hard-coded.
+/// ── الرموز حرفياً كما في القائمة البيضاء بالخادم (`item|sub|store|subgroup|group|category`)
+///    مفصولة بنجمة: أي رمز آخر يُهمل هناك ولا يصل إلى SQL.
+/// ── The codes are literally the server whitelist tokens joined by `*`; anything else is
+///    dropped server-side and never reaches the SQL.
 enum StoreReportGroupBy {
-  item('item', 'الصنف × المخزن'),
+  itemStore('item*store', 'صنف × مخزن'),
   store('store', 'المخزن'),
-  group('group', 'المجموعة الرئيسية'),
-  subgroup('subgroup', 'المجموعة الفرعية'),
+  sub('sub', 'صنف فرعي'),
+  subStore('sub*store', 'صنف فرعي × مخزن'),
+  item('item', 'صنف رئيسي'),
+  itemSub('item*sub', 'صنف رئيسي × صنف فرعي'),
+  subGroup('subgroup', 'مجموعة فرعية'),
+  mainGroup('group', 'مجموعة رئيسية'),
+  subGroupItem('subgroup*item', 'مجموعة فرعية × صنف رئيسي'),
+  subGroupSub('subgroup*sub', 'مجموعة فرعية × صنف فرعي'),
+  subGroupStore('subgroup*store', 'مجموعة فرعية × مخزن'),
+  groupSubGroup('group*subgroup', 'مجموعة رئيسية × مجموعة فرعية'),
   category('category', 'الفئة');
 
   const StoreReportGroupBy(this.code, this.label);
 
   final String code;
   final String label;
+
+  /// عنوان العمود الأول في الخلاصة: «الشيء الذي جُمِّعت له السطور» لا تسمية ثابتة
+  /// The summary's first column caption: whatever the rows were grouped by — never a
+  /// hard-coded word.
+  ///
+  /// ── العنوان يأتي مع مستوى التجميع وإلا قرأ المراجع عمود «الصنف» وهو في الحقيقة عمود
+  ///    الفروع، فيكون الرقم صحيحاً والقراءة غلط.
+  /// ── Without it a reader would see a column headed "item" holding branch rows: right
+  ///    numbers, wrong meaning.
+  String get subjectLabel => switch (this) {
+    StoreReportGroupBy.itemStore => 'الصنف',
+    StoreReportGroupBy.item => 'الصنف الرئيسي',
+    StoreReportGroupBy.sub => 'الصنف الفرعي',
+    StoreReportGroupBy.subStore => 'الصنف الفرعي',
+    StoreReportGroupBy.itemSub => 'الصنف الفرعي',
+    StoreReportGroupBy.store => 'المخزن',
+    StoreReportGroupBy.subGroup => 'المجموعة الفرعية',
+    StoreReportGroupBy.mainGroup => 'المجموعة الرئيسية',
+    StoreReportGroupBy.groupSubGroup => 'المجموعة الفرعية',
+    StoreReportGroupBy.subGroupItem => 'الصنف الرئيسي',
+    StoreReportGroupBy.subGroupSub => 'الصنف الفرعي',
+    StoreReportGroupBy.subGroupStore => 'المخزن',
+    StoreReportGroupBy.category => 'الفئة',
+  };
+
+  /// هل يحمل هذا المستوى فروعه كأعمدة مستقلة؟ (يعني عمود الفرع واللون)
+  /// Whether this level keeps branches as their own columns (so a branch and colour column).
+  bool get hasBranch => switch (this) {
+    StoreReportGroupBy.sub ||
+    StoreReportGroupBy.subStore ||
+    StoreReportGroupBy.itemSub ||
+    StoreReportGroupBy.subGroupSub => true,
+    _ => false,
+  };
 }
 
 /// معطيات التقرير التي تختارها النافذة المنبثقة
@@ -47,6 +120,7 @@ enum StoreReportGroupBy {
 class StoreReportFilter {
   const StoreReportFilter({
     this.kind = StoreReportKind.movement,
+    this.scope = StoreReportScope.branch,
     required this.from,
     required this.to,
     this.storeNos = const [],
@@ -58,11 +132,15 @@ class StoreReportFilter {
     this.sanfDno,
     this.sanfDnoLabel,
     this.movementTypeNos = const [],
-    this.groupBy = StoreReportGroupBy.item,
+    this.groupBy = StoreReportGroupBy.itemStore,
     this.customPeriod = false,
   });
 
   final StoreReportKind kind;
+
+  /// نطاق التقرير: يقرّر الأعمدة الأساسية، وتقسيم الأقسام، والإحصاءات
+  /// The report scope: it decides the basic columns, the sections and the statistics.
+  final StoreReportScope scope;
   final DateTime from;
   final DateTime to;
   final List<int> storeNos;
@@ -114,6 +192,7 @@ class StoreReportFilter {
 
   StoreReportFilter copyWith({
     StoreReportKind? kind,
+    StoreReportScope? scope,
     DateTime? from,
     DateTime? to,
     List<int>? storeNos,
@@ -133,6 +212,7 @@ class StoreReportFilter {
   }) {
     return StoreReportFilter(
       kind: kind ?? this.kind,
+      scope: scope ?? this.scope,
       from: from ?? this.from,
       to: to ?? this.to,
       storeNos: storeNos ?? this.storeNos,
@@ -154,6 +234,10 @@ class StoreReportFilter {
   Map<String, dynamic> toQuery() => {
     'from': fromText,
     'to': toText,
+    // النطاق يُرسل دائماً: الخادم يستنتجه من الفلاتر وقد لا يطابق ما قصده المستخدم
+    // The scope is always sent: the server can infer one from the filters that is not what the
+    // user actually meant.
+    'scope': scope.code,
     if (storeNos.isNotEmpty) 'store_nos': storeNos.join(','),
     if (groupNos.isNotEmpty) 'group_nos': groupNos.join(','),
     if (itemTypeNos.isNotEmpty) 'item_type_nos': itemTypeNos.join(','),
@@ -256,6 +340,10 @@ class StockMovementRow {
     this.category,
     this.subName,
     this.colorName,
+    this.balanceQty = 0,
+    this.balanceValue = 0,
+    this.sectionKey = '',
+    this.sectionLabel = '',
   });
 
   final DateTime? date;
@@ -282,6 +370,18 @@ class StockMovementRow {
   /// The branch that moved the line — the main item's statement must name its branches.
   final String? subName;
   final String? colorName;
+
+  /// ── الرصيد الجاري داخل قسم السطر: السابق + تراكم الصافي حتى هذا السطر.
+  /// ── The running balance inside the row's section: its opening plus the net up to this line.
+  ///    يُحسب في الخادم لا على الشاشة، لأن الرصيد رقم مالي لا زينة عرض.
+  ///    It is computed server-side: a balance is a financial figure, not a display detail.
+  final double balanceQty;
+  final double balanceValue;
+
+  /// مفتاح القسم وعنوانه — حركة صنف رئيسي تُقسَّم لكل فرع، ومجموعة فرعية لكل صنف
+  /// The section's key and label: an item statement splits per branch, a sub group per item.
+  final String sectionKey;
+  final String sectionLabel;
 
   /// وصف الفرع كما يُعرض: الاسم أو المقاس، ثم اللون إن وُجد
   /// The branch label: its name or size, then its colour when present.
@@ -325,8 +425,87 @@ class StockMovementRow {
       colorName: JsonValues.asArabic(
         json['COLOR_NAME'] ?? json['color_name'],
       ),
+      balanceQty: JsonValues.asDoubleOrNull(json['BALANCE_QTY'] ?? json['balance_qty']) ?? 0,
+      balanceValue:
+          JsonValues.asDoubleOrNull(json['BALANCE_VALUE'] ?? json['balance_value']) ?? 0,
+      sectionKey:
+          JsonValues.asText(json['SECTION_KEY'] ?? json['section_key']) ?? '',
+      sectionLabel:
+          JsonValues.asArabic(json['SECTION_LABEL'] ?? json['section_label']) ?? '',
     );
   }
+}
+
+/// إحصاءات تقرير أو قسم: السابق والوارد والمنصرف والصافي والحالي
+/// Statistics for a report or one of its sections: opening, in, out, net and closing.
+///
+/// ── تُحسب في الخادم وتُرسل جاهزة: الرصيد السابق يحتاج مجموع كل ما قبل الفترة، وهو رقم
+///    لا يمكن اشتقاقه من السطور المعروضة وحدها بأي حال.
+/// ── Computed on the server and shipped ready: the opening balance is the sum of everything
+///    before the period, which cannot be derived from the visible rows under any circumstances.
+class ReportStats {
+  const ReportStats({
+    this.openingQty = 0,
+    this.qtyIn = 0,
+    this.qtyInValue = 0,
+    this.qtyOut = 0,
+    this.qtyOutValue = 0,
+    this.netQty = 0,
+    this.closingQty = 0,
+    this.closingValue = 0,
+    this.rows = 0,
+  });
+
+  final double openingQty;
+  final double qtyIn;
+  final double qtyInValue;
+  final double qtyOut;
+  final double qtyOutValue;
+  final double netQty;
+  final double closingQty;
+  final double closingValue;
+  final int rows;
+
+  factory ReportStats.fromMap(Map<String, dynamic>? map) {
+    double pick(String key) => JsonValues.asDoubleOrNull(
+      map?[key] ?? map?[key.toUpperCase()],
+    ) ?? 0;
+
+    return ReportStats(
+      openingQty: pick('opening_qty'),
+      qtyIn: pick('qty_in'),
+      qtyInValue: pick('qty_in_value'),
+      qtyOut: pick('qty_out'),
+      qtyOutValue: pick('qty_out_value'),
+      netQty: pick('net_qty'),
+      closingQty: pick('closing_qty'),
+      closingValue: pick('closing_value'),
+      rows: JsonValues.asInt(map?['rows'] ?? map?['ROWS']),
+    );
+  }
+}
+
+/// قسم في تقرير موسّع: عنوانه وإحصاؤه وسطور
+/// A section of a scoped report: its label, its statistics and its rows.
+///
+/// ── حركة صنف رئيسي تعرض كل فرع في قسم، وحركة مجموعة فرعية كل صنف رئيسي، وحركة مجموعة
+///    رئيسية كل مجموعة فرعية — والإحصاء يقف نهاية كل قسم لا في آخر التقرير وحده، وإلا
+///    احتاج المراجع أن يجمع الأقسام بيد.
+/// ── An item statement shows each branch as a section, a sub-group statement each main item,
+///    a main-group statement each sub group — and the statistics stop at the end of every
+///    section, not only at the end of the report, or a reviewer would add sections by hand.
+class ReportSection<T> {
+  const ReportSection({
+    required this.key,
+    required this.label,
+    required this.rows,
+    required this.stats,
+  });
+
+  final String key;
+  final String label;
+  final List<T> rows;
+  final ReportStats stats;
 }
 
 /// صف خلاصة: وارد/صادر/صافي لكل صنف ومخزن
@@ -348,6 +527,12 @@ class StockSummaryRow {
     this.cost = 0,
     this.netValue = 0,
     this.rowsCount = 0,
+    this.openingQty = 0,
+    this.closingQty = 0,
+    this.inValue = 0,
+    this.outValue = 0,
+    this.subDno,
+    this.subName,
   });
 
   final int sanfNo;
@@ -366,15 +551,40 @@ class StockSummaryRow {
   final double netValue;
   final int rowsCount;
 
+  /// ── الرصيد السابق والحالي لكل سطر خلاصة: السابق من ما قبل الفترة، والحالي منه + الصافي.
+  /// ── A summary row's opening and closing balance: the opening from before the period, the
+  ///    closing as that opening plus the period net — both computed on the server.
+  final double openingQty;
+  final double closingQty;
+
+  /// قيمة الوارد وقيمة المنصرف منفصلتان: «صافي القيمة» رقم لا يخبر المراجع عن اتجاه الحركة
+  /// Inbound and outbound values kept apart: a net value alone tells a reviewer nothing about
+  /// which way the stock actually moved.
+  final double inValue;
+  final double outValue;
+
+  /// الصنف الفرعي كمجمّع محتمل في خلاصة الصنف الرئيسي
+  /// The branch, which may itself be the grouping key of a main-item summary.
+  final int? subDno;
+  final String? subName;
+
   /// عنوان العمود الأول حسب مستوى التجميع — «الصنف» لا معنى له حين تُجمع بالمخزن
   /// The first column's caption for the aggregation level: "item" is meaningless when the
   /// report is grouped by store.
   String labelFor(StoreReportGroupBy level) => switch (level) {
     StoreReportGroupBy.store => storeName ?? 'مخزن $storeNo',
-    StoreReportGroupBy.group => groupName ?? '—',
-    StoreReportGroupBy.subgroup => typeName ?? '—',
+    StoreReportGroupBy.mainGroup => groupName ?? '—',
+    StoreReportGroupBy.subGroup => typeName ?? '—',
+    StoreReportGroupBy.groupSubGroup => typeName ?? '—',
     StoreReportGroupBy.category => category ?? '—',
+    StoreReportGroupBy.sub => subName ?? 'فرع ${subDno ?? 0}',
+    StoreReportGroupBy.subStore => subName ?? 'فرع ${subDno ?? 0}',
+    StoreReportGroupBy.itemSub => subName ?? 'فرع ${subDno ?? 0}',
+    StoreReportGroupBy.subGroupSub => subName ?? 'فرع ${subDno ?? 0}',
     StoreReportGroupBy.item => itemName ?? partNo ?? 'صنف $sanfNo',
+    StoreReportGroupBy.itemStore => itemName ?? partNo ?? 'صنف $sanfNo',
+    StoreReportGroupBy.subGroupItem => itemName ?? partNo ?? 'صنف $sanfNo',
+    StoreReportGroupBy.subGroupStore => storeName ?? 'مخزن $storeNo',
   };
 
   factory StockSummaryRow.fromJson(Map<String, dynamic> json) {
@@ -395,6 +605,14 @@ class StockSummaryRow {
       netValue:
           JsonValues.asDoubleOrNull(json['NET_VALUE'] ?? json['net_value']) ?? 0,
       rowsCount: JsonValues.asInt(json['ROWS_COUNT'] ?? json['rows_count']),
+      openingQty:
+          JsonValues.asDoubleOrNull(json['OPENING_QTY'] ?? json['opening_qty']) ?? 0,
+      closingQty:
+          JsonValues.asDoubleOrNull(json['CLOSING_QTY'] ?? json['closing_qty']) ?? 0,
+      inValue: JsonValues.asDoubleOrNull(json['IN_VALUE'] ?? json['in_value']) ?? 0,
+      outValue: JsonValues.asDoubleOrNull(json['OUT_VALUE'] ?? json['out_value']) ?? 0,
+      subDno: JsonValues.asIntOrNull(json['P_CODE'] ?? json['p_code']),
+      subName: JsonValues.asArabic(json['SUB_NAME'] ?? json['sub_name']),
     );
   }
 }

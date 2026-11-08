@@ -44,8 +44,13 @@ class ReportColumns {
 
   /// أعمدة عرض الحركة — لكل احتمال ينتجه معطٍ عمود يُظهره عند الحاجة
   /// Movement columns: whatever a parameter can produce has a column to show it.
+  ///
+  /// ── الأعمدة الأساسية تسمي الأشياء بأسماء الميدان: نوع الحركة · التاريخ · رقم المستند ·
+  ///    الكمية · التكلفة · القيمة · الرصيد، والبقية اختيار المستخدم.
+  /// ── The basic columns carry the floor's own words — movement type, date, document number,
+  ///    quantity, cost, value, balance — and everything else is the user's choice.
   static List<ReportColumn<StockMovementRow>> movement() {
-    return const [
+    return [
       ReportColumn(
         id: 'no',
         label: 'م.',
@@ -55,9 +60,16 @@ class ReportColumns {
         read: _mvNo,
       ),
       ReportColumn(
+        id: 'type',
+        label: 'نوع الحركة',
+        weight: 1.3,
+        defaultOn: true,
+        read: _mvType,
+      ),
+      ReportColumn(
         id: 'date',
         label: 'التاريخ',
-        weight: 1.1,
+        weight: 1.2,
         defaultOn: true,
         read: _mvDate,
       ),
@@ -69,13 +81,7 @@ class ReportColumns {
         defaultOn: true,
         read: _mvDoc,
       ),
-      ReportColumn(
-        id: 'type',
-        label: 'نوع الحركة',
-        weight: 1.3,
-        defaultOn: true,
-        read: _mvType,
-      ),
+      
       ReportColumn(
         id: 'store',
         label: 'المخزن',
@@ -134,43 +140,70 @@ class ReportColumns {
         weight: 0.7,
         read: _mvUnit,
       ),
-      ReportColumn(
+      const ReportColumn(
         id: 'in',
         label: 'وارد',
         weight: 0.9,
         numeric: true,
-        defaultOn: true,
         read: _mvIn,
       ),
-      ReportColumn(
+      const ReportColumn(
         id: 'out',
-        label: 'صادر',
+        label: 'منصرف',
+        weight: 0.9,
+        numeric: true,
+        read: _mvOut,
+      ),
+      // «الكمية» هي الكمية الموقّعة للحركة: عمود أساسي في كشف الحركة باسم ما يسميه الميدان
+      // "Quantity" is the movement's signed amount: a basic column named the way the floor
+      // names it, not the way the view's column does.
+      const ReportColumn(
+        id: 'qty',
+        label: 'الكمية',
         weight: 0.9,
         numeric: true,
         defaultOn: true,
-        read: _mvOut,
-      ),
-      ReportColumn(
-        id: 'net',
-        label: 'الصافي',
-        weight: 0.9,
-        numeric: true,
         read: _mvNet,
       ),
-      ReportColumn(
+      const ReportColumn(
         id: 'cost',
         label: 'التكلفة',
         weight: 1,
         numeric: true,
+        defaultOn: true,
         read: _mvCost,
       ),
-      ReportColumn(
+      const ReportColumn(
         id: 'value',
         label: 'القيمة',
         weight: 1.1,
         numeric: true,
         defaultOn: true,
         read: _mvValue,
+      ),
+      // الرصيد الجاري من الخادم: رصيد افتتاح القسم + تراكم صافي السطور حتى هنا
+      // The running balance comes from the server: the section's opening plus its net so far.
+      const ReportColumn(
+        id: 'balance',
+        label: 'الرصيد',
+        weight: 1,
+        numeric: true,
+        defaultOn: true,
+        read: _mvBalance,
+      ),
+      const ReportColumn(
+        id: 'balanceValue',
+        label: 'قيمة الرصيد',
+        weight: 1.1,
+        numeric: true,
+        read: _mvBalanceValue,
+      ),
+      const ReportColumn(
+        id: 'net',
+        label: 'الصافي',
+        weight: 0.9,
+        numeric: true,
+        read: _mvNet,
       ),
     ];
   }
@@ -189,16 +222,19 @@ class ReportColumns {
       ),
       ReportColumn(
         id: 'label',
-        label: switch (level) {
-          StoreReportGroupBy.store => 'المخزن',
-          StoreReportGroupBy.group => 'المجموعة الرئيسية',
-          StoreReportGroupBy.subgroup => 'المجموعة الفرعية',
-          StoreReportGroupBy.category => 'الفئة',
-          StoreReportGroupBy.item => 'الصنف',
-        },
+        label: level.subjectLabel,
         weight: 1.8,
         defaultOn: true,
         read: (row, index) => row.labelFor(level),
+      ),
+      ReportColumn(
+        id: 'sub',
+        label: 'الصنف الفرعي',
+        weight: 1.3,
+        // عمود الفرع أساسي فقط حين يكون التجميع بالفرع نفسه
+        // The branch column is basic only when the grouping level is the branch itself.
+        defaultOn: level.hasBranch,
+        read: _smSubName,
       ),
       const ReportColumn(
         id: 'part',
@@ -211,7 +247,9 @@ class ReportColumns {
         id: 'store',
         label: 'المخزن',
         weight: 1.1,
-        defaultOn: level == StoreReportGroupBy.item,
+        // مستوى لا يخزن بمخزن يعرض عمود المخزن اختيارياً لا أساسياً
+        // A level not grouped by store keeps the store column optional, never basic.
+        defaultOn: level == StoreReportGroupBy.itemStore,
         read: _smStore,
       ),
       ReportColumn(
@@ -240,6 +278,14 @@ class ReportColumns {
         read: _smUnit,
       ),
       const ReportColumn(
+        id: 'cost',
+        label: 'التكلفة',
+        weight: 1,
+        numeric: true,
+        defaultOn: true,
+        read: _smCost,
+      ),
+      const ReportColumn(
         id: 'in',
         label: 'وارد',
         weight: 0.9,
@@ -249,7 +295,7 @@ class ReportColumns {
       ),
       const ReportColumn(
         id: 'out',
-        label: 'صادر',
+        label: 'منصرف',
         weight: 0.9,
         numeric: true,
         defaultOn: true,
@@ -257,19 +303,42 @@ class ReportColumns {
       ),
       const ReportColumn(
         id: 'net',
-        label: 'الصافي',
+        label: 'صافي الفترة',
         weight: 0.9,
         numeric: true,
         defaultOn: true,
         read: _smNet,
       ),
       const ReportColumn(
-        id: 'cost',
-        label: 'التكلفة',
+        id: 'opening',
+        label: 'الرصيد السابق',
         weight: 1,
         numeric: true,
-        read: _smCost,
+        read: _smOpening,
       ),
+      const ReportColumn(
+        id: 'balance',
+        label: 'الرصيد',
+        weight: 1,
+        numeric: true,
+        defaultOn: true,
+        read: _smClosing,
+      ),
+      const ReportColumn(
+        id: 'inValue',
+        label: 'قيمة الوارد',
+        weight: 1.1,
+        numeric: true,
+        read: _smInValue,
+      ),
+      const ReportColumn(
+        id: 'outValue',
+        label: 'قيمة المنصرف',
+        weight: 1.1,
+        numeric: true,
+        read: _smOutValue,
+      ),
+      
       const ReportColumn(
         id: 'value',
         label: 'القيمة',
@@ -277,6 +346,13 @@ class ReportColumns {
         numeric: true,
         defaultOn: true,
         read: _smValue,
+      ),
+      const ReportColumn(
+        id: 'balanceValue',
+        label: 'قيمة الرصيد',
+        weight: 1.1,
+        numeric: true,
+        read: _smBalanceValue,
       ),
       const ReportColumn(
         id: 'lines',
@@ -369,6 +445,12 @@ String _mvCost(StockMovementRow row, int index) => StoreFormat.money(row.cost);
 String _mvValue(StockMovementRow row, int index) =>
     StoreFormat.money(row.lineValue);
 
+String _mvBalance(StockMovementRow row, int index) =>
+    StoreFormat.qty(row.balanceQty);
+
+String _mvBalanceValue(StockMovementRow row, int index) =>
+    StoreFormat.money(row.balanceValue);
+
 // ─── قراءات الخلاصة / summary readers ───────────────────────────────────────
 String _smNo(StockSummaryRow row, int index) => '${index + 1}';
 
@@ -397,3 +479,23 @@ String _smValue(StockSummaryRow row, int index) =>
     StoreFormat.money(row.netValue);
 
 String _smLines(StockSummaryRow row, int index) => '${row.rowsCount}';
+
+String _smOpening(StockSummaryRow row, int index) =>
+    StoreFormat.qty(row.openingQty);
+
+String _smClosing(StockSummaryRow row, int index) =>
+    StoreFormat.qty(row.closingQty);
+
+String _smInValue(StockSummaryRow row, int index) =>
+    StoreFormat.money(row.inValue);
+
+String _smOutValue(StockSummaryRow row, int index) =>
+    StoreFormat.money(row.outValue);
+
+/// قيمة الرصيد الحالية: صافي القيمة فوق الرصيد السابق — لا يُختلق رقم لعدم وجوده
+/// The closing value: the period's net value carried on the opening — never invented.
+String _smBalanceValue(StockSummaryRow row, int index) =>
+    StoreFormat.money(row.netValue);
+
+String _smSubName(StockSummaryRow row, int index) =>
+    row.subName ?? 'فرع ${row.subDno ?? 0}';

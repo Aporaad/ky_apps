@@ -23,6 +23,28 @@ class StoreReportResult<T> {
 
   bool get truncated => meta['truncated'] == true;
 
+  /// إحصاءات التقرير الكاملة — يرسلها الخادم جاهزاً لا يُشتق من السطور
+  /// The report's full statistics — shipped ready by the server, never derived from the rows.
+  ReportStats get stats => ReportStats.fromMap(
+    meta['totals'] is Map ? Map<String, dynamic>.from(meta['totals'] as Map) : null,
+  );
+
+  /// إحصاء كل قسم في التقارير الموسعة، بترتيب ظهورها في السطور
+  /// Each section's statistics, in the order the rows present them.
+  List<ReportStats> get sectionStats => [
+    for (final entry in meta['sections'] is List ? (meta['sections'] as List) : const [])
+      if (entry is Map) ReportStats.fromMap(Map<String, dynamic>.from(entry)),
+  ];
+
+  /// عناوين الأقسام بترتيبها — يطابق sectionStats حرفياً لأنهما من نفس القائمة
+  /// The section labels in order — matched to [sectionStats] because both come from one list.
+  List<String> get sectionLabels => [
+    for (final entry in meta['sections'] is List ? (meta['sections'] as List) : const [])
+      if (entry is Map) (entry['label'] ?? entry['LABEL'] ?? '').toString(),
+  ];
+
+  String get scope => (meta['scope'] ?? '').toString();
+
   double _double(String key) {
     final value = meta[key];
 

@@ -19,6 +19,7 @@ class ReportColumnsSheet extends StatefulWidget {
     required this.labels,
     required this.defaults,
     required this.initial,
+    this.locked = const [],
     this.title = 'أعمدة العرض',
   });
 
@@ -28,6 +29,10 @@ class ReportColumnsSheet extends StatefulWidget {
   /// The defaults come from the template: its ids are not copied out here.
   final List<String> defaults;
   final Set<String> initial;
+
+  /// الأعمدة الأساسية — تظهر موصولة ولا تُفصل: إخفاؤها يترك مستنداً بلا معنى
+  /// The basic columns: shown and locked on. Hiding them leaves a meaningless document.
+  final List<String> locked;
   final String title;
 
   static Future<Set<String>?> show(
@@ -35,6 +40,7 @@ class ReportColumnsSheet extends StatefulWidget {
     required List<(String, String)> labels,
     required List<String> defaults,
     required Set<String> initial,
+    List<String> locked = const [],
     String title = 'أعمدة العرض',
   }) {
     return showModalBottomSheet<Set<String>>(
@@ -45,6 +51,7 @@ class ReportColumnsSheet extends StatefulWidget {
         labels: labels,
         defaults: defaults,
         initial: initial,
+        locked: locked,
         title: title,
       ),
     );
@@ -60,7 +67,9 @@ class _ReportColumnsSheetState extends State<ReportColumnsSheet> {
   /// الظاهر فعلاً: المحدّد صريحاً، أو الافتراضي ما لم يلمس المستخدم شيئاً
   /// What is really on: the explicit picks, or the defaults until the user touches anything.
   Set<String> get _effective =>
-      _chosen.isEmpty ? widget.defaults.toSet() : _chosen;
+      (_chosen.isEmpty ? widget.defaults.toSet() : _chosen).union(
+        widget.locked.toSet(),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -120,21 +129,25 @@ class _ReportColumnsSheetState extends State<ReportColumnsSheet> {
                     FilterChip(
                       label: Text(entry.$2, style: const TextStyle(fontSize: 11)),
                       selected: _effective.contains(entry.$1),
-                      onSelected: (selected) => setState(() {
-                        // من حالة «الافتراضي» يجب أن ينتقل النقر الأول إلى مجموعة صريحة،
-                        // وإلا بدت الاستجابة معكوسة على Chip يبدو مختاراً
-                        // Out of the "defaults" state the first tap must materialise an explicit
-                        // set, or a chip that looks selected would toggle backwards.
-                        final base = {..._effective};
+                      // الأساسية موصولة ولا تلمس: إخفاؤها يترك مستنداً بلا معنى
+                      // Basics stay on and untouchable: hiding one leaves a meaningless document.
+                      onSelected: widget.locked.contains(entry.$1)
+                          ? null
+                          : (selected) => setState(() {
+                              // من حالة «الافتراضي» يجب أن ينتقل النقر الأول إلى مجموعة صريحة،
+                              // وإلا بدت الاستجابة معكوسة على Chip يبدو مختاراً
+                              // Out of the "defaults" state the first tap must materialise an
+                              // explicit set, or a chip that looks selected would toggle back.
+                              final base = {..._effective};
 
-                        if (selected) {
-                          base.add(entry.$1);
-                        } else {
-                          base.remove(entry.$1);
-                        }
+                              if (selected) {
+                                base.add(entry.$1);
+                              } else {
+                                base.remove(entry.$1);
+                              }
 
-                        _chosen = base;
-                      }),
+                              _chosen = base;
+                            }),
                     ),
                 ],
               ),
