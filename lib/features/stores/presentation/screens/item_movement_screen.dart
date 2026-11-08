@@ -4,13 +4,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
+import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/report_model.dart';
 import '../../data/repositories/store_result.dart';
 import '../providers/items_providers.dart';
+import '../utils/report_columns.dart';
+import '../utils/report_parameters.dart';
 import '../utils/store_export.dart';
+import '../widgets/report_columns_sheet.dart';
+import '../widgets/report_data_table.dart';
 import '../widgets/store_ui.dart';
 
 /// كشف حركة صنف — الصنف الرئيسي بكامل فروعه أو فرع واحد
@@ -46,6 +53,27 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
   DateTime? _from;
   DateTime? _to;
   bool _busy = false;
+
+  /// الأعمدة الظاهرة — `null` حتى يغيّرها المستخدم فتسري افتراضيات القالب
+  /// Visible columns: null until the user changes them, then the template defaults apply.
+  Set<String>? _columns;
+
+  /// كشف الفرع لا يُعقل أن يُطبع بلا فرع: عمود الفرع ملزم هنا وإن غاب من الافتراضي
+  /// A branch statement without its branch column is nonsense: the branch is mandatory here
+  /// even though the generic defaults may leave it out.
+  static const List<String> _statementDefaults = <String>[
+    'no',
+    'date',
+    'doc',
+    'type',
+    'store',
+    'branch',
+    'in',
+    'out',
+    'net',
+    'cost',
+    'value',
+  ];
 
   String get _branchLabel => widget.subDno == null
       ? 'كل الفروع'
@@ -85,6 +113,11 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
             onPressed: () => _pickRange(context),
             icon: const Icon(Icons.date_range_rounded),
           ),
+          IconButton(
+            tooltip: 'أعمدة العرض',
+            onPressed: _openColumns,
+            icon: const Icon(Icons.view_column_rounded),
+          ),
           if (canPrint)
             IconButton(
               tooltip: 'طباعة',
@@ -99,213 +132,224 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          _header(),
-          Expanded(
-            child: statement.when(
-              loading: () => const StoreLoading(
-                message: 'جارٍ تجهيز كشف الحركة...',
-              ),
-              error: (error, _) => StoreErrorState(
-                message: error.toString(),
-                onRetry: () =>
-                    ref.invalidate(itemStatementProvider(_key)),
-              ),
-              data: (data) {
-                if (data.isEmpty) {
-                  // ── بلا المدى الزمني في الرسالة حين لا مدى محدداً: «في المدى المحدد» توحي
-                  //    بأن المستخدم اختار مدى وهو لم يختر، والحقيقة أن الصنف بلا حركة إطلاقاً.
-                  // ── Do not blame a range the user never picked: "in the selected range" reads
-                  //    like a filter problem when the truth is the item has no movement at all.
-                  return StoreEmptyState(
-                    icon: Icons.timeline_rounded,
-                    title: 'لا حركات',
-                    description: _from == null && _to == null
-                        ? 'لم يُورَّد هذا الصنف ولا يُصرف منه بعد، فرصيد صفر هنا صحيح لا ناقص. '
-                              'اختر مدى زمنياً لعرض ما سبق.'
-                        : 'لا حركة في المدى المحدد ($_rangeText). وسّع المدى أو أعد الضبط.',
-                  );
-                }
+      // لا شريط فوق الترويسة: المستند يبدأ بترويسة التطبيق وينتهي بتذييله الرسمي،
+      // فالصنف والفرع صارا مذكورين في عنوان الكشف نفسه
+      // No strip above the letterhead: the document starts with the app's letterhead and ends
+      // with its official footer, and the item and branch now live in the statement's title.
+      body: statement.when(
+        loading: () => const StoreLoading(
+          message: 'جارٍ تجهيز كشف الحركة...',
+        ),
+        error: (error, _) => StoreErrorState(
+          message: error.toString(),
+          onRetry: () => ref.invalidate(itemStatementProvider(_key)),
+        ),
+        data: (data) {
+          if (data.isEmpty) {
+            // ── بلا المدى الزمني في الرسالة حين لا مدى محدداً: «في المدى المحدد» توحي
+            //    بأن المستخدم اختار مدى وهو لم يختر، والحقيقة أن الصنف بلا حركة إطلاقاً.
+            // ── Do not blame a range the user never picked: "in the selected range" reads
+            //    like a filter problem when the truth is the item has no movement at all.
+            return StoreEmptyState(
+              icon: Icons.timeline_rounded,
+              title: 'لا حركات',
+              description: _from == null && _to == null
+                  ? 'لم يُورَّد هذا الصنف ولا يُصرف منه بعد، فرصيد صفر هنا صحيح لا ناقص. '
+                        'اختر مدى زمنياً لعرض ما سبق.'
+                  : 'لا حركة في المدى المحدد ($_rangeText). وسّع المدى أو أعد الضبط.',
+            );
+          }
 
-                return ReportZoomView(child: _table(data.rows));
-              },
-            ),
-          ),
-          statement.maybeWhen(
-            data: (data) => data.isEmpty ? const SizedBox.shrink() : _totals(data),
-            orElse: () => const SizedBox.shrink(),
-          ),
-        ],
+          return _sheet(data);
+        },
       ),
     );
   }
 
-  /// ترويسة الكشف: الصنف والفرع والمدى — تُقرأ قبل أي جدول
-  /// The statement header: the item, the branch and the range — read before any table.
-  Widget _header() {
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            widget.itemName,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 6),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
+  /// القالب الرسمي للكشف بخمسة مكوّنات: ترويسة · عنوان · جدول · ملخص · تذييل
+  /// The statement's official template in five parts: letterhead · title · table · summary · footer.
+  ///
+  /// ── كان الكشف يُرسم كقائمة بطاقات بلا ترويسة ولا تذييل: نسخة قابلة للقراءة على الهاتف
+  ///    لكنها ليست مستنداً يُسلَّم لمحاسب ولا للمراجعة.
+  /// ── The statement used to be a list of cards with no letterhead and no footer: readable on
+  ///    a phone, but not a document an accountant or a reviewer could be handed.
+  Widget _sheet(MovementStatement data) {
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.read(appConfigNotifierProvider).config,
+    );
+    final title = _title();
+
+    return ReportZoomView(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.landscape,
+          maxPageWidth: 1240,
+          // 1) الترويسة الرسمية
+          header: ReportLetterheadBranding(info: letterhead),
+          // 2) عنوان الكشف ثم المدى عند التخصيص فقط
+          title: _titleBlock(title),
+          // 3) الجدول و4) ملخصه داخل المتن، ثم 5) التذييل الرسمي
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              StoreTag(
-                label: _branchLabel,
-                icon: widget.subDno == null
-                    ? Icons.account_tree_outlined
-                    : Icons.subdirectory_arrow_left_rounded,
-                color: AppColors.primary,
+              ReportDataTable<StockMovementRow>(
+                columns: _visibleColumns(),
+                rows: data.rows,
               ),
-              StoreTag(
-                label: _rangeText,
-                icon: Icons.date_range_rounded,
-                color: AppColors.info,
-              ),
+              const SizedBox(height: 10),
+              _summaryBand(data),
             ],
           ),
-        ],
+          footer: const ReportSignatureFooter(),
+        ),
       ),
     );
   }
 
-  /// جدول الحركة: التاريخ · المستند · النوع · المخزن · الفرع · وارد · صادر · التكلفة · القيمة
-  /// The movement table: date · document · type · store · branch · in · out · cost · value.
-  Widget _table(List<StockMovementRow> rows) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      itemCount: rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
-      itemBuilder: (context, index) {
-        final row = rows[index];
+  /// عنوان الكشف مبنياً في طبقة الأدوات — نفس ما يطبعه الـ PDF حرفيًا
+  /// The statement title built in the utils layer — byte for byte what the PDF prints.
+  ReportTitle _title() {
+    return ReportTitles.statement(
+      itemName: widget.itemName,
+      branchLabel: _branchLabel,
+      branchOnly: widget.subDno != null,
+      // المدى لا يُذكر إلا إذا خصّصه المستخدم: «كل الفترات» هي الافتراضي لا اختيار
+      // The range appears only if the user set it: "all periods" is the default, not a choice.
+      period: _from == null && _to == null ? null : _rangeText,
+    );
+  }
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: row.netQty < 0
-                  ? AppColors.error.withValues(alpha: 0.35)
-                  : AppColors.border,
+  Widget _titleBlock(ReportTitle title) {
+    return Column(
+      children: [
+        Text(
+          title.headline,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
+          ),
+        ),
+        if (title.period != null) ...[
+          const SizedBox(height: 3),
+          Text(
+            title.period!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
           ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 74,
-                child: Text(
-                  row.dateLabel,
+        ],
+        if (title.stores != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            title.stores!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// ملخص الكشف — من الخادم لا من السطور المعروضة
+  /// The statement summary — server totals, never the visible slice.
+  Widget _summaryBand(MovementStatement data) {
+    final cells = <(String, String, Color)>[
+      ('عدد السطور', '${data.lines}', AppColors.textPrimary),
+      ('وارد', StoreFormat.qty(data.qtyIn), AppColors.success),
+      ('صادر', StoreFormat.qty(data.qtyOut), AppColors.error),
+      ('الصافي', StoreFormat.qty(data.netQty), AppColors.textPrimary),
+      ('القيمة', StoreFormat.money(data.value), AppColors.primary),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 4,
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final cell in cells)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              textDirection: TextDirection.rtl,
+              children: [
+                Text(
+                  '${cell.$1}: ',
                   style: const TextStyle(
                     fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
                     color: AppColors.textMuted,
                   ),
                 ),
-              ),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '${row.typeName ?? 'حركة'} · ${row.storeName ?? row.storeNo}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      'مستند ${row.docNo ?? '—'} · ${row.subLabel}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: AppColors.textMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
+                Text(
+                  cell.$2,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: cell.$3,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 8),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    row.netQty == 0 ? '0' : StoreFormat.qty(row.netQty),
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.bold,
-                      color: row.netQty < 0
-                          ? AppColors.error
-                          : AppColors.success,
-                    ),
-                  ),
-                  Text(
-                    StoreFormat.money(row.lineValue),
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  /// شريط المجاميع — من الخادم لا من السطور المعروضة
-  /// The totals bar — server totals, never the visible rows.
-  Widget _totals(MovementStatement data) {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
-          Text(
-            '${data.lines} سطر',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'وارد ${StoreFormat.qty(data.qtyIn)}',
-            style: const TextStyle(fontSize: 11, color: AppColors.success),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'صادر ${StoreFormat.qty(data.qtyOut)}',
-            style: const TextStyle(fontSize: 11, color: AppColors.error),
-          ),
-          const Spacer(),
-          Text(
-            StoreFormat.money(data.value),
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
+              ],
             ),
-          ),
         ],
       ),
     );
+  }
+
+  /// الأعمدة الفعلية: اختيار المستخدم أو افتراضيات الكشف
+  /// The columns in force: the user's choice, or the statement's own defaults.
+  List<ReportColumn<StockMovementRow>> _visibleColumns() {
+    final template = ReportColumns.movement();
+
+    // نوع حقيقي لا محاك: قارئ العمود يقبل صفه بعينه، و`Object` يرمي `is not a subtype`
+    // A real type, not an erased one: the reader takes its own row, so Object would throw.
+    return ReportColumns.visible(
+      template,
+      _columns ?? _statementDefaults.toSet(),
+    );
+  }
+
+  List<String> _columnIds() {
+    return [
+      for (final column in _visibleColumns())
+        column.id,
+    ];
+  }
+
+  Future<void> _openColumns() async {
+    final template = ReportColumns.movement();
+    final chosen = {...?_columns};
+
+    final next = await ReportColumnsSheet.show(
+      context,
+      title: 'أعمدة كشف الحركة',
+      labels: [for (final column in template) (column.id, column.label)],
+      defaults: _statementDefaults,
+      initial: chosen,
+    );
+
+    if (next == null || !mounted) return;
+
+    setState(() => _columns = next);
   }
 
   /// اختيار المدى الزمني — بلا مدى يُمسح الـ VIEW كاملة
@@ -351,6 +395,11 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
         qtyOut: data.qtyOut,
         netQty: data.netQty,
         totalValue: data.value,
+        // المطبوع نسخة مما على الشاشة، لا جدولاً ثانيًا كُتب بيد أخرى
+        // The print is a copy of the screen, not a second table written by another hand.
+        columnIds: _columnIds(),
+        branchOnly: widget.subDno != null,
+        customPeriod: _from != null || _to != null,
       );
 
       final fileName =
@@ -381,35 +430,16 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
     setState(() => _busy = true);
 
     try {
-      final bytes = buildStoreRowsXlsx(
-        sheetName: 'حركة الصنف',
-        headers: const [
-          'التاريخ',
-          'المستند',
-          'نوع الحركة',
-          'المخزن',
-          'الفرع',
-          'وارد',
-          'صادر',
-          'الصافي',
-          'التكلفة',
-          'القيمة',
-        ],
-        rows: [
-          for (final row in data.rows)
-            [
-              row.dateLabel,
-              '${row.docNo ?? ''}',
-              row.typeName ?? '',
-              row.storeName ?? '',
-              row.subLabel,
-              StoreFormat.qty(row.qtyIn),
-              StoreFormat.qty(row.qtyOut),
-              StoreFormat.qty(row.netQty),
-              StoreFormat.money(row.cost),
-              StoreFormat.money(row.lineValue),
-            ],
-        ],
+      final bytes = buildItemStatementXlsx(
+        itemName: widget.itemName,
+        branchLabel: _branchLabel,
+        rangeText: _rangeText,
+        rows: data.rows,
+        qtyIn: data.qtyIn,
+        qtyOut: data.qtyOut,
+        netQty: data.netQty,
+        totalValue: data.value,
+        columnIds: _columnIds(),
       );
 
       await StoreExporter.shareXlsx(

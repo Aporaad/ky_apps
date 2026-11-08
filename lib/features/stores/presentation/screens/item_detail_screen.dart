@@ -334,7 +334,9 @@ class _ItemBody extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Expanded(child: _field(rows[i].$1, rows[i].$2), flex: 4),
+                  // `child` أخيراً في استدعاء Widget — قاعدة التنسيق في المشروع
+                  // `child` last in a widget invocation — the project's style rule.
+                  Expanded(flex: 4, child: _field(rows[i].$1, rows[i].$2)),
                   // Container(
                   //   width: 1,
                   //   height: 1,
@@ -343,7 +345,7 @@ class _ItemBody extends ConsumerWidget {
                   //   color: AppColors.border,
                   //   child: Text('|')
                   // ),
-                  Expanded(child: _field(rows[i].$3, rows[i].$4), flex: 2),
+                  Expanded(flex: 2, child: _field(rows[i].$3, rows[i].$4)),
                 ],
               ),
             ),
@@ -529,7 +531,9 @@ class _ItemBody extends ConsumerWidget {
             Expanded(
               flex: 3,
               child: Text(
-                sub.colorLabel ?? '1',
+                // `colorLabel` تحمل الاحتياط داخلها («1» عند انعدام اللون)، فلا ?? هنا
+                // colorLabel already carries its own fallback, so no ?? belongs here.
+                sub.colorLabel,
                 style: const TextStyle(fontSize: 11.5),
                 overflow: TextOverflow.ellipsis,
               ),

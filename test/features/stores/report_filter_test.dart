@@ -68,36 +68,104 @@ void main() {
       expect(query['to'], '2026-10-31');
     });
 
-    test('sends the stores as one comma-separated value and omits an empty scope', () {
+    test('sends the stores as one comma list and omits an empty scope', () {
       expect(
-        StoreReportFilter(from: from, to: to, storeNos: const [1, 3]).toQuery()['store_no'],
+        StoreReportFilter(
+          from: from,
+          to: to,
+          storeNos: const [1, 3],
+        ).toQuery()['store_nos'],
         '1,3',
       );
 
-      // القائمة الفارغة تعني «كل المخازن» لا «لا مخازن»
-      // An empty list means "all stores", never "no stores".
+      // القائمة الفارغة تعني «كل المخازن» لا «لا مخازن» — و«لاشي» في الواجهة تعني هذا بالضبط
+      // An empty list means "all stores", never "no stores" — which is exactly what the UI's
+      // "None" choice means.
       expect(
-        StoreReportFilter(from: from, to: to).toQuery().containsKey('store_no'),
+        StoreReportFilter(from: from, to: to).toQuery().containsKey('store_nos'),
         isFalse,
       );
+    });
+
+    test('sends groups and sub groups as lists, never as a single pick', () {
+      final query = StoreReportFilter(
+        from: from,
+        to: to,
+        groupNos: const [2, 5],
+        itemTypeNos: const [101, 102, 103],
+      ).toQuery();
+
+      expect(query['group_nos'], '2,5');
+      expect(query['item_type_nos'], '101,102,103');
+
+      // الوسيط المفرد لم يعد يُرسل: الخادم يظل يقبله للجهد القديم، لكن العميل لا يخلط المصدرين
+      // The singular params are gone from the client: the server still accepts them for old
+      // callers, but one client must not send two spellings of the same filter.
+      expect(query.containsKey('group_no'), isFalse);
+      expect(query.containsKey('type_no'), isFalse);
     });
 
     test('carries every dimension the sheet offers', () {
       final query = StoreReportFilter(
         from: from,
         to: to,
-        groupNo: 1,
-        typeNo: 101,
+        groupNos: const [1],
+        itemTypeNos: const [101],
         catNo: 4,
         sanfNo: 656,
         sanfDno: 2010602208,
       ).toQuery();
 
-      expect(query['group_no'], 1);
-      expect(query['type_no'], 101);
+      expect(query['group_nos'], '1');
+      expect(query['item_type_nos'], '101');
       expect(query['cat_no'], 4);
       expect(query['sanf_no'], 656);
       expect(query['sanf_dno'], 2010602208);
+    });
+
+    test('names the aggregation level only where a level means something', () {
+      final summary = StoreReportFilter(
+        kind: StoreReportKind.summary,
+        from: from,
+        to: to,
+        groupBy: StoreReportGroupBy.group,
+      );
+
+      expect(summary.toQuery()['group_by'], 'group');
+      expect(summary.usesGroupBy, isTrue);
+
+      // «عرض حركة» لا يجمع أصلاً، فمستوى التجميع فيه ضجيج في الاستعلام
+      // A movement view never aggregates, so a grouping level there is query noise.
+      final movement = StoreReportFilter(from: from, to: to);
+
+      expect(movement.toQuery().containsKey('group_by'), isFalse);
+    });
+
+    test('counts only the constraints that actually constrain', () {
+      expect(StoreReportFilter(from: from, to: to).constraintCount, 0);
+
+      expect(
+        StoreReportFilter(
+          from: from,
+          to: to,
+          storeNos: const [1, 2],
+          groupNos: const [3],
+          sanfNo: 656,
+        ).constraintCount,
+        3,
+      );
+
+      // أنواع الحركة لا تُحسب في الخلاصة: هي موجودة في النموذج لكنها لا تعمل فيه
+      // Movement types are not counted for a summary: they exist on the model but do nothing.
+      expect(
+        StoreReportFilter(
+          kind: StoreReportKind.summary,
+          from: from,
+          to: to,
+          movementTypeNos: const [12],
+        ).constraintCount,
+        0,
+      );
     });
   });
 
@@ -117,20 +185,29 @@ void main() {
       expect(switched.from, from);
     });
 
-    test('can clear a single dimension without touching the rest', () {
+    test('can clear an item and its branch without touching the rest', () {
       final base = StoreReportFilter(
         from: from,
         to: to,
-        groupNo: 1,
-        typeNo: 101,
+        groupNos: const [1],
+        itemTypeNos: const [101],
         sanfNo: 656,
+        sanfName: 'قماش',
+        sanfDno: 201,
+        sanfDnoLabel: 'أزرق',
       );
 
-      final cleared = base.copyWith(clearType: true, clearSanf: true);
+      final cleared = base.copyWith(clearSanf: true, clearSanfDno: true);
 
-      expect(cleared.groupNo, 1);
-      expect(cleared.typeNo, isNull);
+      expect(cleared.groupNos, [1]);
+      expect(cleared.itemTypeNos, [101]);
       expect(cleared.sanfNo, isNull);
+
+      // اسم الصنف يسبق صاحبه: بلاهما معاً تعرض الترويسة المطبوعة رقمًا يتيمًا
+      // The item name goes with the item: leaving it behind would print an orphan in the header.
+      expect(cleared.sanfName, isNull);
+      expect(cleared.sanfDno, isNull);
+      expect(cleared.sanfDnoLabel, isNull);
     });
   });
 }

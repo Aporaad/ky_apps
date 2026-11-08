@@ -4,16 +4,22 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
+import '../../../../core/widgets/report_a4_sheet.dart';
+import '../../../../core/widgets/report_letterhead_branding.dart';
+import '../../../../core/widgets/report_signature_footer.dart';
 import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
-import '../../data/models/item_model.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/store_reference.dart';
-import '../providers/items_providers.dart';
 import '../providers/reports_providers.dart';
 import '../providers/stores_providers.dart';
+import '../utils/report_columns.dart';
+import '../utils/report_parameters.dart';
 import '../utils/store_export.dart';
+import '../widgets/report_columns_sheet.dart';
+import '../widgets/report_data_table.dart';
+import '../widgets/report_filter_sheet.dart';
 import '../widgets/store_ui.dart';
 
 /// تقارير المخازن — عرض حركة أو خلاصة بمعطيات تُختار في نافذة منبثقة
@@ -22,8 +28,13 @@ import '../widgets/store_ui.dart';
 /// ── النافذة تُفتح تلقائياً عند الدخول: التقرير بلا مدى زمني وبلا مخزن يمسح الـ VIEW كاملة
 ///    ويُنتج آلاف السطور التي لا يقرأها أحد. الفتح التلقائي يجعل التحديد خطوة لا خياراً.
 /// ── The sheet opens automatically on entry: an unbounded, store-less report scans the whole
-///    view and returns thousands of rows nobody reads. Auto-opening makes the selection a step,
-///   not an option.
+///    view and returns thousands of rows nobody reads. Auto-opening makes selection a step.
+///
+/// ── القالب الرسمي واحد للحالتين: ترويسة التطبيق، شريط المعطيات، جدول كسول بأعمدة قابلة
+///    للإخفاء، ثم تذييل التوقيعات — وهو نفسه ما يُطبع ويُصدَّر.
+/// ── One official template for both kinds: the app letterhead, a parameters band, a lazy
+///    table whose columns can be hidden, then the signature footer — and it is the same thing
+///    that gets printed and exported.
 class StoreReportsScreen extends ConsumerStatefulWidget {
   const StoreReportsScreen({super.key});
 
@@ -33,22 +44,28 @@ class StoreReportsScreen extends ConsumerStatefulWidget {
 
 class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
   bool _busy = false;
-  bool _autoOpened = false;
+
+  /// الأعمدة الظاهرة — `null` حتى يلمس المستخدم نافذة الأعمدة فتسري الافتراضيات
+  /// Visible columns: null until the user touches the columns sheet, then defaults apply.
+  Set<String>? _movementColumns;
+  Set<String>? _summaryColumns;
 
   @override
   void initState() {
     super.initState();
 
+    // الفتح التلقائي عند الدخول فقط — والزر يفتحها دائماً بعدها
+    // Auto-open on entry only; afterwards the button is what opens it.
     WidgetsBinding.instance.addPostFrameCallback((_) => _openFilter());
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(storeReportProvider);
-    final notifier = ref.read(storeReportProvider.notifier);
     final auth = ref.watch(authNotifierProvider);
     final canPrint = auth.can(Perm.storesReportsPrint);
     final canExport = auth.can(Perm.storesReportsExport);
+    final hasRows = state.movementRows.isNotEmpty || state.summaryRows.isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -60,15 +77,23 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
             onPressed: _openFilter,
             icon: const Icon(Icons.tune_rounded),
           ),
+          // الأعمدة أداة لا زينة: نفس القالب يعرض الحركة بتسعة أعمدة أو بثمانية عشر
+          // Columns are a tool, not a decoration: the same template serves nine or eighteen.
+          IconButton(
+            tooltip: 'أعمدة العرض',
+            onPressed: hasRows || state.filter != null ? _openColumns : null,
+            icon: const Icon(Icons.view_column_rounded),
+          ),
           if (canPrint)
             IconButton(
               tooltip: 'طباعة',
-              onPressed: _busy ? null : () => _export(print: true),
+              onPressed: _busy || !hasRows ? null : () => _export(print: true),
               icon: const Icon(Icons.print_outlined),
             ),
           if (canExport)
             PopupMenuButton<String>(
               tooltip: 'تصدير',
+              enabled: hasRows && !_busy,
               onSelected: (value) async {
                 if (value == 'pdf') await _export();
                 if (value == 'xlsx') await _exportXlsx();
@@ -80,83 +105,29 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
             ),
         ],
       ),
-      body: Column(
-        children: [
-          _summaryBar(state),
-          Expanded(child: _body(state, notifier)),
-          _totalsBar(state),
-        ],
-      ),
+      body: _body(state),
     );
   }
 
-  Widget _summaryBar(StoreReportState state) {
-    final filter = state.filter;
-    final reference = ref.watch(storeReferenceProvider).value;
+  // ─────────────────────────── متن الشاشة ───────────────────────────
+  Widget _body(StoreReportState state) {
+    final notifier = ref.read(storeReportProvider.notifier);
 
-    if (filter == null) {
-      return Container(
-        width: double.infinity,
-        color: Colors.white,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: const Text(
-          'لم تُحدَّد معطيات بعد — اضغط «معطيات التقرير»',
-          style: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
-        ),
-      );
-    }
-
-    final storeLabel = filter.storeNos.isEmpty
-        ? 'كل المخازن'
-        : filter.storeNos
-              .map((no) => reference?.storeById(no)?.storeName ?? '$no')
-              .join('، ');
-
-    return Container(
-      width: double.infinity,
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Wrap(
-        spacing: 6,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          StoreTag(
-            label: filter.kind.label,
-            icon: filter.kind == StoreReportKind.movement
-                ? Icons.timeline_rounded
-                : Icons.summarize_rounded,
-            color: AppColors.primary,
-          ),
-          StoreTag(
-            label: '${filter.fromText} ← ${filter.toText}',
-            icon: Icons.date_range_rounded,
-          ),
-          StoreTag(label: storeLabel, icon: Icons.warehouse_outlined),
-          if (state.truncated)
-            const StoreTag(
-              label: 'النتائج مقتطعة — ضيّق المدى',
-              color: AppColors.warning,
-              icon: Icons.warning_amber_rounded,
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _body(StoreReportState state, StoreReportNotifier notifier) {
     if (state.filter == null) {
       return StoreEmptyState(
         icon: Icons.tune_rounded,
         title: 'حدّد معطيات التقرير',
         description:
-            'نوع التقرير والفترة والمخازن والمجموعات والفئات والأصناف وأنواع الحركة.',
+            'نوع التقرير والفترة والمخازن والمجموعات والفئات والأصناف والأصناف الفرعية '
+            'وأنواع الحركة — وكلها تحتمل «لاشي».',
         actionLabel: 'معطيات التقرير',
         onAction: _openFilter,
       );
     }
 
-    if (state.isLoading) return const StoreLoading(message: 'جارٍ تجهيز التقرير...');
+    if (state.isLoading) {
+      return const StoreLoading(message: 'جارٍ تجهيز التقرير...');
+    }
 
     if (state.error != null) {
       return StoreErrorState(
@@ -166,234 +137,281 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     }
 
     if (state.isEmpty) {
-      return const StoreEmptyState(
+      // رسالة صادقة: لا نتائج مطابقة مع ذكر ما ضيّق التقرير فعلاً
+      // An honest empty state: no matching rows, naming whatever actually narrowed the report.
+      return StoreEmptyState(
         icon: Icons.search_off_rounded,
-        title: 'لا نتائج',
-        description: 'لا حركة مطابقة للمعطيات المحددة في هذه الفترة.',
+        title: 'لا نتائج مطابقة',
+        description: ReportTitles.of(
+          state.filter!,
+          reference: ref.read(storeReferenceProvider).value,
+        ).singleLine,
+        actionLabel: 'تعديل المعطيات',
+        onAction: _openFilter,
       );
     }
 
+    return _sheet(state);
+  }
+
+  /// القالب الرسمي بخمسة مكوّنات لا غير: ترويسة · عنوان · جدول · ملخص · تذييل
+  /// The official template with exactly five parts: letterhead · title · table · summary · footer.
+  ///
+  /// ── لا شريط وسوم فوق الترويسة ولا جدول معطيات قبل الجدول: كلاهما كان يزيح المتن
+  ///    ويحوّل المستند إلى نموذج إدخال، والمعلومة التي كان يحملها صارت في العنوان نفسه.
+  /// ── No chip bar above the letterhead and no parameter table before the grid: both pushed
+  ///    the body down and turned the document back into an input form, and the one fact they
+  ///    carried now lives in the title itself.
+  Widget _sheet(StoreReportState state) {
+    final filter = state.filter!;
+    final reference = ref.watch(storeReferenceProvider).value;
+    final letterhead = ReportLetterheadInfo.fromConfig(
+      ref.watch(appConfigNotifierProvider).config,
+    );
+
+    final isMovement = filter.kind == StoreReportKind.movement;
+
+    // نوعان حقيقيان لا نوع محاك واحد: قارئ العمود دالة تستقبل صفها بعينه، وإمحاؤه
+    // بـ`Object` يرمي `is not a subtype` عند أول خلية تُرسم
+    // Two real types, never one erased type: a column's reader takes its own row, and erasing
+    // it to Object throws "is not a subtype" on the first cell drawn.
+    final table = isMovement
+        ? ReportDataTable<StockMovementRow>(
+            columns: ReportColumns.visible(
+              ReportColumns.movement(),
+              _movementChosen,
+            ),
+            rows: state.movementRows,
+          )
+        : ReportDataTable<StockSummaryRow>(
+            columns: ReportColumns.visible(
+              ReportColumns.summary(filter.groupBy),
+              _summaryChosen(filter.groupBy),
+            ),
+            rows: state.summaryRows,
+          );
+
     return ReportZoomView(
-      child: state.kind == StoreReportKind.movement
-          ? _movementList(state.movementRows)
-          : _summaryList(state.summaryRows),
-    );
-  }
-
-  Widget _movementList(List<StockMovementRow> rows) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      itemCount: rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 5),
-      itemBuilder: (context, index) {
-        final row = rows[index];
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        child: ReportA4Sheet(
+          orientation: ReportSheetOrientation.landscape,
+          maxPageWidth: 1240,
+          // 1) الترويسة الرسمية
+          header: ReportLetterheadBranding(info: letterhead),
+          // 2) عنوان التقرير ثم الفترة والمخازن عند التخصيص فقط
+          title: _title(state, filter, reference),
+          // 3) الجدول و 4) ملخصه — مكوّنان متتابعان داخل المتن
+          body: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      row.itemName ?? 'صنف ${row.sanfNo}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${row.dateLabel} · مستند ${row.docNo ?? '—'}'
-                      ' · ${row.typeName ?? '—'} · ${row.storeName ?? ''}',
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        color: AppColors.textMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: 60,
-                child: Text(
-                  row.qtyIn == 0 ? '—' : StoreFormat.qty(row.qtyIn),
+              table,
+              const SizedBox(height: 10),
+              _summaryBand(state),
+              if (state.truncated) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'تنبيه: النتائج مقتطعة عند حدّ السطور — ضيّق الفترة أو المخازن.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.success,
+                    fontSize: 9.5,
+                    color: AppColors.warning,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-              ),
-              SizedBox(
-                width: 60,
-                child: Text(
-                  row.qtyOut == 0 ? '—' : StoreFormat.qty(row.qtyOut),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    color: AppColors.error,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 92,
-                child: Text(
-                  StoreFormat.money(row.lineValue),
-                  textAlign: TextAlign.left,
-                  style: TextStyle(fontSize: 11, color: AppColors.textPrimary),
-                ),
-              ),
+              ],
             ],
           ),
-        );
-      },
+          // 5) التذييل الرسمي
+          footer: const ReportSignatureFooter(),
+        ),
+      ),
     );
   }
 
-  Widget _summaryList(List<StockSummaryRow> rows) {
-    return ListView.separated(
-      padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
-      itemCount: rows.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 5),
-      itemBuilder: (context, index) {
-        final row = rows[index];
+  Widget _title(
+    StoreReportState state,
+    StoreReportFilter filter,
+    StoreReference? reference,
+  ) {
+    final title = ReportTitles.of(filter, reference: reference);
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: AppColors.border),
+    return Column(
+      children: [
+        Text(
+          title.headline,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 16.5,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.3,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                flex: 3,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      row.itemName ?? 'صنف ${row.sanfNo}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    Text(
-                      '${row.partNo ?? '—'} · ${row.storeName ?? row.storeNo}'
-                      ' · ${row.uomCode ?? ''}',
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        color: AppColors.textMuted,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                width: 55,
-                child: Text(
-                  StoreFormat.qty(row.qtyIn),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 11, color: AppColors.success),
-                ),
-              ),
-              SizedBox(
-                width: 55,
-                child: Text(
-                  StoreFormat.qty(row.qtyOut),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 11, color: AppColors.error),
-                ),
-              ),
-              SizedBox(
-                width: 65,
-                child: Text(
-                  StoreFormat.qty(row.netQty),
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              SizedBox(
-                width: 92,
-                child: Text(
-                  StoreFormat.money(row.netValue),
-                  textAlign: TextAlign.left,
-                  style: TextStyle(fontSize: 11, color: AppColors.primary),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _totalsBar(StoreReportState state) {
-    if (!state.hasRun || state.isLoading) {
-      return const SizedBox.shrink();
-    }
-
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      child: Row(
-        children: [
+        ),
+        // الفترة لا تُذكر إلا إذا خصّصها المستخدم: المدى الافتراضي جزء من معنى التقرير
+        // The range appears only when customised: the default window is part of the meaning.
+        if (title.period != null) ...[
+          const SizedBox(height: 3),
           Text(
-            '${state.kind == StoreReportKind.movement ? state.movementRows.length : state.summaryRows.length} سطر',
-            style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-          ),
-          const SizedBox(width: 10),
-          Text(
-            'وارد ${StoreFormat.qty(state.totalIn)}',
-            style: const TextStyle(fontSize: 11, color: AppColors.success),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            'صادر ${StoreFormat.qty(state.totalOut)}',
-            style: const TextStyle(fontSize: 11, color: AppColors.error),
-          ),
-          const Spacer(),
-          Text(
-            StoreFormat.money(state.totalValue),
+            title.period!,
+            textAlign: TextAlign.center,
             style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.bold,
-              color: AppColors.primary,
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
             ),
           ),
+        ],
+        if (title.stores != null) ...[
+          const SizedBox(height: 2),
+          Text(
+            title.stores!,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// ملخص الجدول — الرقم والقيمة من الخادم لا من المرئي
+  /// The table summary — server figures, never the visible slice.
+  Widget _summaryBand(StoreReportState state) {
+    final isMovement = state.kind == StoreReportKind.movement;
+    final count = isMovement
+        ? state.movementRows.length
+        : state.summaryRows.length;
+
+    final cells = <(String, String, Color)>[
+      ('عدد السطور', '$count', AppColors.textPrimary),
+      ('وارد', StoreFormat.qty(state.totalIn), AppColors.success),
+      ('صادر', StoreFormat.qty(state.totalOut), AppColors.error),
+      ('الصافي', StoreFormat.qty(state.totalIn - state.totalOut), AppColors.textPrimary),
+      ('القيمة', StoreFormat.money(state.totalValue), AppColors.primary),
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.primary.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Wrap(
+        spacing: 16,
+        runSpacing: 4,
+        alignment: WrapAlignment.center,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          for (final cell in cells)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              textDirection: TextDirection.rtl,
+              children: [
+                Text(
+                  '${cell.$1}: ',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                Text(
+                  cell.$2,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: cell.$3,
+                  ),
+                ),
+              ],
+            ),
         ],
       ),
     );
   }
 
-  /// النافذة المنبثقة لمعطيات التقرير
-  /// The report parameters sheet.
-  Future<void> _openFilter() async {
-    if (_autoOpened) {
-      // لا نعيد الفتح تلقائياً بعد أول مرة، لكن الزر يفتحها دائماً
-      // Auto-open happens once; the button always opens it.
-    }
-    _autoOpened = true;
+  /// الأعمدة المختارة لنوع الحركة — الافتراضي ما لم يلمس المستخدم شيئاً
+  /// The chosen movement columns: the defaults until the user touches anything.
+  Set<String> get _movementChosen {
+    final template = ReportColumns.movement();
 
+    return _movementColumns ?? ReportColumns.defaultIds(template).toSet();
+  }
+
+  /// الأعمدة المختارة للخلاصة — تتبع مستوى التجميع لأن عنوان العمود الأول يتبدّل
+  /// The chosen summary columns: they follow the aggregation level, since the first column's
+  /// caption changes with it.
+  Set<String> _summaryChosen(StoreReportGroupBy level) {
+    final template = ReportColumns.summary(level);
+
+    return _summaryColumns ?? ReportColumns.defaultIds(template).toSet();
+  }
+
+  /// معرّفات الأعمدة الظاهرة — تُمرَّرة للتصدير فيطابق المطبوع ما على الشاشة
+  /// The visible column ids, passed to the exporters so the print matches the screen.
+  List<String> _columnIds(StoreReportFilter filter) {
+    if (filter.kind == StoreReportKind.movement) {
+      return [
+        for (final column in ReportColumns.visible(
+          ReportColumns.movement(),
+          _movementChosen,
+        ))
+          column.id,
+      ];
+    }
+
+    return [
+      for (final column in ReportColumns.visible(
+        ReportColumns.summary(filter.groupBy),
+        _summaryChosen(filter.groupBy),
+      ))
+        column.id,
+    ];
+  }
+
+  // ─────────────────────────── الأعمدة ───────────────────────────
+  Future<void> _openColumns() async {
+    final state = ref.read(storeReportProvider);
+    final filter = state.filter;
+
+    if (filter == null) return;
+
+    final isMovement = filter.kind == StoreReportKind.movement;
+    final template = isMovement
+        ? ReportColumns.movement()
+        : ReportColumns.summary(filter.groupBy);
+    final chosen = Set<String>.from(
+      (isMovement ? _movementColumns : _summaryColumns) ??
+          ReportColumns.defaultIds(template),
+    );
+
+    final next = await ReportColumnsSheet.show(
+      context,
+      labels: [for (final column in template) (column.id, column.label)],
+      defaults: ReportColumns.defaultIds(template),
+      initial: chosen,
+    );
+
+    if (next == null) return;
+
+    setState(() {
+      if (isMovement) {
+        _movementColumns = next;
+      } else {
+        _summaryColumns = next;
+      }
+    });
+  }
+
+  // ─────────────────────────── النافذة ───────────────────────────
+  Future<void> _openFilter() async {
     final reference = ref.read(storeReferenceProvider).value;
 
     if (reference == null) return;
@@ -405,26 +423,27 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
           to: DateTime.now(),
         );
 
-    final result = await showModalBottomSheet<StoreReportFilter>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => _ReportFilterSheet(initial: current, reference: reference),
+    final result = await ReportFilterSheet.show(
+      context,
+      initial: current,
+      reference: reference,
     );
 
-    if (result == null) return;
+    if (result == null || !mounted) return;
 
     await ref.read(storeReportProvider.notifier).run(result);
   }
 
+  // ─────────────────────────── التصدير ───────────────────────────
   Future<void> _export({bool print = false}) async {
     final state = ref.read(storeReportProvider);
 
     if (state.filter == null || _busy) return;
 
     if (state.movementRows.isEmpty && state.summaryRows.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('لا نتائج للتصدير')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('لا نتائج للتصدير')));
 
       return;
     }
@@ -436,14 +455,19 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         ref.read(appConfigNotifierProvider).config,
       );
 
+      // الأعمدة الظاهرة تُصدَّر كما هي — المطبوع نسخة مما يُرى لا جدولاً ثابتاً
+      // The visible columns are exported as seen: the print is a copy of the screen, not a
+      // hard-coded table.
       final bytes = await buildStoreReportPdf(
         letterhead: letterhead,
         filter: state.filter!,
+        reference: ref.read(storeReferenceProvider).value,
         movementRows: state.movementRows,
         summaryRows: state.summaryRows,
         totalIn: state.totalIn,
         totalOut: state.totalOut,
         totalValue: state.totalValue,
+        columnIds: _columnIds(state.filter!),
       );
 
       final fileName =
@@ -478,62 +502,15 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     setState(() => _busy = true);
 
     try {
-      final isMovement = state.kind == StoreReportKind.movement;
-
-      final bytes = buildStoreRowsXlsx(
-        sheetName: isMovement ? 'حركة' : 'خلاصة',
-        headers: isMovement
-            ? const [
-                'التاريخ',
-                'المستند',
-                'نوع الحركة',
-                'المخزن',
-                'الكود',
-                'الصنف',
-                'الوحدة',
-                'وارد',
-                'صادر',
-                'القيمة',
-              ]
-            : const [
-                'الكود',
-                'الصنف',
-                'الوحدة',
-                'المخزن',
-                'وارد',
-                'صادر',
-                'الصافي',
-                'القيمة',
-              ],
-        rows: isMovement
-            ? [
-                for (final row in state.movementRows)
-                  [
-                    row.dateLabel,
-                    row.docNo?.toString() ?? '',
-                    row.typeName ?? '',
-                    row.storeName ?? '',
-                    row.partNo ?? '',
-                    row.itemName ?? '',
-                    row.uomCode ?? '',
-                    StoreFormat.qty(row.qtyIn),
-                    StoreFormat.qty(row.qtyOut),
-                    StoreFormat.money(row.lineValue),
-                  ],
-              ]
-            : [
-                for (final row in state.summaryRows)
-                  [
-                    row.partNo ?? '',
-                    row.itemName ?? '',
-                    row.uomCode ?? '',
-                    row.storeName ?? '',
-                    StoreFormat.qty(row.qtyIn),
-                    StoreFormat.qty(row.qtyOut),
-                    StoreFormat.qty(row.netQty),
-                    StoreFormat.money(row.netValue),
-                  ],
-              ],
+      final bytes = buildStoreReportXlsx(
+        filter: state.filter!,
+        reference: ref.read(storeReferenceProvider).value,
+        movementRows: state.movementRows,
+        summaryRows: state.summaryRows,
+        totalIn: state.totalIn,
+        totalOut: state.totalOut,
+        totalValue: state.totalValue,
+        columnIds: _columnIds(state.filter!),
       );
 
       await StoreExporter.shareXlsx(
@@ -555,478 +532,5 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
-  }
-}
-
-/// نافذة معطيات التقرير — كل المعطيات في مكان واحد
-/// The report parameters sheet — every filter in one place.
-class _ReportFilterSheet extends ConsumerStatefulWidget {
-  const _ReportFilterSheet({required this.initial, required this.reference});
-
-  final StoreReportFilter initial;
-  final StoreReference reference;
-
-  @override
-  ConsumerState<_ReportFilterSheet> createState() => _ReportFilterSheetState();
-}
-
-class _ReportFilterSheetState extends ConsumerState<_ReportFilterSheet> {
-  late StoreReportKind _kind = widget.initial.kind;
-  late DateTime _from = widget.initial.from;
-  late DateTime _to = widget.initial.to;
-  late List<int> _storeNos = [...widget.initial.storeNos];
-  late int? _groupNo = widget.initial.groupNo;
-  late int? _typeNo = widget.initial.typeNo;
-  late int? _catNo = widget.initial.catNo;
-  late int? _sanfNo = widget.initial.sanfNo;
-  late List<int> _movementTypeNos = [...widget.initial.movementTypeNos];
-  String? _sanfName;
-  String? _error;
-
-  @override
-  Widget build(BuildContext context) {
-    final reference = widget.reference;
-    final types = reference.typesOfGroup(_groupNo);
-
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        14,
-        14,
-        14,
-        MediaQuery.viewInsetsOf(context).bottom + 14,
-      ),
-      child: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'معطيات التقرير',
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                IconButton(
-                  onPressed: () => Navigator.pop(context),
-                  icon: const Icon(Icons.close_rounded, size: 20),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-
-            // نوع التقرير
-            SegmentedButton<StoreReportKind>(
-              segments: const [
-                ButtonSegment(
-                  value: StoreReportKind.movement,
-                  label: Text('عرض حركة'),
-                  icon: Icon(Icons.timeline_rounded, size: 16),
-                ),
-                ButtonSegment(
-                  value: StoreReportKind.summary,
-                  label: Text('خلاصة'),
-                  icon: Icon(Icons.summarize_rounded, size: 16),
-                ),
-              ],
-              selected: {_kind},
-              onSelectionChanged: (value) => setState(() => _kind = value.first),
-            ),
-            const SizedBox(height: 12),
-
-            // التاريخ من - إلى
-            Row(
-              children: [
-                Expanded(
-                  child: _dateField('من', _from, (value) => _from = value),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _dateField('إلى', _to, (value) => _to = value),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // المخازن: الكل أو تحديد متعدد
-            Row(
-              children: [
-                const Text(
-                  'المخازن',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-                ),
-                const Spacer(),
-                TextButton(
-                  onPressed: () => setState(() => _storeNos = []),
-                  child: const Text('الكل'),
-                ),
-              ],
-            ),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                for (final store in reference.stores)
-                  FilterChip(
-                    label: Text(
-                      store.storeName,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                    selected: _storeNos.contains(store.storeNo),
-                    onSelected: (selected) => setState(() {
-                      if (selected) {
-                        _storeNos = [..._storeNos, store.storeNo];
-                      } else {
-                        _storeNos = _storeNos
-                            .where((no) => no != store.storeNo)
-                            .toList();
-                      }
-                    }),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // المجموعة الرئيسية → الفرعية
-            _dropdown<int>(
-              label: 'المجموعة الرئيسية',
-              value: _groupNo,
-              items: [
-                for (final group in reference.groups)
-                  DropdownMenuItem(
-                    value: group.groupNo,
-                    child: Text(group.groupName),
-                  ),
-              ],
-              onChanged: (value) => setState(() {
-                _groupNo = value;
-                _typeNo = null;
-              }),
-            ),
-            const SizedBox(height: 10),
-            _dropdown<int>(
-              label: 'المجموعة الفرعية',
-              value: _typeNo,
-              items: [
-                for (final type in types)
-                  DropdownMenuItem(
-                    value: type.typeNo,
-                    child: Text(type.typeName),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _typeNo = value),
-            ),
-            const SizedBox(height: 10),
-            _dropdown<int>(
-              label: 'الفئة',
-              value: _catNo,
-              items: [
-                for (final category in reference.categories)
-                  DropdownMenuItem(
-                    value: category.id,
-                    child: Text(category.name),
-                  ),
-              ],
-              onChanged: (value) => setState(() => _catNo = value),
-            ),
-            const SizedBox(height: 12),
-
-            // الصنف الرئيسي ثم الفرعي
-            OutlinedButton.icon(
-              onPressed: _pickItem,
-              icon: const Icon(Icons.inventory_2_outlined, size: 16),
-              label: Text(
-                _sanfNo == null
-                    ? 'تحديد الصنف الرئيسي (اختياري)'
-                    : 'الصنف: ${_sanfName ?? _sanfNo}',
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            if (_sanfNo != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => setState(() {
-                    _sanfNo = null;
-                    _sanfName = null;
-                  }),
-                  child: const Text('مسح الصنف'),
-                ),
-              ),
-            const SizedBox(height: 12),
-
-            // نوع الحركة: يظهر في «عرض حركة» فقط
-            if (_kind == StoreReportKind.movement) ...[
-              const Text(
-                'نوع الحركة (متعدد)',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-              Wrap(
-                spacing: 6,
-                runSpacing: 6,
-                children: [
-                  for (final type in reference.movementTypes)
-                    FilterChip(
-                      label: Text(
-                        type.typeName,
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                      selected: _movementTypeNos.contains(type.typeNo),
-                      onSelected: (selected) => setState(() {
-                        if (selected) {
-                          _movementTypeNos = [
-                            ..._movementTypeNos,
-                            type.typeNo,
-                          ];
-                        } else {
-                          _movementTypeNos = _movementTypeNos
-                              .where((no) => no != type.typeNo)
-                              .toList();
-                        }
-                      }),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'بلا تحديد = كل أنواع الحركة',
-                style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
-              ),
-            ] else
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.info.withValues(alpha: 0.07),
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Text(
-                  'الخلاصة تجمع كل أنواع الحركة بطبيعتها، فتصفية النوع تُلغى هنا.',
-                  style: TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
-                ),
-              ),
-
-            if (_error != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                _error!,
-                style: const TextStyle(fontSize: 11.5, color: AppColors.error),
-              ),
-            ],
-            const SizedBox(height: 16),
-            ElevatedButton.icon(
-              onPressed: _submit,
-              icon: const Icon(Icons.play_arrow_rounded, size: 18),
-              label: const Text('عرض التقرير'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _dateField(
-    String label,
-    DateTime value,
-    void Function(DateTime value) onPicked,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showDatePicker(
-          context: context,
-          initialDate: value,
-          firstDate: DateTime(2015),
-          lastDate: DateTime(2100),
-        );
-
-        if (picked != null) setState(() => onPicked(picked));
-      },
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          isDense: true,
-          border: const OutlineInputBorder(),
-        ),
-        child: Text(
-          StoreFormat.date(value),
-          style: const TextStyle(fontSize: 12.5),
-        ),
-      ),
-    );
-  }
-
-  Widget _dropdown<T>({
-    required String label,
-    required T? value,
-    required List<DropdownMenuItem<T>> items,
-    required ValueChanged<T?> onChanged,
-  }) {
-    return DropdownButtonFormField<T>(
-      value: value,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        isDense: true,
-        border: const OutlineInputBorder(),
-      ),
-      items: items,
-      onChanged: onChanged,
-    );
-  }
-
-  Future<void> _pickItem() async {
-    final picked = await showModalBottomSheet<ItemModel>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => const _ItemPickerSheet(),
-    );
-
-    if (picked == null) return;
-
-    setState(() {
-      _sanfNo = picked.sanfNo;
-      _sanfName = picked.name;
-    });
-  }
-
-  void _submit() {
-    if (_from.isAfter(_to)) {
-      setState(() => _error = 'تاريخ البداية بعد تاريخ النهاية');
-
-      return;
-    }
-
-    final days = _to.difference(_from).inDays;
-
-    if (days > widget.reference.maxRangeDays) {
-      setState(
-        () => _error =
-            'المدى أكبر من الحد المسموح (${widget.reference.maxRangeDays} يوماً)',
-      );
-
-      return;
-    }
-
-    Navigator.pop(
-      context,
-      StoreReportFilter(
-        kind: _kind,
-        from: _from,
-        to: _to,
-        storeNos: _storeNos,
-        groupNo: _groupNo,
-        typeNo: _typeNo,
-        catNo: _catNo,
-        sanfNo: _sanfNo,
-        movementTypeNos: _kind == StoreReportKind.movement
-            ? _movementTypeNos
-            : const [],
-      ),
-    );
-  }
-}
-
-/// منتقي صنف للتصفية
-/// An item picker for the filter.
-class _ItemPickerSheet extends ConsumerStatefulWidget {
-  const _ItemPickerSheet();
-
-  @override
-  ConsumerState<_ItemPickerSheet> createState() => _ItemPickerSheetState();
-}
-
-class _ItemPickerSheetState extends ConsumerState<_ItemPickerSheet> {
-  final TextEditingController _search = TextEditingController();
-  List<ItemModel> _items = const [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-
-    Future.microtask(_load);
-  }
-
-  @override
-  void dispose() {
-    _search.dispose();
-    super.dispose();
-  }
-
-  Future<void> _load([String search = '']) async {
-    setState(() => _loading = true);
-
-    try {
-      final page = await ref
-          .read(storeItemsRepositoryProvider)
-          .fetchItems(search: search, limit: 80);
-
-      if (!mounted) return;
-
-      setState(() {
-        _items = page.items;
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.75,
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: TextField(
-              controller: _search,
-              onSubmitted: _load,
-              decoration: InputDecoration(
-                hintText: 'بحث عن صنف...',
-                prefixIcon: const Icon(Icons.search_rounded, size: 19),
-                isDense: true,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: _loading
-                ? const StoreLoading()
-                : _items.isEmpty
-                ? const StoreEmptyState(
-                    icon: Icons.search_off_rounded,
-                    title: 'لا نتائج',
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    itemCount: _items.length,
-                    separatorBuilder: (_, __) => const Divider(height: 1),
-                    itemBuilder: (context, index) {
-                      final item = _items[index];
-
-                      return ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        title: Text(
-                          item.name,
-                          style: const TextStyle(fontSize: 12.5),
-                        ),
-                        subtitle: Text(
-                          '${item.partNo} · ${item.unitName ?? ''}',
-                          style: const TextStyle(fontSize: 10.5),
-                        ),
-                        onTap: () => Navigator.pop(context, item),
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
   }
 }

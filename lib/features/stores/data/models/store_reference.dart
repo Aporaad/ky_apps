@@ -301,6 +301,57 @@ class StoreReference {
     return types.where((type) => type.groupNo == groupNo).toList(growable: false);
   }
 
+  ///.union المجموعات الفرعية لعدة مجموعات مختارة — بلا تكرار للمعرّف
+  /// The union of the sub groups of several chosen main groups, deduplicated.
+  ///
+  /// ── مجموعة فرعية واحدة قد تنتمي لمجموعتين؛ تحديدهما معاً لا يعني إظهارها مرتين.
+  /// ── A sub group can belong to two main groups; choosing both must not list it twice.
+  List<StoreTypeModel> typesOfGroups(List<int> groupNos) {
+    if (groupNos.isEmpty) return types;
+
+    final wanted = groupNos.toSet();
+    final seen = <int>{};
+
+    return [
+      for (final type in types)
+        if (wanted.contains(type.groupNo) && seen.add(type.typeNo)) type,
+    ];
+  }
+
+  StoreGroupModel? groupById(int? groupNo) {
+    if (groupNo == null) return null;
+
+    for (final group in groups) {
+      if (group.groupNo == groupNo) return group;
+    }
+
+    return null;
+  }
+
+  StoreTypeModel? typeById(int? typeNo) {
+    if (typeNo == null) return null;
+
+    for (final type in types) {
+      if (type.typeNo == typeNo) return type;
+    }
+
+    return null;
+  }
+
+  StoreMovementTypeModel? movementTypeById(int? typeNo) => typeNo == null
+      ? null
+      : movementTypes.cast<StoreMovementTypeModel?>().firstWhere(
+          (type) => type?.typeNo == typeNo,
+          orElse: () => null,
+        );
+
+  StoreCategoryModel? categoryById(int? id) => id == null
+      ? null
+      : categories.cast<StoreCategoryModel?>().firstWhere(
+          (category) => category?.id == id,
+          orElse: () => null,
+        );
+
   /// الأنماط التابعة لمجموعة فرعية
   /// The styles of one sub group.
   List<StoreStyleModel> stylesOfType(int? typeNo) {

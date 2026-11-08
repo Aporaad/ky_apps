@@ -18,7 +18,6 @@ Future<void> main() async {
 
 /// التطبيق الرئيسي مع دعم التعريب الكامل واتجاه RTL
 /// Main Application with full Arabic localization and RTL support
-///
 /// أصبح `ConsumerWidget` يراقب تهيئة التطبيق فيُعيد بناء السمة والعنوان فور تغيّرهما.
 /// Now a [ConsumerWidget] that watches the app config, rebuilding the theme and title live.
 class KyApp extends ConsumerWidget {
@@ -28,9 +27,7 @@ class KyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // نراقب التهيئة: أي حفظ جديد يعيد بناء ThemeData من `AppPalette` المحدَّث
     // Watch the config: any save rebuilds ThemeData from the updated AppPalette.
-    final appName =
-        ref.watch(appConfigNotifierProvider.select((s) => s.config.appName));
-
+    final appName = ref.watch(appConfigNotifierProvider.select((s) => s.config.appName));
     // أي سقوط من «مُصادق» إلى «غير مُصادق» يذهب لشاشة الدخول، من أي مسار جاء
     // Any fall from signed-in to signed-out routes to the login screen, wherever it came from.
     //

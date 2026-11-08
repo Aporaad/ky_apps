@@ -12,6 +12,26 @@ enum StoreReportKind {
   final String label;
 }
 
+/// مستوى التجميع في الخلاصة
+/// The aggregation level of a summary report.
+///
+/// ── «خلاصة» سؤال واحد بصيغتين: ما تحرك لكل صنف في كل مخزن؟ أم ما تحرك لمجموعة كاملة؟
+///    الاختيار صريح الآن بدل أن يكون قراراً ثابتاً في الكود.
+/// ── "Summary" is one question in two forms: what moved per item per store, or what moved
+///    across a whole group? The level is now chosen, not hard-coded.
+enum StoreReportGroupBy {
+  item('item', 'الصنف × المخزن'),
+  store('store', 'المخزن'),
+  group('group', 'المجموعة الرئيسية'),
+  subgroup('subgroup', 'المجموعة الفرعية'),
+  category('category', 'الفئة');
+
+  const StoreReportGroupBy(this.code, this.label);
+
+  final String code;
+  final String label;
+}
+
 /// معطيات التقرير التي تختارها النافذة المنبثقة
 /// The report parameters chosen in the filter sheet.
 ///
@@ -19,30 +39,51 @@ enum StoreReportKind {
 ///    نوعٍ فيها تعطي وارداً/صادراً ناقصاً يخالف معنى الرصيد.
 /// ── movementTypeNos is never sent for a summary: a summary aggregates all movement types,
 ///    and filtering one type there would produce a partial in/out that contradicts the balance.
+///
+/// ── المخازن والمجموعات والفرعيات قوائم لا مفردات: تقرير واحد يغطي ثلاث مجموعات أو مخزنين
+///    معاً، و«لاشي» يعني بلا قيد لا «اختر شيئاً».
+/// ── Stores, groups and sub groups are lists, not singles: one report may cover three groups
+///    or two stores, and "None" means unconstrained — not "pick something".
 class StoreReportFilter {
   const StoreReportFilter({
     this.kind = StoreReportKind.movement,
     required this.from,
     required this.to,
     this.storeNos = const [],
-    this.groupNo,
-    this.typeNo,
+    this.groupNos = const [],
+    this.itemTypeNos = const [],
     this.catNo,
     this.sanfNo,
+    this.sanfName,
     this.sanfDno,
+    this.sanfDnoLabel,
     this.movementTypeNos = const [],
+    this.groupBy = StoreReportGroupBy.item,
+    this.customPeriod = false,
   });
 
   final StoreReportKind kind;
   final DateTime from;
   final DateTime to;
   final List<int> storeNos;
-  final int? groupNo;
-  final int? typeNo;
+  final List<int> groupNos;
+  final List<int> itemTypeNos;
   final int? catNo;
   final int? sanfNo;
+
+  /// اسم الصنف المختار — الطابعة تعرض الاسم لا الرقم
+  /// The picked item's name: the printed sheet shows a name, never a bare number.
+  final String? sanfName;
   final int? sanfDno;
+  final String? sanfDnoLabel;
   final List<int> movementTypeNos;
+  final StoreReportGroupBy groupBy;
+
+  /// هل خصّص المستخدم الفترة بنفسه؟ العنوان الرسمي لا يذكر المدى إلا إذا خصّصه،
+  /// فالافتراضي جزء من معنى التقرير لا من نتائجه
+  /// Did the user customise the period? The official title prints the range only when they did:
+  /// the default window belongs to the report's meaning, not to its result.
+  final bool customPeriod;
 
   String get fromText => _dateText(from);
 
@@ -52,6 +93,23 @@ class StoreReportFilter {
   /// Is the movement-type filter meaningful for this report kind?
   bool get usesMovementTypes => kind == StoreReportKind.movement;
 
+  bool get usesGroupBy => kind == StoreReportKind.summary;
+
+  /// عدد القيود الفعلية — يظهر في شريط المعطيات وفي الترويسة المطبوعة
+  /// How many constraints are actually in force — shown on the meta band and the print header.
+  int get constraintCount {
+    var count = 0;
+    if (storeNos.isNotEmpty) count++;
+    if (groupNos.isNotEmpty) count++;
+    if (itemTypeNos.isNotEmpty) count++;
+    if (catNo != null) count++;
+    if (sanfNo != null) count++;
+    if (sanfDno != null) count++;
+    if (usesMovementTypes && movementTypeNos.isNotEmpty) count++;
+
+    return count;
+  }
+
   bool get isValid => !from.isAfter(to);
 
   StoreReportFilter copyWith({
@@ -59,14 +117,16 @@ class StoreReportFilter {
     DateTime? from,
     DateTime? to,
     List<int>? storeNos,
-    int? groupNo,
-    int? typeNo,
+    List<int>? groupNos,
+    List<int>? itemTypeNos,
     int? catNo,
     int? sanfNo,
+    String? sanfName,
     int? sanfDno,
+    String? sanfDnoLabel,
     List<int>? movementTypeNos,
-    bool clearGroup = false,
-    bool clearType = false,
+    StoreReportGroupBy? groupBy,
+    bool? customPeriod,
     bool clearCat = false,
     bool clearSanf = false,
     bool clearSanfDno = false,
@@ -76,12 +136,16 @@ class StoreReportFilter {
       from: from ?? this.from,
       to: to ?? this.to,
       storeNos: storeNos ?? this.storeNos,
-      groupNo: clearGroup ? null : groupNo ?? this.groupNo,
-      typeNo: clearType ? null : typeNo ?? this.typeNo,
+      groupNos: groupNos ?? this.groupNos,
+      itemTypeNos: itemTypeNos ?? this.itemTypeNos,
       catNo: clearCat ? null : catNo ?? this.catNo,
       sanfNo: clearSanf ? null : sanfNo ?? this.sanfNo,
+      sanfName: clearSanf ? null : sanfName ?? this.sanfName,
       sanfDno: clearSanfDno ? null : sanfDno ?? this.sanfDno,
+      sanfDnoLabel: clearSanfDno ? null : sanfDnoLabel ?? this.sanfDnoLabel,
       movementTypeNos: movementTypeNos ?? this.movementTypeNos,
+      groupBy: groupBy ?? this.groupBy,
+      customPeriod: customPeriod ?? this.customPeriod,
     );
   }
 
@@ -90,14 +154,15 @@ class StoreReportFilter {
   Map<String, dynamic> toQuery() => {
     'from': fromText,
     'to': toText,
-    if (storeNos.isNotEmpty) 'store_no': storeNos.join(','),
-    if (groupNo != null) 'group_no': groupNo,
-    if (typeNo != null) 'type_no': typeNo,
+    if (storeNos.isNotEmpty) 'store_nos': storeNos.join(','),
+    if (groupNos.isNotEmpty) 'group_nos': groupNos.join(','),
+    if (itemTypeNos.isNotEmpty) 'item_type_nos': itemTypeNos.join(','),
     if (catNo != null) 'cat_no': catNo,
     if (sanfNo != null) 'sanf_no': sanfNo,
     if (sanfDno != null) 'sanf_dno': sanfDno,
     if (usesMovementTypes && movementTypeNos.isNotEmpty)
       'type_nos': movementTypeNos.join(','),
+    if (usesGroupBy) 'group_by': groupBy.code,
   };
 
   static String _dateText(DateTime date) {
@@ -276,6 +341,7 @@ class StockSummaryRow {
     this.storeName,
     this.groupName,
     this.typeName,
+    this.category,
     this.qtyIn = 0,
     this.qtyOut = 0,
     this.netQty = 0,
@@ -292,12 +358,24 @@ class StockSummaryRow {
   final String? storeName;
   final String? groupName;
   final String? typeName;
+  final String? category;
   final double qtyIn;
   final double qtyOut;
   final double netQty;
   final double cost;
   final double netValue;
   final int rowsCount;
+
+  /// عنوان العمود الأول حسب مستوى التجميع — «الصنف» لا معنى له حين تُجمع بالمخزن
+  /// The first column's caption for the aggregation level: "item" is meaningless when the
+  /// report is grouped by store.
+  String labelFor(StoreReportGroupBy level) => switch (level) {
+    StoreReportGroupBy.store => storeName ?? 'مخزن $storeNo',
+    StoreReportGroupBy.group => groupName ?? '—',
+    StoreReportGroupBy.subgroup => typeName ?? '—',
+    StoreReportGroupBy.category => category ?? '—',
+    StoreReportGroupBy.item => itemName ?? partNo ?? 'صنف $sanfNo',
+  };
 
   factory StockSummaryRow.fromJson(Map<String, dynamic> json) {
     return StockSummaryRow(
@@ -309,6 +387,7 @@ class StockSummaryRow {
       storeName: JsonValues.asArabic(json['INV_NAME'] ?? json['inv_name']),
       groupName: JsonValues.asArabic(json['GROUP_NAME'] ?? json['group_name']),
       typeName: JsonValues.asArabic(json['TYPE_NAME'] ?? json['type_name']),
+      category: JsonValues.asArabic(json['CAT_NAME'] ?? json['cat_name']),
       qtyIn: JsonValues.asDoubleOrNull(json['QTY_IN'] ?? json['qty_in']) ?? 0,
       qtyOut: JsonValues.asDoubleOrNull(json['QTY_OUT'] ?? json['qty_out']) ?? 0,
       netQty: JsonValues.asDoubleOrNull(json['NET_QTY'] ?? json['net_qty']) ?? 0,

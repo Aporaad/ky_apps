@@ -3180,3 +3180,70 @@ SELECT COUNT(*) FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE I_CODE = 1991;  -- 156 ⇒ �
 
 **النموذج:** Qoder · **الوقت:** 2026-11-04 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
 
+
+
+## 2026-11-07 — استعلامات القراءة أثناء تطوير تقارير المخازن (SELECT فقط)
+
+**المنفذ:** Qoder · **الوقت:** 2026-11-07 · **الاتصال:** `oracle` (ACCOUNTS) · **النوع:** قراءة
+فقط — لا إنشاء ولا تعديل ولا حذف ولا تنفيذ DDL.
+
+### 1) نافذة الاختبار من ساعة أوراكل نفسها
+
+لأن `app.timezone = UTC` بينما `SYSDATE` بفرق +03:00، فإن حساب المدى من PHP كان يُسقط سطوراً
+على حافة النافذة؛ فصار المصدر هو أوراكل نفسها (نفس الدرس المسجَّل في `SessionPolicy`).
+
+```sql
+SELECT TO_CHAR(SYSDATE - 7, 'YYYY-MM-DD') AS F,
+       TO_CHAR(SYSDATE,      'YYYY-MM-DD') AS T
+  FROM DUAL;
+```
+
+### 2) اختيار مجموعات قليلة الحركة حتى لا يقتطعها سقف الـ 5000
+
+```sql
+SELECT GROUPNO
+  FROM (SELECT GROUPNO, COUNT(*) AS C
+          FROM ACCOUNTS.ITEM_MOVEMENT_D
+         WHERE GROUPNO IS NOT NULL
+           AND I_DATE >= TO_DATE(:f, 'YYYY-MM-DD')
+           AND I_DATE <  TO_DATE(:t, 'YYYY-MM-DD') + 1
+         GROUP BY GROUPNO
+         ORDER BY 2 ASC)
+ WHERE ROWNUM <= 3;
+```
+
+### 3) الاستعلامات التي نفّذها التطبيق نفسها أثناء الاختبار (كلها SELECT)
+
+- عرض الحركة: `ITEM_MOVEMENT_D` مع لقطتين فرعيتين
+  `(SELECT MAX(SANF_DNAME) FROM SANFS_D WHERE SANF_DNO = m.P_CODE)` و
+  `(SELECT MAX(COLOR_NAME) FROM SANFS_COLOR WHERE COLOR_NO = m.COLOR_NO)`، وشروط
+  `IN (:st0…)` / `IN (:gr0…)` / `IN (:it0…)` / `IN (:tn0…)`.
+- الخلاصة: نفس الجدول بـ`GROUP BY` متبدّل (`I_CODE, INV_ID` · `INV_ID` · `GROUPNO` ·
+  `TYPE_NO` · `CAT_NAME`) و`MAX()` لكل عمود وصفي.
+- الأرصدة وكشف الجرد: `AVVG` بشروط القوائم نفسها.
+- المنتقيات: `SANFS` (النشط فقط) و`SANFS_D` بوسيط `SANF_NO` جديد + `ITEM_MOVEMENT_D` للرصيد.
+- المراجع: `STORES` · `GROUP1` · `TYPES` · `CATEGORY` · `UNITS` · `TRANS_TYPE` · `STYLE` ·
+  `SANFS_COLOR` · `CURRENCY`.
+
+### 4) ملاحظة أداء موثَّقة سابقاً وما زالت قائمة
+
+`AVVG` تحمل تكلفة ثابتة ~13–14.6 ثانية مهما كان التضييق (لا تنزل شروط إلى فرعي `UNION ALL`
+داخل الـ VIEW)، لذا صار رصيد الأصناف في شاشة الأصناف يُبنى من `ITEM_MOVEMENT_D` مباشرة
+(~1.5 ثانية). شاشة «أرصدة المخازن» وحدها ما تزال تقرأ `AVVG` المباشر — بانتظار قرار المستخدم
+بشأن تخزين النتيجة مؤقتاً وإبطالها عند أي مستند.
+
+### 5) لم يُنفَّذ أي أمر كتابة
+
+**لا `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `ALTER` / `CREATE` / `DROP` في هذه الجلسة.**
+
+
+## 2026-11-08 — لا أوامر جديدة على قاعدة البيانات في هذه الجولة
+
+**المنفذ:** Qoder · **الوقت:** 2026-11-08 · **النوع:** لا شيء.
+
+لم يُرسَل أي `SELECT` ولا `INSERT` ولا `UPDATE` ولا `ALTER` إلى أوراكل في هذه الجولة: التعديل
+كان في طبقة العرض والتصدير فقط (Flutter/Dart). لم تُشغَّل اختبارات الخادم لأن ملفات PHP لم
+تتغيّر، واكتفت البوابة بـ `flutter analyze` (نظيف) و`flutter test` (593 ناجحًا).
+
+**التذكير الثابت:** كل ما يصل أوراكل من قسم التقارير قراءة من `ITEM_MOVEMENT_D` / `AVVG`،
+والكتابة الوحيدة في القسم هي سجل الطباعة/التصدير على `APP_ACTIVITY`.

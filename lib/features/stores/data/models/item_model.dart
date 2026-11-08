@@ -211,6 +211,22 @@ class ItemSubModel {
     return '$l×$w';
   }
 
+  /// ما يعرضه منتقي الفروع: اسمه ثم مقاسه ثم لونه عند الحاجة
+  /// What the branch picker shows: its name, then its size, then its colour when one exists.
+  String get pickerLabel {
+    final name = this.name?.trim();
+    final base = name != null && name.isNotEmpty ? name : 'فرع $sanfDno';
+    final color = colorName?.trim() ?? '';
+    final sized = len == 0 && wid == 0 ? '' : sizeLabel;
+
+    return [
+      base,
+      if (sized.isNotEmpty) sized,
+      if (color.isNotEmpty && color != '1') color,
+      if (partNo != null && partNo!.trim().isNotEmpty && name != partNo!.trim()) partNo!.trim(),
+    ].join(' · ');
+  }
+
   static String _trim(double value) {
     if (value == value.roundToDouble()) return value.toInt().toString();
 

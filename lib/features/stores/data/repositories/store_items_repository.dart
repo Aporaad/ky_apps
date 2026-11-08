@@ -299,14 +299,15 @@ class StoreItemsRepository {
     }
   }
 
-  /// تبويب الأصناف الفرعية — كل الفروع بصفحات
-  /// The sub-items tab — every branch, paged.
+  /// تبويب الأصناف الفرعية — كل الفروع بصفحات، أو فروع صنف واحد للمنتقي
+  /// The sub-items tab — every branch, paged; or one item's branches for the picker.
   Future<StorePage<ItemSubModel>> fetchSubItems({
     String search = '',
     int page = 1,
     int limit = 50,
     int? groupNo,
     int? typeNo,
+    int? sanfNo,
     String active = 'all',
     CancelToken? cancelToken,
   }) async {
@@ -319,6 +320,7 @@ class StoreItemsRepository {
           'limit': limit,
           if (groupNo != null) 'group_no': groupNo,
           if (typeNo != null) 'type_no': typeNo,
+          if (sanfNo != null) 'sanf_no': sanfNo,
           if (active != 'all') 'active': active,
         },
         cancelToken: cancelToken,
