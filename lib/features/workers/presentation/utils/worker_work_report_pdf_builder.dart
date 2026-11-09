@@ -36,6 +36,9 @@ Future<Uint8List> buildWorkerWorkReportPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح: كشف عمل طويل كان يتوقف عند الصفحة 21
+      // Explicit page ceiling: a long work report used to stop at page 21.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(24),
       textDirection: pw.TextDirection.rtl,

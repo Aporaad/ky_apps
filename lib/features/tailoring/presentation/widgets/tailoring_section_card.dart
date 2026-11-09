@@ -74,15 +74,18 @@ class TailoringSectionCard extends StatelessWidget {
                   child: Row(
                     children: [
                       Flexible(
-                        child: Text(
-                          title,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            color: accent,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: AlignmentDirectional.centerStart,
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: accent,
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (titleTrailing != null) ...[
@@ -94,7 +97,18 @@ class TailoringSectionCard extends StatelessWidget {
                 ),
                 if (trailing != null) ...[
                   const SizedBox(width: 6),
-                  trailing!,
+                  // سقف عرض للذيل مع تصغير تلقائي: الشارة لا تدفع السطر إلى التجاوز
+                  // عند تكبير الخط
+                  // A width cap with automatic scaling: the chip never pushes the row into
+                  // overflow when the text scale grows.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 168),
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: AlignmentDirectional.centerEnd,
+                      child: trailing!,
+                    ),
+                  ),
                 ],
               ],
             ),
@@ -160,12 +174,12 @@ class TailoringInfoTile extends StatelessWidget {
                     // تسمية واضحة: ثانوي غامق + وزن ثقيل يكسر بهتان السابق
                     // A clear label: a dark secondary tone with a heavy weight instead of
                     // the previous faded look.
-                    fontSize: 10.5,
+                    fontSize: 8.5,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textSecondary,
                   ),
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                  overflow: TextOverflow.visible,
                 ),
               ),
             ],
@@ -174,12 +188,12 @@ class TailoringInfoTile extends StatelessWidget {
           Text(
             text,
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 10,
               fontWeight: FontWeight.w800,
               color: valueColor ?? AppColors.textPrimary,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            overflow: TextOverflow.visible,
           ),
         ],
       ),

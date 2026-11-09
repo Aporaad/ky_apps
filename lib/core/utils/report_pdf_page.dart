@@ -28,6 +28,29 @@ class ReportPdfColors {
   static const PdfColor dangerRed = PdfColor.fromInt(0xFFDC2626);
 }
 
+// ─── سقف صفحات مستند PDF / PDF document page ceiling ────────────────────────────
+
+/// سقف صفحات `pw.MultiPage` لكل تقارير التطبيق.
+///
+/// القيمة الافتراضية في حزمة `pdf` هي **20** صفحة، وهي ليست سقفاً للمستند بل سقفٌ
+/// لامتداد **العنصر الواحد** القابل للامتداد (`pw.Table` مثلاً). أي جدول يتجاوز
+/// عشرين صفحة كان يُسقط التوليد كاملاً بـ`TooManyPagesException`، فلا تُطبَع ولا
+/// تُصدَّر أي صفحة على الإطلاق — وهذا هو عطل «التقرير الكبير لا يُطبَع».
+///
+/// ‏20 000 صفحة ≈ 700 ألف سطر حركة (نحو 35 سطراً في صفحة A4)، أي ما يزيد على أي
+/// دفتر أستاذ فعلي بمرات، ويبقى مع ذلك حدًّا يمنع دوراناً لا نهائياً عند خللٍ ما.
+///
+/// `pw.MultiPage` ships with a default `maxPages` of **20**, and that is not a
+/// document ceiling: it is the ceiling on how far a *single* spanning widget (a
+/// `pw.Table`, for instance) may run. Every table longer than twenty pages aborted
+/// generation entirely with `TooManyPagesException`, so nothing at all was printed
+/// or exported — the "large report won't print" defect.
+///
+/// 20 000 pages ≈ 700 000 movement rows (~35 rows per A4 sheet): orders of
+/// magnitude beyond any real ledger, yet still a bound that stops a runaway
+/// layout bug from looping forever.
+const int kReportPdfMaxPages = 20000;
+
 // ─── الترويسة الموحّدة / Unified header ─────────────────────────────────────────
 
 /// يبني ترويسة صفحة PDF موحّدة: شريط ثلاثي الأعمدة (عربي/شعار/إنجليزي) + عنوان
@@ -191,7 +214,12 @@ pw.Widget pdfDateRangeRow({
 
 /// ثلاثة خانات توقيعة + سطر إخلاء مسؤولية 15 يوماً.
 /// Three signature slots + the 15-day review notice line.
-pw.Widget pdfSignatures() {
+///
+/// ── `keeper` هو خانة الوسط: «توقيع أمين المخزن» في تقارير المخازن و«توقيع أمين الصندوق»
+///    في الحسابات والأقسام الأخرى — والقيمة الافتراضية هي الأصل فلا تتغيّر بقية التقارير.
+/// ── `keeper` is the middle slot: the storekeeper's in stores reports and the cashier's in
+///    accounts and the rest — its default is the original, so every other report stays as is.
+pw.Widget pdfSignatures({String keeper = 'توقيع أمين الصندوق'}) {
   return pw.Column(
     children: [
       pw.SizedBox(height: 20),
@@ -200,7 +228,7 @@ pw.Widget pdfSignatures() {
         crossAxisAlignment: pw.CrossAxisAlignment.end,
         children: [
           _signatureSlot('توقيع المحاسب'),
-          _signatureSlot('توقيع أمين الصندوق'),
+          _signatureSlot(keeper),
           _signatureSlot('توقيع المدير'),
         ],
       ),

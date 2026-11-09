@@ -107,10 +107,10 @@ class CuttingBillsListNotifier extends Notifier<CuttingBillsListState> {
 
   @override
   CuttingBillsListState build() {
-    // لا انتظار داخل build: التحميل الأول يُجدول بعده لا فيه، فما تجمّد الشاشة.
-    // No awaiting inside build: the first load is scheduled after it, never inside it.
-    Future.microtask(load);
-
+    // لا طلب داخل build: الشاشة تطلب التحميل الأول في `initState` مرة واحدة. الطلب هنا كان
+    // يُطلق طلباً ثانياً يُلغي الأول (`_cancelToken.cancel()`) فيظهر خطأ عابر ثم تُعرض القائمة.
+    // No request inside build: the screen asks for the first load once in `initState`. A request
+    // here fired a second one that cancelled the first, which flashed an error then showed the list.
     ref.onDispose(() {
       _debounceTimer?.cancel();
       _cancelToken?.cancel();
@@ -201,6 +201,10 @@ class CuttingBillsListNotifier extends Notifier<CuttingBillsListState> {
       );
 
       if (fingerprint != '${state.query}|${state.fromDate}|${state.toDate}|$page') {
+        // طلب تجاوزه أحدث: يُطفأ مؤشر التحميل كي لا تعلق الشاشة على الدوران
+        // A newer request superseded this one: the loading flag is cleared so the screen never
+        // stays on the spinner.
+        state = state.copyWith(isLoading: false, isLoadingMore: false);
         return;
       }
 

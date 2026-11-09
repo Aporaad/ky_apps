@@ -200,6 +200,49 @@ void main() {
       expect(find.textContaining('قصّاص وخيّاط'), findsWidgets);
     });
 
+    testWidgets('a narrow phone width shows the full name without overflowing',
+        (tester) async {
+      tester.view.physicalSize = const Size(360, 780);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      const longName = 'عبدالرحمن محمد الأهدل الشميري';
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            authNotifierProvider
+                .overrideWith(() => _StubAuthNotifier(_adminState())),
+            tailoringRepositoryProvider.overrideWithValue(
+              _FakeListRepo(
+                page: CuttingBillPage(
+                  items: [
+                    _summary(custName: longName),
+                    _summary(billNo: 12000, custName: 'سالم'),
+                  ],
+                  total: 2,
+                  page: 1,
+                  pages: 1,
+                ),
+              ),
+            ),
+          ],
+          child: const MaterialApp(
+            locale: Locale('ar'),
+            home: CuttingBillsListScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // الاسم كامل على أي عرض (يصغر الخط بدل القصّ)
+      // The full name at any width (the font shrinks instead of the text being cut).
+      expect(find.text(longName), findsOneWidget);
+      // ولا تجاوز أفقي في البطاقة
+      // And no horizontal overflow inside the card.
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a failure shows the message and a retry', (tester) async {
       await _pumpList(
         tester,

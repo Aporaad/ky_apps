@@ -37,6 +37,9 @@ Future<Uint8List> buildAccountTreePdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح: دليل حسابات كامل يتجاوز العشرين صفحة بكثير
+      // Explicit page ceiling: a full chart of accounts runs far past twenty pages.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(18),
       textDirection: pw.TextDirection.rtl,

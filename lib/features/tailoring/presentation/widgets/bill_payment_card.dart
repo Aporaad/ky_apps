@@ -3,21 +3,22 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/cutting_bill_detail_model.dart';
 import '../../data/models/tailoring_parse.dart';
+import 'tailoring_cells.dart';
 import 'tailoring_section_card.dart';
 
-/// القسم 3: تفاصيل الدفع — تُغلَّف بـ `PermissionGate(tailoring.payments_view)`
-/// Section 3: the payment details — wrapped in `PermissionGate(tailoring.payments_view)`.
+/// القسم 3: تفاصيل الدفع — كل الأرقام في **سطر وصف واحد دائماً**
+/// Section 3: the payment details — every figure on **one row always**.
 ///
-/// الحجب الحقيقي على الخادم: بلا الصلاحية يصل `payment = null` ولا تُعرض أرقام أصلاً.
-/// The real block is server-side: without the grant `payment` arrives null and no figures
-/// are shown at all.
+/// الحجب الحقيقي على الخادم: بلا صلاحية `tailoring.payments_view` يصل `payment = null` ولا
+/// تُعرض أرقام أصلاً.
+/// The real block is server-side: without `payments_view` the block arrives null and no figure
+/// is shown at all.
 ///
-/// الأرقام الأساسية فقط في صف واحد: الإجمالي · الخصم · الصافي · المدفوع · المتبقي · رقم
-/// السند (والمدفوعات الأخرى عند وجودها). حُذفت سعر العملة والاستحقاق وطريقة الدفع بطلب
-/// المستخدم.
-/// Only the core figures on one row: total · discount · net · paid · balance · voucher (plus
-/// other payments when present). The currency price, due date and payment method were removed
-/// at the user's request.
+/// التنسيق: الشبكة تُطلب بـ`rows: 1` فتأخذ كل خانة حصّة متساوية، والتسمية والقيمة تُصغَّران
+/// معاً داخل `FittedBox`، فلا عمود يلتفّ ولا نصّ يُقصّ ولا يختفي عند كبر حجم الخط أو المساحة.
+/// Layout: the grid asks for `rows: 1` so every cell takes an equal share, and both label and
+/// value shrink together inside a `FittedBox` — no column wraps, no text is cut, and nothing
+/// disappears when the type scale or the width grows.
 class BillPaymentCard extends StatelessWidget {
   final CuttingBillPayment? payment;
 
@@ -32,10 +33,11 @@ class BillPaymentCard extends StatelessWidget {
         title: 'تفاصيل الدفع',
         icon: Icons.payments_rounded,
         accent: AppColors.warning,
-        child: const TailoringInfoGrid(
-          minCellWidth: 4000,
-          children: [
-            TailoringInfoTile(
+        child: TailoringCellGrid(
+          rows: 1,
+          minCellWidth: 300,
+          cells: const [
+            TailoringCell(
               label: 'الصلاحية',
               value: 'لا تملك صلاحية عرض تفاصيل دفع فاتورة التفصيل',
               icon: Icons.lock_outline_rounded,
@@ -52,47 +54,52 @@ class BillPaymentCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          TailoringInfoGrid(
-            singleRow: true,
-            minCellWidth:50,
-            children: [
-              TailoringInfoTile(
+          TailoringCellGrid(
+            // سطر واحد: الحقول كلها في صف واحد بحصص متساوية وقيم مقياسية
+            // One row: all fields in a single line with equal shares and scaled values.
+            rows: 1,
+            minCellWidth: 80,
+            cells: [
+              TailoringCell(
                 label: 'الإجمالي',
                 value: tailoringNumber(data.total),
-                icon: Icons.summarize_rounded,
+                numeric: true,
               ),
-              TailoringInfoTile(
+              TailoringCell(
                 label: 'الخصم',
                 value: tailoringNumber(data.discount),
-                icon: Icons.remove_circle_outline_rounded,
+                numeric: true,
               ),
-              TailoringInfoTile(
+              TailoringCell(
                 label: 'الصافي',
                 value: tailoringNumber(data.net),
-                icon: Icons.calculate_rounded,
+                numeric: true,
               ),
-              TailoringInfoTile(
+              TailoringCell(
                 label: 'المدفوع',
                 value: tailoringNumber(data.paidTotal),
-                icon: Icons.price_check_rounded,
-              ),
-              TailoringInfoTile(
+                numeric: true,
+              ),              
+              TailoringCell(
                 label: data.balanceLabel,
                 value: data.balanceValue,
-                icon: Icons.account_balance_wallet_rounded,
+                numeric: true,
                 // الرصيد السالب دفعة مقدمة — لونه أخضر لأنه لصالح العميل لا عليه
                 // A negative balance is an advance — green because it favours the customer.
                 valueColor: data.isAdvance
                     ? AppColors.success
                     : (data.remaining == 0 ? AppColors.success : AppColors.error),
               ),
-              TailoringInfoTile(
+              TailoringCell(
                 label: 'رقم السند',
                 value: data.voucherNo,
-                icon: Icons.receipt_rounded,
+                numeric: true,
               ),
             ],
-          ),                    
+          ),
+          // إشارة الرصيد السالب تُشرح صراحةً بدل ترك المستخدم يقرأ السالب خطأ
+          // The negative balance is explained instead of leaving the sign to be misread.
+          
         ],
       ),
     );

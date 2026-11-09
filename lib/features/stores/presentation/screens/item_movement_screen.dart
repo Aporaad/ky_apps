@@ -15,9 +15,11 @@ import '../../data/repositories/store_result.dart';
 import '../providers/items_providers.dart';
 import '../utils/report_columns.dart';
 import '../utils/report_parameters.dart';
+import '../utils/report_totals.dart';
 import '../utils/store_export.dart';
 import '../widgets/report_columns_sheet.dart';
 import '../widgets/report_data_table.dart';
+import '../widgets/report_stats_band.dart';
 import '../widgets/store_ui.dart';
 
 /// كشف حركة صنف — الصنف الرئيسي بكامل فروعه أو فرع واحد
@@ -54,9 +56,13 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
   DateTime? _to;
   bool _busy = false;
 
-  /// الأعمدة الظاهرة — `null` حتى يغيّرها المستخدم فتسري افتراضيات القالب
-  /// Visible columns: null until the user changes them, then the template defaults apply.
-  Set<String>? _columns;
+  /// ترتيب الأعمدة الظاهرة — `null` حتى يغيّره المستخدم فتُطبَّق افتراضيات الكشف
+  /// The visible column order — null until the user changes it, then the statement defaults.
+  List<String>? _order;
+
+  /// حقول الإحصاءات الظاهرة — `null` تعني «كلها»
+  /// The visible statistic fields — null means "all of them".
+  List<String>? _statIds;
 
   /// الأعمدة الأساسية للكشف = أعمدة تقرير الحركة نفسها، فلا يختلف الكشف عن التقرير
   /// The statement's basic columns are the movement report's basics: a statement must not
@@ -195,12 +201,25 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
               ReportDataTable<StockMovementRow>(
                 columns: _visibleColumns(),
                 rows: data.rows,
+                // سطر التجميع في ذيل الجدول، ثم ملخص الخادم تحته
+                // The totals row closes the table; the server's summary follows beneath it.
+                totals: ReportTotals.movement(data.rows),
               ),
               const SizedBox(height: 10),
-              _summaryBand(data),
+              ReportStatsBand(
+                title: 'إحصاءات الكشف',
+                fields: ReportStatFields.visible(
+                  ReportStatFields.statement(data),
+                  _statIds,
+                ),
+              ),
             ],
           ),
-          footer: const ReportSignatureFooter(),
+          // الشركة لا تصرف بأنفسها: خانة الوسط في تقارير المخازن لأمين المخزن
+          // A company does not hand out stock itself: the middle slot is the storekeeper's.
+          footer: const ReportSignatureFooter(
+            keeper: ReportSignatureFooter.storekeeper,
+          ),
         ),
       ),
     );
@@ -259,71 +278,14 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
     );
   }
 
-  /// ملخص الكشف — من الخادم لا من السطور المعروضة
-  /// The statement summary — server totals, never the visible slice.
-  Widget _summaryBand(MovementStatement data) {
-    final cells = <(String, String, Color)>[
-      ('عدد السطور', '${data.lines}', AppColors.textPrimary),
-      ('وارد', StoreFormat.qty(data.qtyIn), AppColors.success),
-      ('صادر', StoreFormat.qty(data.qtyOut), AppColors.error),
-      ('الصافي', StoreFormat.qty(data.netQty), AppColors.textPrimary),
-      ('القيمة', StoreFormat.money(data.value), AppColors.primary),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Wrap(
-        spacing: 16,
-        runSpacing: 4,
-        alignment: WrapAlignment.center,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          for (final cell in cells)
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              textDirection: TextDirection.rtl,
-              children: [
-                Text(
-                  '${cell.$1}: ',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                Text(
-                  cell.$2,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: cell.$3,
-                  ),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  /// الأعمدة الفعلية: اختيار المستخدم أو افتراضيات الكشف
-  /// The columns in force: the user's choice, or the statement's own defaults.
+  /// الأعمدة الفعلية: اختيار المستخدم بترتيبه أو افتراضيات الكشف
+  /// The columns in force: the user's order, or the statement's own defaults.
   List<ReportColumn<StockMovementRow>> _visibleColumns() {
     final template = ReportColumns.movement();
 
     // نوع حقيقي لا محاك: قارئ العمود يقبل صفه بعينه، و`Object` يرمي `is not a subtype`
     // A real type, not an erased one: the reader takes its own row, so Object would throw.
-    return ReportColumns.visible(
-      template,
-      _columns ?? _statementDefaults.toSet(),
-    );
+    return ReportColumns.ordered(template, _order ?? _statementDefaults);
   }
 
   List<String> _columnIds() {
@@ -335,19 +297,22 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
 
   Future<void> _openColumns() async {
     final template = ReportColumns.movement();
-    final chosen = {...?_columns};
 
-    final next = await ReportColumnsSheet.show(
+    final choice = await ReportColumnsSheet.show(
       context,
       title: 'أعمدة كشف الحركة',
       labels: [for (final column in template) (column.id, column.label)],
-      defaults: _statementDefaults,
-      initial: chosen,
+      visible: _order ?? _statementDefaults,
+      statLabels: ReportStatFields.statementLabels,
+      visibleStats: _statIds,
     );
 
-    if (next == null || !mounted) return;
+    if (choice == null || !mounted) return;
 
-    setState(() => _columns = next);
+    setState(() {
+      _order = choice.columnIds;
+      _statIds = choice.statIds;
+    });
   }
 
   /// اختيار المدى الزمني — بلا مدى يُمسح الـ VIEW كاملة
@@ -396,6 +361,7 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
         // المطبوع نسخة مما على الشاشة، لا جدولاً ثانيًا كُتب بيد أخرى
         // The print is a copy of the screen, not a second table written by another hand.
         columnIds: _columnIds(),
+        statIds: _statIds,
         branchOnly: widget.subDno != null,
         customPeriod: _from != null || _to != null,
       );

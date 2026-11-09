@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/cutting_bill_detail_model.dart';
+import 'tailoring_cells.dart';
 import 'tailoring_section_card.dart';
 
-/// القسم 2: بيانات العميل — الاسم بجانب عنوان القسم، وثلاثة حقول في سطر واحد
-/// Section 2: the customer data — the name beside the section title, three fields on one line.
+/// القسم 2: بيانات العميل — الاسم بجانب العنوان، وثلاثة حقول في **سطر واحد دائماً**
+/// Section 2: the customer data — the name beside the title and three fields on **one row always**.
 ///
-/// اسم العميل في شريط العنوان نفسه (trailing) لأنه هوية القسم، ثم صف واحد: الهاتف · رقم
-/// العميل · رقم الحساب. العنوان حُذف بطلب المستخدم.
-/// The customer's name sits in the title bar itself (trailing) because it is the section's
-/// identity, then one row: phone · customer number · account number. The address was removed
-/// at the user's request.
+/// «سطر واحد» ليست رجاءً بل قاعدة: الشبكة تُطلب بـ`rows: 1`، فعدد الأعمدة يُحسب من عدد
+/// الحقول لا من عرض الشاشة، وكل قيمة داخل `FittedBox` تصغّر خطّها ليتّسع النص كاملاً بدل
+/// أن يختفي أو يلتفّ. النتيجة سطر واحد على 320 و360 و1024 مهما كبر حجم الخط.
+/// "One row" is a rule, not a wish: the grid is asked for `rows: 1`, so the column count comes
+/// from the field count rather than the screen width, and every value sits in a `FittedBox` that
+/// shrinks its font so the whole text fits instead of vanishing or wrapping. One row at 320,
+/// 360 and 1024 no matter how large the text scale is.
 class BillCustomerCard extends StatelessWidget {
   final CuttingBillHeader header;
 
@@ -25,36 +28,42 @@ class BillCustomerCard extends StatelessWidget {
       title: 'بيانات العميل',
       icon: Icons.person_rounded,
       accent: AppColors.accent,
-      // الاسم ملتصق بالعنوان مباشرةً: يُقرأ «بيانات العميل — محمد الأهدل»
-      // The name is glued to the title: it reads "customer data — Mohammed".
-      titleTrailing: Text(
-        name,
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textPrimary,
+      // الاسم ملتصق بالعنوان مباشرةً ولا يُقصّ: يُصغَّر خطّه عند الضيق
+      // The name is glued to the title and never clipped: its font shrinks when space is tight.
+      titleTrailing: FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: AlignmentDirectional.centerStart,
+        child: Text(
+          name,
+          maxLines: 1,
+          style: TextStyle(
+            fontSize: 12.5,
+            fontWeight: FontWeight.w800,
+            color: AppColors.textPrimary,
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
-      child: TailoringInfoGrid(
-        singleRow: true,
-        minCellWidth: 104,
-        children: [
-          TailoringInfoTile(
+      child: TailoringCellGrid(
+        // سطر واحد دائم مهما ضاق العرض أو كبر الخط
+        // Always one row however narrow the width or large the type scale.
+        rows: 1,
+        minCellWidth: 84,
+        cells: [
+          TailoringCell(
             label: 'الهاتف',
             value: header.telNo1,
             icon: Icons.phone_rounded,
           ),
-          TailoringInfoTile(
+          TailoringCell(
             label: 'رقم العميل',
             value: header.custNo?.toString(),
             icon: Icons.person_outline_rounded,
           ),
-          TailoringInfoTile(
+          TailoringCell(
             label: 'رقم الحساب',
             value: header.accNo?.toString(),
             icon: Icons.account_balance_rounded,
+            numeric: true,
           ),
         ],
       ),

@@ -279,8 +279,16 @@ class StoreReportState {
 /// عنوان قسم وإحصاؤه — يقرّرهما الخادم لا الشاشة
 /// A section's label and statistics — decided by the server, not the screen.
 class ReportSectionHeader {
-  const ReportSectionHeader({required this.label, required this.stats});
+  const ReportSectionHeader({
+    required this.key,
+    required this.label,
+    required this.stats,
+  });
 
+  /// مفتاح القسم كما يحمله كل سطر في `sectionKey` — به تُقرن الإحصاءات بالسطور
+  /// The section key as every row carries it in `sectionKey` — the pair used to join the
+  /// statistics to their rows.
+  final String key;
   final String label;
   final ReportStats stats;
 }
@@ -343,6 +351,7 @@ class StoreReportNotifier extends Notifier<StoreReportState> {
           sections: [
             for (var i = 0; i < result.sectionLabels.length; i++)
               ReportSectionHeader(
+                key: i < result.sectionKeys.length ? result.sectionKeys[i] : '',
                 label: result.sectionLabels[i],
                 stats: result.sectionStats[i],
               ),

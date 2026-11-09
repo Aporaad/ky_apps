@@ -43,6 +43,9 @@ Future<Uint8List> buildAccountStatementDetailPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح: الافتراضي 20 صفحة للعنصر الواحد كان يُسقط الكشف الطويل
+      // Explicit page ceiling: the 20-page default per widget aborted long statements.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(24),
       textDirection: pw.TextDirection.rtl,

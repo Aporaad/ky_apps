@@ -312,7 +312,10 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
       );
     }
 
-    if (state.error != null) {
+    // الخطأ يُعرض فقط عندما لا توجد صفوف: خطأ عابر أثناء تحديث قائمة ظاهرة لا يغطّيها
+    // The error shows only when there are no rows: a transient error while a visible list is
+    // refreshing must not cover it.
+    if (state.error != null && state.items.isEmpty) {
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),

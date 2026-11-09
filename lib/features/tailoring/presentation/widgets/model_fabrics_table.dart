@@ -110,13 +110,20 @@ class _FabricCard extends StatelessWidget {
     final values = <String?>[
       piece.ohdId?.toString() ?? '${piece.seqNo1}',
       piece.clothName,
-      // العرض رقم (58/45/38) من MULTI_CLOTHS — لا كلمة CLOTH_TYPE التي تعني «عرضية/ضيقة»
-      // The width is the number (58/45/38) from MULTI_CLOTHS — not the CLOTH_TYPE word.
-      piece.clothWidth,
-      piece.colorText,
+      // العرض رقم (58/45/38) من MULTI_CLOTHS، وبغيابه يعود وصف القماش بدل خانة فارغة
+      // The width is the number (58/45/38) from MULTI_CLOTHS; when it is absent the cloth
+      // description is shown instead of an empty cell.
+      piece.clothWidth ?? piece.clothType,
+      // اللون النصّي إن وُجد، وإلا رقم اللون كما تخزّنه القاعدة (CLOTHS_COLOR)
+      // The colour text when present, otherwise the stored colour number (CLOTHS_COLOR).
+      piece.colorText ?? piece.colorNo?.toString(),
       tailoringNumber(piece.hinsh),
       tailoringNumber(piece.yards),
-      tailoringNumber(piece.price, decimals: 2),
+      // السعر صفر يعني «غير مسعّر» لا «مجاناً»: تُعرض شرطة بدل رقم مضلّل
+      // A zero price means "not priced", not "free": a dash replaces the misleading number.
+      (piece.price == null || piece.price == 0)
+          ? null
+          : tailoringNumber(piece.price, decimals: 2),
     ];
 
     return Material(
@@ -140,12 +147,13 @@ class _FabricCard extends StatelessWidget {
             children: [
               Container(
                 color: tone.withValues(alpha: selected ? 0.16 : 0.10),
-                padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+                padding: EdgeInsets.zero,
                 child: TailoringCellRow(
                   weights: _firstWeights,
                   cells: [
                     for (var i = 0; i < values.length; i++)
                       TailoringCell(
+                        compact: true,
                         label: _firstLabels[i],
                         value: values[i],
                         numeric: i != 1 && i != 3,
@@ -156,16 +164,18 @@ class _FabricCard extends StatelessWidget {
               ),
               Container(height: 1.2, color: tone.withValues(alpha: 0.45)),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+                padding: EdgeInsets.zero,
                 child: TailoringCellRow(
                   weights: const [2.4, 2.4, 1.6],
                   cells: [
                     TailoringCell(
+                      compact: true,
                       label: 'القصّاص',
                       value: piece.cutterName,
                       icon: Icons.content_cut_rounded,
                     ),
                     TailoringCell(
+                      compact: true,
                       label: 'الخيّاط',
                       // «غير مسند» لا «—»: غير المسند حالة إنتاجية لا معلومة ناقصة
                       // "Unassigned" is a production state, not a missing value.
@@ -174,6 +184,7 @@ class _FabricCard extends StatelessWidget {
                       valueColor: piece.hasTailor ? null : AppColors.textSecondary,
                     ),
                     TailoringCell(
+                      compact: true,
                       label: 'المرحلة',
                       value: piece.stage.label,
                       valueColor: _stageColor(piece.stage),

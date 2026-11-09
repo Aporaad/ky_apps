@@ -35,6 +35,9 @@ Future<Uint8List> buildWorkerGroupWorkReportPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح: مجموعة عمال كاملة تتجاوز سقف الحزمة الافتراضي
+      // Explicit page ceiling: a whole worker group exceeds the package default.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(24),
       textDirection: pw.TextDirection.rtl,

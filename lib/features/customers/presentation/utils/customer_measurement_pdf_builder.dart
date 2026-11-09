@@ -56,6 +56,9 @@ Future<Uint8List> buildCustomerMeasurementPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح — يحمي التقارير متعددة الموديلات من سقف الحزمة الافتراضي
+      // Explicit page ceiling — protects multi-model reports from the package default.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(24),
       textDirection: pw.TextDirection.rtl,

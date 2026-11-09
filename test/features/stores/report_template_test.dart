@@ -10,8 +10,12 @@ import 'package:ky_apps/features/stores/data/repositories/store_reports_reposito
 import 'package:ky_apps/features/stores/presentation/utils/report_columns.dart';
 import 'package:ky_apps/features/stores/presentation/utils/report_parameters.dart';
 import 'package:ky_apps/features/stores/presentation/utils/report_templates.dart';
+import 'package:ky_apps/features/stores/presentation/utils/report_totals.dart';
+import 'package:ky_apps/features/stores/presentation/utils/store_export.dart';
 import 'package:ky_apps/features/stores/presentation/widgets/multi_select_field.dart';
 import 'package:ky_apps/features/stores/presentation/widgets/report_data_table.dart';
+import 'package:ky_apps/features/stores/presentation/widgets/report_stats_band.dart';
+import 'package:ky_apps/features/stores/presentation/widgets/store_ui.dart';
 
 /// قالب تقارير المخازن: الأعمدة والمعطيات وحقول الاختيار المتعدد
 /// The stores-report template: columns, parameters and the multi-select fields.
@@ -148,16 +152,135 @@ void main() {
       final bySub = ReportColumns.summary(StoreReportGroupBy.sub);
 
       expect(
-        bySub.firstWhere((column) => column.id == 'sub').defaultOn,
+        bySub.firstWhere((column) => column.id == 'branch').defaultOn,
         isTrue,
       );
 
       final byItemStore = ReportColumns.summary(StoreReportGroupBy.itemStore);
 
       expect(
-        byItemStore.firstWhere((column) => column.id == 'sub').defaultOn,
+        byItemStore.firstWhere((column) => column.id == 'branch').defaultOn,
         isFalse,
       );
+    });
+  });
+
+  group('column order', () {
+    test('draw the columns in the user order, not the template order', () {
+      final ordered = ReportColumns.ordered(
+        ReportColumns.movement(),
+        const ['balance', 'date', 'qty'],
+      );
+
+      expect(
+        ordered.map((column) => column.id).toList(),
+        ['balance', 'date', 'qty'],
+      );
+    });
+
+    test('drop an id the template does not know instead of drawing a blank column', () {
+      final ordered = ReportColumns.ordered(
+        ReportColumns.movement(),
+        const ['tax', 'balance'],
+      );
+
+      expect(ordered.map((column) => column.id).toList(), ['balance']);
+    });
+
+    test('fall back to the defaults when nothing survives', () {
+      final columns = ReportColumns.movement();
+
+      // جدول بلا أعمدة مستحيل: معرّفات لا تخصّه تعني الافتراضي لا جدولاً فارغاً
+      // A column-less table is impossible: foreign ids mean the defaults, not an empty grid.
+      expect(
+        ReportColumns.ordered(columns, const ['tax']).map((column) => column.id),
+        ReportColumns.defaultIds(columns),
+      );
+    });
+  });
+
+  group('totals and statistics', () {
+    test('sum the quantity and money columns of a movement, never cost or balance', () {
+      final totals = ReportTotals.movement(const [
+        StockMovementRow(
+          sanfNo: 10,
+          qtyIn: 10,
+          qtyOut: 4,
+          netQty: 6,
+          cost: 20,
+          lineValue: 120,
+          balanceQty: 99,
+        ),
+        StockMovementRow(
+          sanfNo: 10,
+          qtyIn: 5,
+          qtyOut: 1,
+          netQty: 4,
+          cost: 20,
+          lineValue: 80,
+          balanceQty: 103,
+        ),
+      ]);
+
+      expect(totals['no'], '2');
+      expect(totals['in'], '15');
+      expect(totals['out'], '5');
+      expect(totals['qty'], '10');
+      expect(totals['value'], '200.00');
+
+      // التكلفة سعر وحدة والرصيد رقم متراكم: جمعهما يقول رقماً كاذباً
+      // Cost is a unit price and the balance already accumulates: summing either lies.
+      expect(totals.containsKey('cost'), isFalse);
+      expect(totals.containsKey('balance'), isFalse);
+    });
+
+    test('sum the closing balances of a summary but never the unit cost', () {
+      final totals = ReportTotals.summary(const [
+        StockSummaryRow(
+          sanfNo: 10,
+          qtyIn: 10,
+          qtyOut: 4,
+          netQty: 6,
+          cost: 20,
+          netValue: 120,
+          openingQty: 30,
+          closingQty: 36,
+          inValue: 200,
+          outValue: 80,
+        ),
+      ]);
+
+      expect(totals['opening'], '30');
+      expect(totals['balance'], '36');
+      expect(totals['inValue'], '200.00');
+      expect(totals['outValue'], '80.00');
+      expect(totals.containsKey('cost'), isFalse);
+    });
+
+    test('build the statistics fields under the ids the columns sheet hides', () {
+      const stats = ReportStats(
+        openingQty: 12,
+        qtyIn: 40,
+        qtyOut: 25,
+        netQty: 15,
+        closingQty: 27,
+        closingValue: 0,
+        rows: 8,
+      );
+
+      final fields = ReportStatFields.of(stats);
+
+      expect(fields.map((field) => field.id), containsAll(<String>['opening', 'in']));
+      // قيمة صفرية لا تملأ شريطاً مختصراً بضجيج
+      // A zero value must not fill a compact strip with noise.
+      expect(fields.any((field) => field.id == 'closingValue'), isFalse);
+
+      // الإخفاء بالمعرّف نفسه: ما أخفاه المستخدم لا يعود من طريق آخر
+      // Hiding works by the same id: what the user hid does not return by another route.
+      final kept = ReportStatFields.visible(fields, const ['in', 'net']);
+
+      expect(kept.map((field) => field.id).toList(), ['in', 'net']);
+      expect(ReportStatFields.visible(fields, const []), isEmpty);
     });
   });
 
@@ -483,20 +606,24 @@ void main() {
       }
     });
 
-    test('basics cannot be hidden and optional never repeats a basic', () {
+    test('keep every id unique and start from the basics, never lock them', () {
       for (final template in ReportTemplates.all) {
-        // لا عمود أساسي في القائمة الاختيارية: وإلا ظن المستخدم أنه يستطيع إخفاءه
-        // No basic column may hide in the optional list, or the user would think it optional.
+        // معرّف مكرّر يجعل اختيار المستخدم والترتيب وقراءة الجدول تلتقط العمود الخطأ
+        // A repeated id makes the user's pick, the order and the table's reader resolve the
+        // wrong column — the reason the summary branch id changed from `sub` to `branch`.
+        expect(template.basic.toSet().length, template.basic.length);
+        expect(template.optional.toSet().length, template.optional.length);
+
+        // لا عمود في القائمتين معاً: العمود إما أساسي وإما اختياري، لا الاثنان
+        // No column lives in both lists: a column is either basic or optional.
         expect(
           template.optional.toSet().intersection(template.basic.toSet()),
           isEmpty,
         );
 
-        final visible = ReportTemplates.visibleIds(template, chosen: const {'no'});
-
-        for (final id in template.basic) {
-          expect(visible, contains(id));
-        }
+        // الأساسيات هي نقطة البداية، ويستطيع المستخدم إخفاءها بعد ذلك
+        // The basics are the starting point, and the user may hide them afterwards.
+        expect(template.defaultIds, template.basic);
       }
     });
 
@@ -859,6 +986,214 @@ void main() {
     });
   });
 
+  // ── الشكوى: عند تكبير الشاشة والخط تخرج رؤوس الأعمدة عن مواضعها وتتشوّه أرقام النهاية.
+  //    الجذر أن الخانة كانت تلتفّ: «المستند» تُكسر إلى «المستن» و«د»، و«-12,985.76» تُقسم
+  //    نصفين، فيختلف ارتفاع الصف وتنزاح الخانات. الحل: سطر واحد ثابت الارتفاع يوافق خانته.
+  // ── The complaint: enlarging the screen and the font pushed the headings out of place and
+  //    deformed the closing figures. The root cause was wrapping: a caption broke in half and
+  //    a figure split across two lines, so rows changed height and cells drifted. The fix: one
+  //    line of fixed height that fits its own cell.
+  group('table geometry', () {
+    Widget frame(
+      Widget body, {
+      double width = 380,
+      double scale = 1.25,
+    }) {
+      return MaterialApp(
+        locale: const Locale('ar', 'SA'),
+        home: Builder(
+          builder: (context) => MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: Directionality(
+              textDirection: TextDirection.rtl,
+              child: Scaffold(
+                body: Align(
+                  alignment: AlignmentDirectional.topStart,
+                  child: SizedBox(width: width, child: body),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    List<ReportColumn<StockMovementRow>> picked(List<String> ids) {
+      return ReportColumns.visible(ReportColumns.movement(), ids.toSet());
+    }
+
+    const layoutIds = <String>[
+      'type',
+      'date',
+      'doc',
+      'qty',
+      'cost',
+      'value',
+      'balance',
+    ];
+
+    final rows = <StockMovementRow>[
+      StockMovementRow(
+        typeName: 'منصرف للقص',
+        date: DateTime(2026, 10, 12),
+        docNo: 10101052301,
+        qtyOut: 3.28,
+        netQty: -3.28,
+        cost: 1347.07,
+        lineValue: -4418.39,
+        balanceQty: 437.29,
+      ),
+      StockMovementRow(
+        typeName: 'منصرف للقص',
+        date: DateTime(2026, 10, 17),
+        docNo: 10101052303,
+        qtyOut: 2.69,
+        netQty: -2.69,
+        cost: 1347.07,
+        lineValue: -3623.62,
+        balanceQty: 434.6,
+      ),
+    ];
+
+    testWidgets('every cell stays on one line under a large font on a phone', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        frame(
+          ReportDataTable<StockMovementRow>(
+            columns: picked(layoutIds),
+            rows: rows,
+            opening: const {'balance': '440.57'},
+            totals: const {
+              'qty': '-9.64',
+              'value': '-12,985.76',
+              'balance': '430.93',
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      final cells = find.descendant(
+        of: find.byType(ReportDataTable<StockMovementRow>),
+        matching: find.byType(Text),
+      );
+
+      for (final widget in tester.widgetList<Text>(cells)) {
+        // سطر واحد دائماً: الالتفاف هو ما شوّه الرأس وقسم الرقم
+        // Always one line: wrapping is what deformed the head and split the figure.
+        expect(widget.maxLines, 1);
+        expect(widget.softWrap, isFalse);
+      }
+    });
+
+    testWidgets('the head, the opening, the rows and the totals are one cell tall', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        frame(
+          ReportDataTable<StockMovementRow>(
+            columns: picked(layoutIds),
+            rows: rows,
+            opening: const {'balance': '440.57'},
+            totals: const {'balance': '430.93'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // ارتفاع الخانة واحد في كل الكتل: لا صف أعلى من صف، ولا صف يُكسَر نصفين.
+      // (خط الاختبار مربّع بعرض 1em للحرف، فلا يُقاس عليه تصغير الرأس في التطبيق.)
+      // One cell height in every block: no row taller than another and none split in two.
+      // (The harness font is square at 1em per glyph, so the real heading fit is not
+      // measurable here — the invariant guarded is the uniform height.)
+      double heightOf(String text) => tester
+          .getRect(
+            find.ancestor(
+              of: find.text(text).first,
+              matching: find.byType(Container),
+            ).first,
+          )
+          .height;
+
+      final heights = <double>[
+        heightOf('المستند'), // الرأس — the head
+        heightOf('440.57'), // الافتتاح — the opening
+        heightOf('منصرف للقص'), // سطر حركة — a movement row
+        heightOf('الإجمالي'), // المجاميع — the totals
+      ];
+
+      for (final height in heights) {
+        // فرق عشر البكسل تسامح حسابي لا اختلاف تصميم
+        // A tenth of a pixel is arithmetic slack, not a design difference.
+        expect(height, closeTo(heights.first, 0.1));
+      }
+
+      expect(heights.first, greaterThan(10));
+    });
+
+    testWidgets('the head and the totals row share the same column track', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        frame(
+          ReportDataTable<StockMovementRow>(
+            columns: picked(layoutIds),
+            rows: rows,
+            opening: const {'balance': '440.57'},
+            totals: const {'balance': '430.93'},
+          ),
+          width: 1100,
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+
+      // الرأس والمجاميع كتلتان مستقلتان: بكسلات محسوبة مرة واحدة تجعلهما على مسار واحد.
+      // نقارن حدود الخانة لا مركز النص، لأن الرأس الرقمي في الوسط والأرقام في الطرف.
+      // The head and the totals are separate blocks: pixels computed once put both on one
+      // track. The cell's bounds are compared, not the text's centre, because a numeric
+      // heading sits in the middle while its figures sit at the line's end.
+      Rect trackOf(String text) => tester.getRect(
+        find.ancestor(of: find.text(text).first, matching: find.byType(Container)).first,
+      );
+
+      final head = trackOf('الرصيد');
+      final total = trackOf('430.93');
+
+      expect(head.left, closeTo(total.left, 1.0));
+      expect(head.right, closeTo(total.right, 1.0));
+    });
+
+    testWidgets('a negative figure reads left to right, minus first', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        frame(
+          ReportDataTable<StockMovementRow>(
+            columns: picked(layoutIds),
+            rows: rows,
+            totals: const {'qty': '-9.64'},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // اتجاه الواجهة عربي، والرقم لا يُقلب: «-3.28» ولا «3.28-»
+      // The interface is Arabic, but the figure is not mirrored: "-3.28", never "3.28-".
+      final cell = tester.widget<Text>(find.text('-3.28').first);
+
+      expect(cell.textDirection, TextDirection.ltr);
+    });
+  });
+
   group('report title', () {
     const reference = StoreReference(
       stores: [
@@ -1016,6 +1351,223 @@ void main() {
       );
 
       expect(shared.typesOfGroups(const [1, 2]), hasLength(1));
+    });
+  });
+
+  group('section unit of every scope', () {
+    // ── الحارس الذي كان ناقصاً: التقرير الموسّع كان يعرض «القسم» دائماً، فيبدو «حركة صنف
+    //    رئيسي» مطابقاً لـ«حركة صنف فرعي» — والتقارير الأربعة إنما وُجدت ليفترق بعضها عن بعض.
+    // ── The guard that was missing: a scoped report always said "القسم", so an item statement
+    //    read exactly like a branch statement — and these four reports exist to differ.
+    test('names the element each movement report splits by', () {
+      expect(StoreReportScope.branch.sectionLabel, 'الصنف الفرعي');
+      expect(StoreReportScope.item.sectionLabel, 'الصنف الفرعي');
+      expect(StoreReportScope.subGroup.sectionLabel, 'الصنف الرئيسي');
+      expect(StoreReportScope.mainGroup.sectionLabel, 'المجموعة الفرعية');
+    });
+
+    test('plurals title the closing total, never a singular', () {
+      expect(StoreReportScope.item.sectionPlural, 'الأصناف الفرعية');
+      expect(StoreReportScope.subGroup.sectionPlural, 'الأصناف الرئيسية');
+      expect(StoreReportScope.mainGroup.sectionPlural, 'المجموعات الفرعية');
+    });
+
+    test('the section unit differs from the report it is opened from', () {
+      // كل تقرير يجمّع ما دونه: الصنف الرئيسي يجمع فروعه، والمجموعة الرئيسية مجموعاتها
+      // Every report aggregates what sits beneath it, never itself.
+      for (final scope in StoreReportScope.values) {
+        if (!scope.sectioned) continue;
+        expect(scope.sectionLabel, isNot(scope.label));
+      }
+    });
+  });
+
+  group('opening balance', () {
+    test('is the first figure of the balance column, not zero', () {
+      final stats = ReportStats.fromMap(const <String, dynamic>{
+        'opening_qty': 251711.69,
+        'opening_value': 900000,
+        'qty_in': 18135.32,
+        'qty_out': 7890.02,
+        'net_qty': 10245.3,
+        'closing_qty': 261956.99,
+      });
+
+      expect(stats.openingQty, 251711.69);
+      expect(stats.openingValue, 900000);
+
+      // السطر الأول يحمل نفس رقم الافتتاح لا صفراً
+      // The opening line carries the opening figure itself, never a zero.
+      final line = ReportTotals.opening(stats);
+
+      expect(line['balance'], StoreFormat.qty(251711.69));
+      expect(line['balanceValue'], StoreFormat.money(900000));
+    });
+
+    test('leaves the value column empty when no value balance exists', () {
+      final line = ReportTotals.opening(
+        const ReportStats(openingQty: 40),
+      );
+
+      expect(line['balance'], '40');
+      // حقل قيمة لا رقم له لا يُملأ برقم مُختلق
+      // A value with no figure behind it is never filled with an invented one.
+      expect(line.containsKey('balanceValue'), isFalse);
+    });
+
+    testWidgets('prints a "رصيد سابق" line above the first movement', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar', 'SA'),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: SizedBox(
+                width: 360,
+                height: 720,
+                child: ReportZoomView(
+                  child: SingleChildScrollView(
+                    child: ReportA4Sheet(
+                      body: ReportDataTable<StockMovementRow>(
+                        columns: ReportColumns.visible(
+                          ReportColumns.movement(),
+                          ReportColumns.defaultIds(
+                            ReportColumns.movement(),
+                          ).toSet(),
+                        ),
+                        rows: <StockMovementRow>[
+                          StockMovementRow(
+                            itemName: 'قماش كوري',
+                            typeName: 'وارد شراء',
+                            qtyIn: 12,
+                            netQty: 12,
+                            balanceQty: 252,
+                            lineValue: 15000,
+                          ),
+                        ],
+                        opening: const <String, String>{'balance': '240'},
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('رصيد سابق'), findsOneWidget);
+      expect(find.text('240'), findsOneWidget);
+    });
+  });
+
+  group('section keys', () {
+    test('are read beside the labels so stats pair with their rows', () {
+      final result = StoreReportResult<StockMovementRow>(
+        meta: const <String, dynamic>{
+          'scope': 'subgroup',
+          'sections': [
+            <String, dynamic>{
+              'key': '11',
+              'label': 'قطن صيفي',
+              'opening_qty': 6.05,
+              'closing_qty': 5.95,
+            },
+            <String, dynamic>{
+              'key': '16',
+              'label': 'سوبر',
+              'opening_qty': 8,
+              'closing_qty': 4.44,
+            },
+          ],
+        },
+      );
+
+      expect(result.sectionKeys, ['11', '16']);
+      expect(result.sectionLabels, ['قطن صيفي', 'سوبر']);
+      expect(result.sectionStats.last.openingQty, 8);
+    });
+  });
+
+  // ── إحصاء القسم سطر لا تقرير: أربعة أرقام فقط، بلا «السطور» ولا «الصافي» ولا قيم
+  // ── A section's statistics are a line, not a report: four figures only, with no rows,
+  //    net or value fields copied down from the report summary.
+  group('section statistics', () {
+    const stats = ReportStats(
+      openingQty: 240,
+      openingValue: 1200,
+      qtyIn: 50,
+      qtyInValue: 500,
+      qtyOut: 30,
+      qtyOutValue: 300,
+      netQty: 20,
+      closingQty: 260,
+      closingValue: 1400,
+      rows: 9,
+    );
+
+    test('are exactly the four figures a section is asked about', () {
+      final ids = ReportStatFields.section(stats).map((field) => field.id);
+
+      expect(ids, ['opening', 'in', 'out', 'closing']);
+      expect(ReportStatFields.sectionIds, ['opening', 'in', 'out', 'closing']);
+
+      // ما ليس من الأربعة يسقط: التقرير وحده هو من يُسأل عن قيم الوارد والمنصرف
+      // Whatever is not one of the four drops out: only the report is asked about values.
+      for (final surplus in ['rows', 'net', 'inValue', 'outValue', 'closingValue']) {
+        expect(ids, isNot(contains(surplus)));
+      }
+    });
+
+    test('print as four figures and nothing else', () {
+      // لا «الصافي» ولا «قيمة الرصيد» في الورق: نص السطر يطابق الشاشة حرفاً بحرف
+      // No net and no closing value on paper: the line matches the screen word for word.
+      final line = sectionStatsLine(stats, null);
+
+      expect(line, 'السابق 240 · الوارد 50 · المنصرف 30 · الرصيد الحالي 260');
+      expect(line.contains('الصافي'), isFalse);
+      expect(line.contains('قيمة'), isFalse);
+    });
+
+    test('drop a figure the user hid, and only that one', () {
+      // حقل أخفاه المستخدم لا يعود من أي منفذ — شاشة أو ورق
+      // A field the user hid never comes back through any output.
+      expect(
+        sectionStatsLine(stats, const ['opening', 'closing']),
+        'السابق 240 · الرصيد الحالي 260',
+      );
+    });
+
+    testWidgets('are drawn on one line instead of a full report strip',
+        (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('ar', 'SA'),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: Scaffold(
+              body: ReportStatsBand.compact(
+                title: 'إحصاءات الصنف الفرعي',
+                fields: ReportStatFields.section(stats),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(tester.takeException(), isNull);
+      expect(find.text('إحصاءات الصنف الفرعي'), findsOneWidget);
+      expect(find.text('السابق'), findsOneWidget);
+      expect(find.text('الرصيد الحالي'), findsOneWidget);
+
+      // حقول التقرير الكامل لا تنزل إلى سطر القسم
+      // Report-wide fields never descend into a section's line.
+      expect(find.text('السطور'), findsNothing);
+      expect(find.text('الصافي'), findsNothing);
     });
   });
 }

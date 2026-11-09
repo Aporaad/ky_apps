@@ -187,13 +187,12 @@ class CuttingBillPayment {
 
   /// المدفوع كاملاً (مع المدفوعات الأخرى)
   /// The full paid amount, including the other payments.
-  double get paidTotal => (paid ?? 0) + (othersPayments ?? 0);
+  double get paidTotal => (paid ?? 0) ;//+ (othersPayments ?? 0);
 
   /// تسمية الرصيد: متبقٍّ / رصيد مقدم / مسدَّد
   /// The balance label: due / advance / settled.
   String get balanceLabel {
-    if (remaining == null) return '—';
-    if (isAdvance) return 'رصيد مقدم';
+    if (remaining == null) return '—';    
     if (remaining == 0) return 'مسدَّد بالكامل';
     return 'المتبقي';
   }

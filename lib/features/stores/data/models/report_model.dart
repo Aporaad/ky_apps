@@ -22,6 +22,32 @@ enum StoreReportScope {
   /// Whether this report renders as successive sections with a balance per section.
   final bool sectioned;
 
+  /// اسم **وحدة القسم** في هذا النطاق — ما يتكرّر في التقرير ويحمل إحصاءه
+  /// The name of the SECTION UNIT in this scope — what repeats in the report and carries
+  /// its own statistics.
+  ///
+  /// ── حركة صنف رئيسي تُقسَّم للفروع، وحركة مجموعة فرعية للأصناف الرئيسية، وحركة مجموعة
+  ///    رئيسية للمجموعات الفرعية — والفرق بين الثلاثة هو هذا الاسم وحده في الواجهة.
+  /// ── An item statement sections by branches, a sub-group statement by main items and a
+  ///    main-group statement by sub groups — the only difference on screen is this name.
+  String get sectionLabel => switch (this) {
+    StoreReportScope.branch => 'الصنف الفرعي',
+    StoreReportScope.item => 'الصنف الفرعي',
+    StoreReportScope.subGroup => 'الصنف الرئيسي',
+    StoreReportScope.mainGroup => 'المجموعة الفرعية',
+  };
+
+  /// جمع وحدة القسم — عنوان الإحصاء الختامي: «إجمالي كل الأصناف الفرعية» لا «إجمالي كل
+  /// الصنف الفرعي»
+  /// The plural of the section unit — the closing band's caption. Without it the grand total
+  /// would be titled with a singular, which reads as one section rather than all of them.
+  String get sectionPlural => switch (this) {
+    StoreReportScope.branch => 'الأصناف الفرعية',
+    StoreReportScope.item => 'الأصناف الفرعية',
+    StoreReportScope.subGroup => 'الأصناف الرئيسية',
+    StoreReportScope.mainGroup => 'المجموعات الفرعية',
+  };
+
   static StoreReportScope fromCode(String? code) {
     for (final scope in values) {
       if (scope.code == code) return scope;
@@ -446,6 +472,7 @@ class StockMovementRow {
 class ReportStats {
   const ReportStats({
     this.openingQty = 0,
+    this.openingValue = 0,
     this.qtyIn = 0,
     this.qtyInValue = 0,
     this.qtyOut = 0,
@@ -457,6 +484,10 @@ class ReportStats {
   });
 
   final double openingQty;
+
+  /// قيمة الرصيد السابق — الرصيد الحالي قيمةً يُبنى عليها لا يبدأ من صفر
+  /// The opening balance's value — the closing value is carried on it, not started from zero.
+  final double openingValue;
   final double qtyIn;
   final double qtyInValue;
   final double qtyOut;
@@ -473,6 +504,7 @@ class ReportStats {
 
     return ReportStats(
       openingQty: pick('opening_qty'),
+      openingValue: pick('opening_value'),
       qtyIn: pick('qty_in'),
       qtyInValue: pick('qty_in_value'),
       qtyOut: pick('qty_out'),

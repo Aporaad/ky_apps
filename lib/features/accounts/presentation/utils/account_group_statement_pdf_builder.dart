@@ -27,6 +27,9 @@ Future<Uint8List> buildAccountGroupStatementPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح — الافتراضي 20 يُسقط ميزان المراجعة الكبير
+      // Explicit page ceiling — the 20-page default aborts a large trial balance.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4.landscape,
       margin: const pw.EdgeInsets.all(20),
       textDirection: pw.TextDirection.rtl,

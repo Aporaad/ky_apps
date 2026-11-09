@@ -3247,3 +3247,279 @@ SELECT GROUPNO
 
 **التذكير الثابت:** كل ما يصل أوراكل من قسم التقارير قراءة من `ITEM_MOVEMENT_D` / `AVVG`،
 والكتابة الوحيدة في القسم هي سجل الطباعة/التصدير على `APP_ACTIVITY`.
+
+
+## 2026-11-09 — قراءات فقط: تطبيع مفاتيح OCI8 ونافذة اختبار مشتقة من البيانات
+
+**المنفذ:** Qoder · **الوقت:** 2026-11-09 · **النوع:** `SELECT` فقط (بلا أي كتابة).
+
+### 1) سبب عمود الرصيد الفارغ — لا علاقة له بأوراكل
+
+المخطط والبيانات سليمة؛ العيب في **قراءة المفاتيح**: OCI8 يعيد أسماء الأعمدة بأحرف صغيرة
+(`p_qty`, `p_code`, `net_qty`) والكود كان يقرأ `P_QTY` فيحصل على `null` صامت. الحل في PHP:
+
+```php
+$row = array_change_key_case((array) $row, CASE_UPPER);
+```
+
+طُبِّق في `StoreReportController` (مسار الحركة، مسار الخلاصة، ومساعدَا الرصيد الافتتاحي) — **بلا أي
+تغيير في SQL ولا في الجداول أو الـ VIEWs**.
+
+### 2) الاستعلامات التي أُرسلت فعليًا (كلها قراءة)
+
+| الغرض | الاستعلام |
+|---|---|
+| حدود نافذة الاختبار | `SELECT TO_CHAR(SYSDATE - 7/14/30/60, 'YYYY-MM-DD') AS F, TO_CHAR(SYSDATE, 'YYYY-MM-DD') AS T FROM DUAL` |
+| أقل ثلاث مجموعات حركةً | `SELECT GROUPNO, COUNT(*) AS C FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE GROUPNO IS NOT NULL AND I_DATE >= TO_DATE(:f,…) AND I_DATE < TO_DATE(:t,…) + 1 GROUP BY GROUPNO ORDER BY 2 ASC` (مع `ROWNUM <= 3`) |
+| عدّاد المستندات (اختبار عدم الكتابة) | `SELECT (SELECT COUNT(*) FROM ACCOUNTS.INVENTORY_RECEIVE) RCV, … FROM DUAL` |
+| التقارير نفسها | `SELECT` من `ACCOUNTS.ITEM_MOVEMENT_D` / `AVVG` / `SANFS*` عبر `StoreReportController` |
+
+### 3) لم يُنفَّذ أي أمر كتابة
+
+**لا `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `ALTER` / `CREATE` / `DROP` / `TRUNCATE` في هذه الجولة.**
+اختبار «the stocktake sheet writes nothing at all» يتحقق من ذلك بمقارنة أعداد صفوف المستندات قبل
+التشغيل وبعده، وقد نجح.
+
+**التذكير الثابت:** عمود الرصيد يُقرأ من `ITEM_MOVEMENT_D` عبر `P_QTY` بعد التطبيع؛ وأي كود جديد يقرأ
+صفًا من `DB::connection('oracle')` يجب أن يطبّع المفاتيح أولًا وإلا عاد `null` بلا خطأ.
+
+---
+
+## 2026-11-09 — استعلامات الرصيد السابق (الرصيد الافتتاحي لكل قسم)
+
+**الغرض:** التحقق من أن «الرصيد السابق» يُقرأ فعلاً من الدفاتر قبل الفترة، وأن انعدامه في بعض النوافذ
+سببه عمر الدفاتر لا خلل في الاستعلام.
+
+### 1) حدود عمر الدفاتر — القياس الذي فسّر «الصفر»
+
+```sql
+SELECT TO_CHAR(MIN(I_DATE),'YYYY-MM-DD') AS MN,
+       TO_CHAR(MAX(I_DATE),'YYYY-MM-DD') AS MX,
+       COUNT(*)                            AS C,
+       SUM(CASE WHEN I_DATE < TO_DATE('2026-01-01','YYYY-MM-DD') THEN 1 ELSE 0 END) AS PRE26
+  FROM ACCOUNTS.ITEM_MOVEMENT_D;
+```
+
+**النتيجة:** `MN = 2026-04-25` · `MX = 2026-10-31` · `C = 27321` · `PRE26 = 0`.
+
+**الاستنتاج:** لا توجد حركة واحدة قبل 2026-01-01، فرصيد ما قبل هذا التاريخ صفرٌ **حقيقي**. أي فترة
+تبدأ قبل 2026-04-25 تعيد افتتاحاً صفرياً بصدق، وليس عيباً. لهذا بُنيت اختبارات الافتتاح على نافذة
+`2026-09-01`.
+
+### 2) استعلام الافتتاح المعتمد (كمية + قيمة، لكل قسم)
+
+هذه هي الصيغة التي صارت في `StoreReportController::openingBySection()` — وهي الأصح لأنها تجمع
+القيمة من تكلفة كل حركة سابقة:
+
+```sql
+-- نطاق مقطَّع (صنف رئيسي / مجموعة فرعية / مجموعة رئيسية)
+SELECT m.P_CODE                        AS SK,
+       NVL(SUM(m.P_QTY), 0)             AS OPEN_QTY,
+       NVL(SUM(m.P_QTY * m.STK_COST),0) AS OPEN_VALUE
+  FROM ACCOUNTS.ITEM_MOVEMENT_D m
+ WHERE <شروط النطاق: INV_ID / P_CODE / I_CODE / TYPE_NO / GROUPNO>
+   AND m.I_DATE < TO_DATE(:open_from, 'YYYY-MM-DD')
+ GROUP BY m.P_CODE;
+
+-- نطاق الفرع (بلا تقسيم): صف واحد مفتاحه __all__
+SELECT '__all__'                       AS SK,
+       NVL(SUM(m.P_QTY), 0)             AS OPEN_QTY,
+       NVL(SUM(m.P_QTY * m.STK_COST),0) AS OPEN_VALUE
+  FROM ACCOUNTS.ITEM_MOVEMENT_D m
+ WHERE <شروط النطاق>
+   AND m.I_DATE < TO_DATE(:open_from, 'YYYY-MM-DD');
+```
+
+**قاعدة ملزمة:** شروط النطاق في استعلام الافتتاح تُطابق شروط التقرير **بلا شرط التاريخ**. أي فرق
+بينهما يجعل `الافتتاح + الوارد − المنصرف ≠ الرصيد الحالي`.
+
+### 3) نتائج التحقق على النافذة `2026-09-01 … 2026-10-31`
+
+| النطاق | نتيجة القراءة |
+|---|---|
+| فرع (مخزن 1) | `OPEN_QTY = 251711.69` · أول `BALANCE_QTY` = **251741.69** (= الافتتاح + 30) |
+| صنف 1991 | قسم مستقل لكل فرع، كل قسم يبدأ من افتتاحه |
+| مجموعة فرعية (`I_CODE`) | **136** قسماً، أمثلة افتتاح: 6.05 · 7.55 · 2478.9 |
+| مجموعة رئيسية (`TYPE_NO`) | قسم `101` افتتاحه **126950.69** |
+
+### 4) فحص الأقسام التي يعيدها الخادم
+
+قراءة تمريرة كاملة على نفس المدى ثم مقارنة `meta.sections[].key` بقيم `SECTION_KEY` في السطور:
+
+```sql
+SELECT m.I_DATE, m.DOC_TYPE, m.INV_ID, m.I_CODE, m.P_CODE, m.TYPE_NO,
+       m.GROUPNO, m.P_QTY, m.STK_COST
+  FROM ACCOUNTS.ITEM_MOVEMENT_D m
+ WHERE m.I_DATE >= TO_DATE(:from,'YYYY-MM-DD')
+   AND m.I_DATE <  TO_DATE(:to,'YYYY-MM-DD') + 1
+ ORDER BY <عمود القسم>, m.I_DATE, m.INVOIC_ID, m.I_CODE;
+```
+
+قبل الإصلاح أعاد الخادم قسماً واحداً `__all__` رغم صحة `SECTION_KEY` في كل سطر → أثبت أن الخلل في
+بناء الإحصاءات (نسخ المصفوفة عند الكتابة) لا في SQL ولا في المخطط.
+
+### 5) لم يُنفَّذ أي أمر كتابة
+
+**لا `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `MERGE` / `ALTER` / `CREATE` / `DROP` / `TRUNCATE`
+في هذه الجولة.** كل الاستعلامات أعلاه قراءة، وأداة التحقق المؤقتة
+(`probe_scopes.php`, `probe_opening.php`, `probe_out.json`) حُذفت بعد الاستخدام.
+
+**المنفِّذ:** Qoder · **الوقت:** 2026-11-09 · **DDL:** لا · **DML:** لا · **قراءة فقط**.
+
+---
+
+## الأمر — 2026-11-09 (تكملة: إحصاء القسم سطراً واحداً + حل الأخطاء)
+
+**نصّ الأمر كما ورد حرفياً:**
+
+> «اكمل وحل الاخطاء
+> وايضا احصاءات القسم الفرعي في تقرير حركه صنف رئيسي و تقرير حركه مجموعه فرعية و تقرير حركه مجموعه رئيسية اريد ان تظهر مختصره وتظهر بسطر واحد في نهايه جدول حركه القسم ولااريد ان تظهر احصاءات كامله مثل احصاءات التقرير كامل
+> وايضا قم بتصغير حجم خط ومساحه حقول الاحصاءات»
+
+### 1) لا استعلام ولا أمر كتابة في هذه الجولة
+
+**DDL:** لا · **DML:** لا · **SELECT:** لا.
+
+لم يلمس هذا العمل قاعدة البيانات إطلاقاً: لا استعلام تحقق، ولا قراءة تجريبية، ولا ملف تحقيق مؤقت.
+الطلبات الثلاثة كلها في **طبقة العرض داخل Flutter** — شكل شريط الإحصاءات وحجم خطه ومساحته:
+
+| ما تغيّر | الملف | الطبقة |
+|---|---|---|
+| شريط إحصاء القسم (سطر واحد: السابق · وارد · منصرف · الرصيد الحالي) | `report_stats_band.dart` · `report_totals.dart` | عرض |
+| تمرير الإحصاء المختصر لجدول كل قسم | `store_reports_screen.dart` | عرض |
+| نفس السطر في المطبوع وملف Excel | `store_export.dart` | عرض |
+
+### 2) الأرقام التي يعرضها الشريط مصدرها كما هو
+
+الخط الأربعة المختصرة (`السابق` · `الوارد` · `المنصرف` · `الرصيد الحالي`) هي نفس الحقول التي
+يحسبها الخادم أصلاً ويعيدها في `meta.sections[].stats`
+(`opening_qty` · `qty_in` · `qty_out` · `closing_qty`) — **لم يُضف حقل جديد ولم يُغيَّر حساب**،
+واستعلام الافتتاح `openingBySection()` بقي كما هو. أي أن الأرقام في الشاشة والمطبوع والـ`meta`
+تظل متطابقة، والتغيير **في الانتقاء والعرض فقط**: أربعة بدل تسعة، وسطر بدل شريط.
+
+### 3) سبب «الأخطاء» التي طُلب حلّها — لا علاقة لها بالبيانات
+
+`flutter analyze` أبلغ عن **11 خطأ بناء**: `ReportTotals.opening` غير معرّفة، و`_appendColumns`
+بلا الوسائط المسماة `opening`/`heading`/`statsLine`، و`pw.Double` غير موجود. الجذر أن جزءاً من
+تعديلات الجولة السابقة لم يكن موجوداً في شجرة العمل، فاستُعيدت التعريفات الثلاثة. **المخطط
+والاستعلامات بريئة تماماً من هذه الأخطاء** — لم يرسل التطبيق أي طلب خاطئ إلى أوراكل.
+
+### 4) التحقق
+
+`flutter analyze lib/features/stores` → **No issues found!** · `flutter test test/features/stores`
+→ **149 ناجحاً** · `report_template_test.dart` → **61 ناجحاً** · `flutter test` (الحزمة كاملة)
+→ **624 ناجحاً** (~10 متخطّى). اختبارات `StoreReportTest` الخادمية (20 ناجحاً / 20263 تحققاً)
+بلا أي تغيير لأن الخادم لم يُمسّ.
+
+**المنفِّذ:** Qoder · **الوقت:** 2026-11-09 · **DDL:** لا · **DML:** لا · **لا استعلام**.
+
+---
+
+## الأمر — 2026-11-09 05:05 (هندسة جدول التقرير + حقول الإحصاء الافتراضية)
+
+**نصّ الأمر كما ورد حرفياً:**
+
+> «هناك مشكله في حجم وتنسيق الاعمده والحقول في جدول التقرير عند تكبير حجم الشاشه والخط تخرج الاعمده من اماكنه وخاصه رؤؤس الجدول ونهايته وتتشوه وهذا غلط ويجب ظبطها لتضل ظاهر بنفس سطر وحجم الخليه وتناسب حجم النص عليها ويضل السطر متناسق ومنظم
+>
+> ثانيا قم بتعديل حقول الاحصاءات الافتراضيه التي تظهر وجعل الظاهره فقط (السابق-وارد-منصرف-الصافي-الرصيدالحالي) فقط وبقيه الحقول تكون مخفية في قسم التخصيص حتى يتم اظهارها»
+
+### 1) لا استعلام ولا أمر كتابة
+
+**DDL:** لا · **DML:** لا · **SELECT:** لا.
+
+الجولة كلها في طبقة العرض داخل Flutter: رسم الخانة، حساب عرضها بالبكسل، قياس حجم الخط، واختيار
+حقول الإحصاء الظاهرة. لم يُرسل التطبيق إلى Oracle أي أمر، ولم يُشغَّل أي ملف تحقيق.
+
+### 2) الحقول التي اختيرت ليست جديدة على الخادم
+
+الخمسة الظاهرة افتراضياً تُقرأ من نفس مفاتيح الاستجابة القائمة:
+
+| معرّف العميل | مفتاح الاستجابة | مصدره في الخادم |
+|---|---|---|
+| `opening` | `opening_qty` | `SUM(P_QTY)` قبل `:from` في `openingBySection()` |
+| `in` | `qty_in` | `SUM(CASE WHEN P_QTY > 0 …)` على السطور |
+| `out` | `qty_out` | `SUM(CASE WHEN P_QTY < 0 …)` على السطور |
+| `net` | `net_qty` | `qty_in − qty_out` |
+| `closing` | `closing_qty` | `opening_qty + net_qty` |
+
+والأربعة المخفية افتراضياً (`rows` · `qty_in_value` · `qty_out_value` · `closing_value`) تبقى في
+الـ JSON كما هي؛ الإخفاء **في الانتقاء** لا في الحساب، و`closing_value` ما زال
+`opening_value + in_value − out_value` على الخادم.
+
+### 3) لماذا لا يخصّ أي استعلام هذا التغيير
+
+العلة التي رآها المستخدم (رأس مكسور «المستن/د»، رقم مكسور «12,985.7-/6»، عمود منزاح بين الرأس
+والمجاميع) علتها في الواجهة: `softWrap: true` داخل خانة ضيقة، و`FlexColumnWidth` يقرّب الكسر في كل
+كتلة على حدة، و`FittedBox` لم يكن مستخدماً. لا شيء منها يُقرأ من قاعدة البيانات، ولا يصلحه تعديل
+استعلام.
+
+### 4) التحقق
+
+`flutter analyze` (المشروع كله) → **No issues found!** · `flutter test test/features/stores` →
+**153 ناجحاً** (4 جديدة في `table geometry`) · `flutter test` → **629 ناجحاً** (~10 متخطّى).
+`StoreReportTest` على الخادم (20 ناجحاً / 20263 تحققاً) لم يُعَد تشغيله لأن الخادم لم يُمسّ.
+
+**المنفِّذ:** Qoder · **الوقت:** 2026-11-09 05:05 · **DDL:** لا · **DML:** لا · **لا استعلام**.
+
+
+---
+
+## 2026-11-09 06:31 — استعلامات تشخيص اللون والسعر والملاحظة (قراءة فقط)
+
+```sql
+-- 1) أي عمود يحمل الملاحظة؟ (النتيجة: NOTES2 فقط)
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='SALES_DETAILES_SHAPES'
+   AND (COLUMN_NAME LIKE '%NOTE%' OR COLUMN_NAME LIKE '%DETAIL%' OR COLUMN_NAME LIKE '%DESC%');
+
+-- 2) اللون والسعر لقطعة حقيقية (ohdid = 2621148495 ⇒ bill 21464 / seq 85139)
+SELECT BILL_NO, YEAR, SEQ_NO, SEQ_NO1, OHDID, CLOTHS_COLOR, CLOTHS_COLOR2,
+       SANF_PRICE, SANFPRICE
+  FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW
+ WHERE OHDID = 2621148495;
+-- النتيجة: CLOTHS_COLOR=2, CLOTHS_COLOR2=null, SANF_PRICE=0, SANFPRICE=10000
+
+-- 3) ملاحظة الموديل نفسه
+SELECT SEQ_NO, NOTES2, NECK_TYPE FROM ACCOUNTS.SALES_DETAILES_SHAPES
+ WHERE BILL_NO = 21464 AND YEAR = 2026 AND SEQ_NO = 85139;
+-- النتيجة: NOTES2 = null (ملاحظة غير مسجّلة)، NECK_TYPE = «جلباب»
+
+-- 4) كم صفاً يحمل NOTES2 فعلاً؟
+SELECT COUNT(*) FROM ACCOUNTS.SALES_DETAILES_SHAPES WHERE NOTES2 IS NOT NULL;  -- 36150
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 06:31 · **DDL:** لا · **DML:** لا.
+
+
+---
+
+## 2026-11-09 06:54 — DDL: إضافة `MODEL_NOTES` إلى عرض التفصيل
+
+```sql
+-- 1) استخراج التعريف الأصلي (لمراجعته فقط)
+SELECT DBMS_METADATA.GET_DDL('VIEW','CUTTING_SALES_BILL_VIEW','ACCOUNTS') AS DDL FROM DUAL;
+-- الطول: 4,488 حرفاً
+
+-- 2) إعادة الإنشاء مع عمود الملاحظة في النهاية (مختصر البنية)
+CREATE OR REPLACE FORCE VIEW "ACCOUNTS"."CUTTING_SALES_BILL_VIEW" (
+  ... , "TAILOR_TRANSFER_DATE", "MODEL_NOTES"
+) AS
+SELECT multi_cloths.ohid, ...
+       multi_cloths.tailor_transfer_date,
+       sales_detailes_shapes.notes2
+  FROM sales_bill, sales_detailes_shapes, multi_cloths, cutter, TYPES, tailor
+ WHERE ...;   -- نفس شروط الربط الأصلية بلا تغيير
+
+-- 3) التحقق
+SELECT COLUMN_NAME FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='CUTTING_SALES_BILL_VIEW'
+   AND COLUMN_NAME='MODEL_NOTES';                       -- صف واحد
+
+SELECT BILL_NO, YEAR, SEQ_NO, MODEL_NOTES
+  FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW
+ WHERE MODEL_NOTES IS NOT NULL AND ROWNUM <= 2;          -- يعيد ملاحظات فعلية
+
+SELECT COUNT(*) FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW;  -- 45490
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 06:54 · **DDL:** نعم · **DML:** لا.

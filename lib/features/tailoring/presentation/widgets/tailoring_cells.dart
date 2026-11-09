@@ -19,6 +19,12 @@ class TailoringCell extends StatelessWidget {
   /// Numbers align to the cell's end so a column of figures reads like a column.
   final bool numeric;
 
+  /// وضع مدمج: تسمية في سطر واحد تُصغَّر لتتّسع، وحشو أقل، وقيمة أصغر — يُزيل الفراغ
+  /// الميّت أسفل الخلايا ويقلّص ارتفاع البطاقة
+  /// A compact mode: a single-line label that scales to fit, tighter padding and a smaller
+  /// value — it removes the dead space under the cells and shortens the card.
+  final bool compact;
+
   const TailoringCell({
     super.key,
     required this.label,
@@ -26,6 +32,7 @@ class TailoringCell extends StatelessWidget {
     this.icon,
     this.valueColor,
     this.numeric = false,
+    this.compact = false,
   });
 
   @override
@@ -34,7 +41,10 @@ class TailoringCell extends StatelessWidget {
     final isBlank = text == '—';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 3 : 4,
+        vertical: compact ? 2 : 3,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
@@ -42,27 +52,41 @@ class TailoringCell extends StatelessWidget {
           Row(
             children: [
               if (icon != null) ...[
-                Icon(icon, size: 10, color: AppColors.textSecondary),
-                const SizedBox(width: 3),
+                Icon(
+                  icon,
+                  size: compact ? 9 : 10,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: 2),
               ],
+              // التسمية في سطر واحد دائماً: تُصغَّر بدل أن تلتفّ فتُطيل الخانة
+              // The label is always one line: it shrinks instead of wrapping and stretching the cell.
               Flexible(
-                child: Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.2,
-                    height: 0.8,
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: AlignmentDirectional.centerStart,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: compact ? 8.5 : 9.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 0.2,
+                      height: 1.2,
+                    ),
                   ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 2),
+          SizedBox(height: compact ? 1 : 2),
+          // heightFactor: 1 يمنع الخلية من التمدد رأسياً لتملأ ارتفاع الصف — فالارتفاع
+          // يتبع المحتوى فقط ولا يبقى فراغ أسفل النص
+          // heightFactor: 1 stops the cell from stretching to the row's height, so the height
+          // follows the content only and no empty band is left under the text.
           Align(
+            heightFactor: 1,
             alignment:
                 numeric ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
             child: FittedBox(
@@ -72,7 +96,7 @@ class TailoringCell extends StatelessWidget {
               child: Text(
                 text,
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: compact ? 12 : 13,
                   fontWeight: FontWeight.w900,
                   color: isBlank
                       ? AppColors.textMuted
@@ -101,20 +125,20 @@ class TailoringCellRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final children = <Widget>[];
-
-    for (var i = 0; i < cells.length; i++) {
-      if (i > 0) children.add(Container(width: 1, color: tailoringGridRule));
-      children.add(
-        Expanded(flex: (weights[i] * 10).round(), child: cells[i]),
-      );
-    }
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
+    // `Table` تحسب ارتفاع الصف من محتواه: لا تمدد رأسياً ولا فراغ أسفل الخلايا،
+    // وحدودها ترسم الفواصل الرأسية بطول الصف كاملاً.
+    // A Table sizes the row to its content: no vertical stretching and no empty band under the
+    // cells, while its border draws the vertical rules across the full row height.
+    return Table(
+      defaultVerticalAlignment: TableCellVerticalAlignment.top,
+      columnWidths: {
+        for (var i = 0; i < cells.length; i++)
+          i: FlexColumnWidth(weights[i]),
+      },
+      border: TableBorder(
+        verticalInside: BorderSide(color: tailoringGridRule, width: 1),
       ),
+      children: [TableRow(children: cells)],
     );
   }
 }
@@ -162,54 +186,39 @@ class TailoringCellGrid extends StatelessWidget {
           columns = (cells.length / wanted).ceil().clamp(1, cells.length);
         }
 
-        final rowWidgets = <Widget>[];
+        // جدول واحد لكل الشبكة: ارتفاع كل صف من محتواه فقط، والفواصل أفقياً ورأسياً
+        // A single table for the whole grid: each row is as tall as its content and the rules are
+        // drawn both ways.
+        final tableRows = <TableRow>[];
         for (var start = 0; start < cells.length; start += columns) {
-          rowWidgets.add(
-            _row(
-              cells.sublist(start, (start + columns).clamp(0, cells.length)),
-              columns,
+          final slice = cells.sublist(
+            start,
+            (start + columns).clamp(0, cells.length),
+          );
+          tableRows.add(
+            TableRow(
+              children: [
+                for (final cell in slice) cell,
+                for (var i = slice.length; i < columns; i++)
+                  const SizedBox.shrink(),
+              ],
             ),
           );
         }
 
-        return Container(
-          decoration: BoxDecoration(
-            color: AppColors.surface,
+        return Table(
+          defaultVerticalAlignment: TableCellVerticalAlignment.top,
+          columnWidths: {
+            for (var i = 0; i < columns; i++) i: const FlexColumnWidth(1),
+          },
+          border: TableBorder.all(
+            color: tailoringGridRule,
+            width: 1,
             borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: tailoringGridRule, width: 1.1),
           ),
-          clipBehavior: Clip.antiAlias,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              for (var i = 0; i < rowWidgets.length; i++) ...[
-                if (i > 0) Container(height: 0.1, color: tailoringGridRule),
-                rowWidgets[i],
-              ],
-            ],
-          ),
+          children: tableRows,
         );
       },
-    );
-  }
-
-  Widget _row(List<TailoringCell> rowCells, int columns) {
-    final children = <Widget>[];
-
-    for (var i = 0; i < rowCells.length; i++) {
-      if (i > 0) children.add(Container(width: 1, color: tailoringGridRule));
-      children.add(Expanded(child: rowCells[i]));
-    }
-
-    for (var i = rowCells.length; i < columns; i++) {
-      children.add(const Expanded(child: SizedBox()));
-    }
-
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: children,
-      ),
     );
   }
 }

@@ -286,6 +286,9 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
       child: ModelSelectorStrip(
         models: detail.models,
         selectedIndex: modelIndex,
+        // اسم العميل الأصلي بديلاً عن المستفيد الفارغ (الموديل للعميل نفسه)
+        // The original customer name replaces an empty beneficiary (the model is his own).
+        customerName: detail.header.custName,
         // تغيير الموديل يعيد اختيار القماش إلى أوله
         // Switching the model resets the fabric choice to its first fabric.
         onSelected: (i) => setState(() {

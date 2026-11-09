@@ -2,29 +2,47 @@ import 'package:flutter/material.dart';
 
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/cutting_model_item.dart';
+import 'tailoring_cells.dart';
 
 /// القسم 4: الموديلات والمستفيدون — جدول مصغّر: رأس واحد ثم صف لكل موديل
 /// Section 4: the models and beneficiaries — a mini table: one header, then a row per model.
 ///
-/// رأس الأعمدة (الموديل · المستفيد · القطع · الملاحظة) يظهر **مرة واحدة** أعلى القائمة، وكل
-/// موديل في سطر: اسم نوعه فقط (قطري/حجازي/عماني…) · المستفيد إن وُجد · عدد القطع · ملاحظته.
-/// حُذف رقم الموديل وكلمة «موديل» وحقل المرحلة بطلب المستخدم، والمستفيد الفارغ لا يُعرض له
-/// شيء أصلاً.
-/// The column header (model · beneficiary · pieces · note) appears **once** at the top, and each
-/// model occupies one row: its type name only (Qatari/Hejazi/Omani…), the beneficiary when it
-/// exists, the piece count and its note. The model number, the word "موديل" and the stage column
-/// were removed at the user's request, and an empty beneficiary shows nothing at all.
+/// رأس الأعمدة (الموديل · المستفيد · القطع · الملاحظة) يظهر **مرة واحدة**، وكل خلية داخل
+/// `FittedBox` في سطر واحد: لا نصّ مخفي ولا «الق...» في الرأس — الخط يصغر ليتّسع النص كاملاً
+/// مهما ضاقت المساحة أو كبر حجم الخط.
+/// The column header (model · beneficiary · pieces · note) appears **once**, and every cell sits
+/// in a one-line `FittedBox`: no hidden text and no "الق…" in the header — the font shrinks so
+/// the whole text fits however narrow the width or large the type scale.
+///
+/// المستفيد الفارغ يعني أن الموديل للعميل نفسه، ولا يعني «لا بيانات»: يُعرض اسم العميل الأصلي
+/// بدلاً من فراغ يوهم بفقدان المعلومة.
+/// An empty beneficiary means the model belongs to the customer himself, not "no data": the
+/// customer's own name is shown instead of a blank that looks like missing information.
 class ModelSelectorStrip extends StatelessWidget {
   final List<CuttingModelItem> models;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
+
+  /// اسم العميل الأصلي — بديل المستفيد حين يكون الموديل للعميل نفسه
+  /// The original customer name — the beneficiary fallback when the model is the customer's own.
+  final String? customerName;
 
   const ModelSelectorStrip({
     super.key,
     required this.models,
     required this.selectedIndex,
     required this.onSelected,
+    this.customerName,
   });
+
+  /// أوزان الأعمدة: علامة الاختيار 22px · الموديل 2.4 · المستفيد 4 · القطع 1.4 · الملاحظة 4.2
+  /// Column weights: a 22px selection mark · model 2.4 · beneficiary 4 · pieces 1.4 · note 4.2
+  static const List<double> _weights = [2.4, 4.0, 1.4, 4.2];
+  static const List<String> _headings = ['الموديل', 'المستفيد', 'القطع', 'الملاحظة'];
+
+  /// عرض عمود علامة الصح في بداية السطر
+  /// The width of the leading check-mark column.
+  static const double _checkWidth = 24;
 
   @override
   Widget build(BuildContext context) {
@@ -39,77 +57,141 @@ class ModelSelectorStrip extends StatelessWidget {
       );
     }
 
-    // هل يحمل أي موديل مستفيداً؟ العمود يظهر فقط إن كان له وجود
-    // Does any model carry a beneficiary? The column only exists when it is populated.
-    final hasBeneficiary = models.any((m) => _clean(m.beneficiary) != null);
+    // هل يحمل أي موديل مستفيداً خاصاً؟ العمود يظهر دائماً لكن قيمه تعود لاسم العميل عند الغياب
+    // Does any model carry its own beneficiary? The column always shows; empty values fall back
+    // to the customer's name.
+    final fallback = _clean(customerName);
 
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.border),
-        borderRadius: BorderRadius.circular(7),
+    return Table(
+      defaultVerticalAlignment: TableCellVerticalAlignment.middle,
+      columnWidths: {
+        0: const FixedColumnWidth(_checkWidth),
+        for (var i = 0; i < _weights.length; i++)
+          i + 1: FlexColumnWidth(_weights[i]),
+      },
+      border: TableBorder(
+        horizontalInside: BorderSide(color: tailoringGridRule, width: 1),
+        verticalInside: BorderSide(color: tailoringGridRule, width: 1),
       ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _headerRow(hasBeneficiary),
-          for (var i = 0; i < models.length; i++) ...[
-            Container(height: 0.7, color: AppColors.border),
-            _ModelRow(
-              model: models[i],
-              selected: i == selectedIndex,
-              showBeneficiary: hasBeneficiary,
-              onTap: () => onSelected(i),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  /// رأس الأعمدة: يظهر مرة واحدة فقط أعلى القائمة
-  /// The column header: rendered once above the list.
-  Widget _headerRow(bool hasBeneficiary) {
-    return Container(
-      color: AppColors.surfaceSubtle,
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // رأس الأعمدة — مرة واحدة فقط (العمود الأول لعلامة الاختيار بلا عنوان)
+        // The column header — once only (the first column carries the mark, with no title).
+        TableRow(
+          decoration: const BoxDecoration(color: AppColors.surfaceSubtle),
           children: [
-            Expanded(flex: 3, child: _head('الموديل')),
-            _divider(),
-            if (hasBeneficiary) ...[
-              Expanded(flex: 5, child: _head('المستفيد')),
-              _divider(),
-            ],
-            Expanded(flex: 2, child: _head('القطع')),
-            _divider(),
-            Expanded(flex: 6, child: _head('الملاحظة')),
-            const SizedBox(width: 18),
+            const SizedBox.shrink(),
+            for (final heading in _headings) _headerCell(heading),
           ],
         ),
-      ),
+        for (var i = 0; i < models.length; i++)
+          TableRow(
+            decoration: BoxDecoration(
+              color: i == selectedIndex
+                  ? AppColors.primary.withValues(alpha: 0.08)
+                  : (i.isEven ? AppColors.surface : const Color(0xFFF7F9FB)),
+            ),
+            children: [
+              // علامة صح في بداية سطر الموديل المحدد
+              // A check mark at the start of the selected model's row.
+              _checkCell(i == selectedIndex),
+              _valueCell(
+                i,
+                _clean(models[i].typeName) ?? '—',
+                color: AppColors.primary,
+                weight: FontWeight.w800,
+              ),
+              // المستفيد، وإن غاب فاسم العميل الأصلي
+              // The beneficiary, or the original customer's name when it is absent.
+              _valueCell(
+                i,
+                _clean(models[i].beneficiary) ?? fallback ?? '—',
+                color: _clean(models[i].beneficiary) == null
+                    ? AppColors.textSecondary
+                    : AppColors.textPrimary,
+              ),
+              _valueCell(i, '${models[i].piecesCount}', numeric: true),
+              // ملاحظة الموديل من `MODEL_NOTES` في العرض فقط، وإن غابت تبقى الخلية فارغة
+              // The model note comes from the view's `MODEL_NOTES` only; when absent the cell
+              // stays empty (no placeholder, no bill note).
+              _valueCell(i, _clean(models[i].specs.notes) ?? ''),
+            ],
+          ),
+      ],
     );
   }
 
-  Widget _head(String text) {
+  /// خلية علامة الاختيار: صح أخضر للمحدد، وفراغ لغيره
+  /// The selection cell: a green check for the chosen model, empty otherwise.
+  Widget _checkCell(bool selected) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.w800,
-          color: AppColors.textSecondary,
+      padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
+      child: selected
+          ? Icon(
+              Icons.check_circle_rounded,
+              size: 16,
+              color: AppColors.success,
+            )
+          : const SizedBox.shrink(),
+    );
+  }
+
+  /// خلية رأس: خط صغير عريض داخل تصغير تلقائي فلا يُقصّ العنوان
+  /// A header cell: a small bold label inside automatic scaling so the title is never cut.
+  Widget _headerCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            text,
+            maxLines: 1,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textSecondary,
+            ),
+          ),
         ),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
       ),
     );
   }
 
-  Widget _divider() =>
-      Container(width: 0.7, color: AppColors.border.withValues(alpha: 0.9));
+  /// خلية قيمة: سطر واحد يصغر خطّه ليتّسع النص كاملاً
+  /// A value cell: one line whose font shrinks so the whole text fits.
+  Widget _valueCell(
+    int rowIndex,
+    String text, {
+    Color? color,
+    FontWeight weight = FontWeight.w700,
+    bool numeric = false,
+  }) {
+    return InkWell(
+      onTap: () => onSelected(rowIndex),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 5),
+        child: Align(
+          heightFactor: 1,
+          alignment:
+              numeric ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment:
+                numeric ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
+            child: Text(
+              text,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: weight,
+                color: color ?? AppColors.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   /// النص الفارغ أو المزيّف بـ«لا يوجد» لا يُعدّ قيمة
   /// An empty text, or the legacy "لا يوجد", is not a value.
@@ -118,98 +200,4 @@ class ModelSelectorStrip extends StatelessWidget {
     if (value == null || value.isEmpty || value == 'لا يوجد') return null;
     return value;
   }
-}
-
-class _ModelRow extends StatelessWidget {
-  final CuttingModelItem model;
-  final bool selected;
-  final bool showBeneficiary;
-  final VoidCallback onTap;
-
-  const _ModelRow({
-    required this.model,
-    required this.selected,
-    required this.showBeneficiary,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final beneficiary = ModelSelectorStrip._clean(model.beneficiary);
-    final typeName = ModelSelectorStrip._clean(model.typeName) ?? '—';
-    final note = ModelSelectorStrip._clean(model.specs.notes) ?? '—';
-
-    return Material(
-      color: selected
-          ? AppColors.primary.withValues(alpha: 0.08)
-          : AppColors.surface,
-      child: InkWell(
-        onTap: onTap,
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                flex: 3,
-                child: _cell(
-                  typeName,
-                  color: AppColors.primary,
-                  weight: FontWeight.w800,
-                ),
-              ),
-              _divider(),
-              if (showBeneficiary) ...[
-                Expanded(
-                  flex: 5,
-                  child: _cell(beneficiary ?? '—'),
-                ),
-                _divider(),
-              ],
-              Expanded(flex: 2, child: _cell('${model.piecesCount}')),
-              _divider(),
-              Expanded(flex: 6, child: _cell(note)),
-              // علامة الاختيار: الأولوية للون والخط، والعلامة تأكيد بصري
-              // The selection mark: colour and weight lead, the check confirms.
-              SizedBox(
-                width: 18,
-                child: selected
-                    ? Icon(
-                        Icons.check_rounded,
-                        size: 13,
-                        color: AppColors.primary,
-                      )
-                    : null,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _cell(
-    String text, {
-    Color? color,
-    FontWeight weight = FontWeight.w700,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-      child: Align(
-        alignment: AlignmentDirectional.centerStart,
-        child: Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: weight,
-            color: color ?? AppColors.textPrimary,
-          ),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-    );
-  }
-
-  Widget _divider() =>
-      Container(width: 0.7, color: AppColors.border.withValues(alpha: 0.9));
 }

@@ -227,8 +227,12 @@ class ReportColumns {
         defaultOn: true,
         read: (row, index) => row.labelFor(level),
       ),
+      // ── معرّف الفرع `branch` لا `sub`: لكل عمود معرّف واحد لا يتكرّر، وإلا صار
+      //    اختيار المستخدم وترتيبه وقارئ الجدول يبحثون عن عمودين بالاسم نفسه فيجدون أولاً.
+      // ── The branch's id is `branch`, never `sub`: every column needs a unique id, or the
+      //    user's choice, its order and the table's reader all resolve the wrong column.
       ReportColumn(
-        id: 'sub',
+        id: 'branch',
         label: 'الصنف الفرعي',
         weight: 1.3,
         // عمود الفرع أساسي فقط حين يكون التجميع بالفرع نفسه
@@ -398,6 +402,34 @@ class ReportColumns {
     for (final column in columns)
       if (column.defaultOn) column,
   ];
+
+  /// الأعمدة بترتيب المستخدم حرفياً — ثم ما نسيه القالب ملحقٌ بالآخر
+  /// The columns in the user's own order, with anything they left out appended last.
+  ///
+  /// ── الترتيب حق المستخدم لا تفصيل في القالب: «التاريخ ثم الكمية ثم الرصيد» عادة مراجع،
+  ///    وقالب ثابت كان يفرض ترتيباً يقرأه المراجع بخطأ.
+  /// ── Order is the user's right, not a template detail: "date, quantity, balance" is how a
+  ///    reviewer reads, and a fixed template kept forcing a different one.
+  static List<ReportColumn<T>> ordered<T>(
+    List<ReportColumn<T>> columns,
+    List<String> ids,
+  ) {
+    final byId = {
+      for (final column in columns)
+        column.id: column,
+    };
+
+    final picked = <ReportColumn<T>>[
+      for (final id in ids)
+        if (byId.containsKey(id)) byId[id]!,
+    ];
+
+    // جدول بلا أعمدة مستحيل: إن أخفى المستخدم كل شيء تعود الأعمدة الافتراضية
+    // A column-less table is impossible: hide everything and the defaults come back.
+    if (picked.isEmpty) return defaultColumns(columns);
+
+    return picked;
+  }
 }
 
 // ─── قراءات الحركة / movement readers ───────────────────────────────────────

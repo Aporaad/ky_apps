@@ -38,6 +38,9 @@ Future<Uint8List> buildCuttingBillPdf({
 
   doc.addPage(
     pw.MultiPage(
+      // سقف الصفحات الصريح — فاتورة بموديلات وأقمشة كثيرة تتجاوز السقف الافتراضي
+      // Explicit page ceiling — a bill with many models/fabrics beats the default.
+      maxPages: kReportPdfMaxPages,
       pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(24),
       textDirection: pw.TextDirection.rtl,

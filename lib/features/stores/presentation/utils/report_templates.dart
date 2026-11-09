@@ -22,8 +22,13 @@ class ReportTemplate {
   final StoreReportScope scope;
   final StoreReportKind kind;
 
-  /// الأعمدة الأساسية — تظهر دائماً ولا تُخفى لأنها تعريف التقرير
-  /// The basic columns: always shown, because they define what the report is.
+  /// الأعمدة الأساسية — تظهر أول مرة، ويستطيع المستخدم إخفاءها أو إعادة ترتيبها بعد ذلك
+  /// The basic columns: shown on first run, and hideable/reorderable by the user afterwards.
+  ///
+  /// ── «أساسي» هنا يعني «ظاهر افتراضياً» لا «مقفل». القفل كان يمنع المحاسب من إخفاء عمود
+  ///    لا يخصّه في كشف معيّن، فيبقى الجدول عريضاً على حساب الوضوح.
+  /// ── "Basic" means "on by default", not "locked". Locking kept an accountant from hiding a
+  ///    column that had no business in a given statement, leaving the grid wide and unclear.
   final List<String> basic;
 
   /// الأعمدة القابلة للتخصيص — يضيفها المستخدم عند الحاجة فقط
@@ -42,7 +47,7 @@ class ReportTemplate {
 
   /// المعرّفات الظاهرة عند أول تشغيل: الأساسية وحدها — فلا أعمدة لم يطلبها أحد
   /// What is shown on first run: the basic columns only — nothing the user did not ask for.
-  Set<String> get defaultIds => basic.toSet();
+  List<String> get defaultIds => basic;
 }
 
 /// كتالوج تقارير المخازن — ثمانية قوالب: أربعة حركة وأربعة خلاصة
@@ -94,6 +99,7 @@ class ReportTemplates {
 
   static const List<String> _summaryOptional = <String>[
     'no',
+    'branch',
     'store',
     'opening',
     'inValue',
@@ -195,18 +201,5 @@ class ReportTemplates {
     }
 
     return all.first;
-  }
-
-  /// الأعمدة التي تُرسم: الأساسية دائماً + ما اختاره المستخدم من القائمة الاختيارية
-  /// The columns drawn: the basic ones always, plus whatever the user picked as optional.
-  static List<String> visibleIds(
-    ReportTemplate template, {
-    Set<String> chosen = const {},
-  }) {
-    return [
-      ...template.basic,
-      for (final id in template.optional)
-        if (chosen.contains(id) && !template.basic.contains(id)) id,
-    ];
   }
 }

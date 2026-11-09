@@ -43,6 +43,14 @@ class StoreReportResult<T> {
       if (entry is Map) (entry['label'] ?? entry['LABEL'] ?? '').toString(),
   ];
 
+  /// مفاتيح الأقسام بترتيبها — بها تقرن الشاشة إحصاء القسم بسطوره لا بموضعه
+  /// The section keys in order — the screen pairs a section's statistics with its rows by
+  /// key rather than by position, so a skipped section can never shift the figures.
+  List<String> get sectionKeys => [
+    for (final entry in meta['sections'] is List ? (meta['sections'] as List) : const [])
+      if (entry is Map) (entry['key'] ?? entry['KEY'] ?? '').toString(),
+  ];
+
   String get scope => (meta['scope'] ?? '').toString();
 
   double _double(String key) {

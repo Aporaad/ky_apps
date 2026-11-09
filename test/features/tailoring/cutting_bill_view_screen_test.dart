@@ -98,6 +98,7 @@ Future<void> _pumpScreen(
   _FakeRepo repo, {
   Size size = const Size(1200, 900),
   List<String>? grants,
+  double textScale = 1.0,
 }) async {
   // سطح العرض افتراضياً عريض كالحاسب، والشاشة الضيقة تُمرَّر صراحةً لاختبار التجاوب
   // The surface is desktop-wide by default; a narrow screen is passed in for the responsive check.
@@ -116,9 +117,16 @@ Future<void> _pumpScreen(
         ),
         tailoringRepositoryProvider.overrideWithValue(repo),
       ],
-      child: const MaterialApp(
-        locale: Locale('ar'),
-        home: CuttingBillViewScreen(billKey: _billKey),
+      child: MaterialApp(
+        locale: const Locale('ar'),
+        home: const CuttingBillViewScreen(billKey: _billKey),
+        // تكبير الخط يُمرَّر عبر MediaQuery كي يقيس الاختبار نفس ما يراه المستخدم
+        // The text scale goes through MediaQuery so the test measures what the user sees.
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(textScale)),
+          child: child!,
+        ),
       ),
     ),
   );
@@ -408,6 +416,80 @@ void main() {
       expect(find.textContaining('سجل الحركة — صوف'), findsNothing);
     });
 
+    testWidgets('a large text scale keeps customer and payment on one row',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        size: const Size(360, 780),
+        textScale: 1.6,
+      );
+      await tester.pumpAndSettle();
+
+      double topOf(String label) =>
+          tester.getTopLeft(find.textContaining(label).first).dy;
+
+      // بيانات العميل: ثلاثة حقول في سطر واحد حتى مع خط مكبَّر 1.6×
+      // Customer data: three fields on one row even at a 1.6× text scale.
+      expect(topOf('الهاتف'), closeTo(topOf('رقم الحساب'), 1.5));
+      expect(topOf('الهاتف'), closeTo(topOf('رقم العميل'), 1.5));
+
+      // تفاصيل الدفع: كل الأرقام في سطر واحد كذلك
+      // Payment details: every figure on one row as well.
+      expect(topOf('الإجمالي'), closeTo(topOf('رقم السند'), 1.5));
+
+      // ولا قصّ ولا تجاوز: النصوص تُصغَّر لتبقى كاملة
+      // No clipping and no overflow: texts shrink to stay complete.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('payment and fabric rows hug their content height',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail()),
+        size: const Size(1280, 900),
+      );
+      await tester.pumpAndSettle();
+
+      // صف الدفع: ارتفاعه بقدر تسمية + قيمة فقط (لا فراغ أسفل الخلايا)
+      // The payment row is as tall as a label plus a value (no empty band under the cells).
+      final paymentRow = tester.getSize(
+        find.ancestor(of: find.text('الإجمالي'), matching: find.byType(Table)).first,
+      );
+      expect(paymentRow.height, lessThan(64));
+
+      // صف بيانات القماش: نفس القاعدة بعد الوضع المدمج
+      // The fabric data row follows the same rule after the compact mode.
+      final fabricRow = tester.getSize(
+        find.ancestor(of: find.text('القماش'), matching: find.byType(Table)).first,
+      );
+      expect(fabricRow.height, lessThan(56));
+    });
+
+    testWidgets('a model with no beneficiary shows the customer name',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail(withBeneficiary: false)),
+        size: const Size(360, 780),
+      );
+      await tester.pumpAndSettle();
+
+      // الاسم في عنوان القسم + في صفّي الموديلين (بدل فراغ يوهم بفقدان المعلومة)
+      // The name appears in the section title and in both model rows (instead of a blank that
+      // looks like missing data).
+      expect(find.text('محمد الأهدل'), findsNWidgets(3));
+
+      // رؤوس الأعمدة كاملة بلا قصّ حتى على عرض 360 (القطع قد يتكرّر في ترويسة الفاتورة)
+      // The column headers are complete — not clipped — even at 360px ("القطع" may repeat in the
+      // bill header).
+      for (final heading in ['الموديل', 'المستفيد', 'القطع', 'الملاحظة']) {
+        expect(find.text(heading), findsWidgets);
+      }
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('a phone width stacks the sections without overflowing',
         (tester) async {
       await _pumpScreen(
@@ -432,7 +514,11 @@ void main() {
 
 /// فاتورة كاملة: موديلان (2 + 1 قطع) مع تسميات مقاسات حقيقية
 /// A whole bill: two models (2 + 1 pieces) with real measurement labels.
-CuttingBillDetail _detail({bool withPayment = true, bool models = true}) {
+CuttingBillDetail _detail({
+  bool withPayment = true,
+  bool models = true,
+  bool withBeneficiary = true,
+}) {
   return CuttingBillDetail.fromJson(<String, dynamic>{
     'header': {
       'bill_no': '12345',
@@ -465,7 +551,7 @@ CuttingBillDetail _detail({bool withPayment = true, bool models = true}) {
         : [
             {
               'seq_no': '1',
-              'beneficiary': 'محمد الأهدل',
+              'beneficiary': withBeneficiary ? 'محمد الأهدل' : null,
               'type_name': 'قميص',
               'shape_name': 'كلاسيكي',
               'qty': '2',
@@ -478,7 +564,7 @@ CuttingBillDetail _detail({bool withPayment = true, bool models = true}) {
             },
             {
               'seq_no': '2',
-              'beneficiary': 'سالم',
+              'beneficiary': withBeneficiary ? 'سالم' : null,
               'type_name': 'قميص',
               'shape_name': 'كلاسيكي',
               'measurements': {'L1': '61', 'L3': '60'},

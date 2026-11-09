@@ -17,10 +17,12 @@ import '../providers/stores_providers.dart';
 import '../utils/report_columns.dart';
 import '../utils/report_parameters.dart';
 import '../utils/report_templates.dart';
+import '../utils/report_totals.dart';
 import '../utils/store_export.dart';
 import '../widgets/report_columns_sheet.dart';
 import '../widgets/report_data_table.dart';
 import '../widgets/report_filter_sheet.dart';
+import '../widgets/report_stats_band.dart';
 import '../widgets/store_ui.dart';
 
 /// تقارير المخازن — عرض حركة أو خلاصة بمعطيات تُختار في نافذة منبثقة
@@ -46,10 +48,23 @@ class StoreReportsScreen extends ConsumerStatefulWidget {
 class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
   bool _busy = false;
 
-  /// الأعمدة الظاهرة — `null` حتى يلمس المستخدم نافذة الأعمدة فتسري الافتراضيات
-  /// Visible columns: null until the user touches the columns sheet, then defaults apply.
-  Set<String>? _movementColumns;
-  Set<String>? _summaryColumns;
+  /// ترتيب الأعمدة الظاهرة لكل نوع — `null` حتى يغيّره المستخدم فتُطبَّق أساسيات القالب
+  /// The visible order per kind — null until the user changes it, then the template's basics.
+  List<String>? _movementOrder;
+  List<String>? _summaryOrder;
+
+  /// حقول الإحصاءات الظاهرة — تبدأ بالخمسة الافتراضية (السابق · وارد · منصرف · الصافي ·
+  /// الرصيد الحالي)، وما عداها يبقى متاحاً في «تخصيص» حتى يُظهره المستخدم.
+  /// The visible statistic fields — they start on the five defaults (opening · in · out ·
+  /// net · closing), and everything else stays available under "customise" until enabled.
+  ///
+  /// ── لماذا ليست `null` كما كانت؟ لأن `null` كانت تعني «كل الحقول»، فكان شريط التقرير
+  ///    يُفتح على تسعة أرقام لا تُقرأ في نظرة. القائمة الافتراضية تُبقي القرار للمستخدم
+  ///    لكنها لا تُغرق الشاشة قبل أن يقرّر.
+  /// ── Why not `null` as before? `null` meant "every field", so the strip opened on nine
+  ///    figures that cannot be read at a glance. The default list leaves the decision to the
+  ///    user without flooding the screen before they make it.
+  List<String>? _statIds = ReportStatFields.defaultIds;
 
   @override
   void initState() {
@@ -177,9 +192,14 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     // بـ`Object` يرمي `is not a subtype` عند أول خلية تُرسم
     // Two real types, never one erased type: a column's reader takes its own row, and erasing
     // it to Object throws "is not a subtype" on the first cell drawn.
-    final movementColumns = ReportColumns.visible(
+    final movementColumns = ReportColumns.ordered(
       ReportColumns.movement(),
-      _chosenFor(template, _movementColumns),
+      _orderFor(template, isMovement: true),
+    );
+
+    final summaryColumns = ReportColumns.ordered(
+      ReportColumns.summary(filter.groupBy),
+      _orderFor(template, isMovement: false),
     );
 
     final body = <Widget>[];
@@ -188,7 +208,15 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     //    الذي يرى كل الفروع في جدول واحد لا يرى رصيد أي فرع منها على حدة.
     // ── Scoped reports render as successive sections, branch after branch and item after
     //    item: a reviewer looking at every branch in one table sees no branch's balance.
-    if (isMovement && template.sectioned && state.sections.length > 1) {
+    //
+    // ── الشرط هو `sectioned` وحده: انتظار أكثر من قسم كان يُسقط التقرير إلى جدول واحد مسطّح
+    //    في أي نطاق أعطى قسماً واحداً، فيبدو «حركة صنف رئيسي» مطابقاً لـ«حركة صنف فرعي» —
+    //    وهو الخلط الذي تُبنى هذه التقارير الأربعة لتمييزه.
+    // ── The condition is `sectioned` alone: waiting for more than one section dropped the
+    //    report back to a single flat table whenever a scope yielded one section, making an
+    //    item statement look exactly like a branch statement — the very confusion these four
+    //    reports exist to remove.
+    if (isMovement && template.sectioned) {
       for (final block in _movementBlocks(template, state, movementColumns)) {
         body.add(block);
       }
@@ -197,23 +225,44 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         ReportDataTable<StockMovementRow>(
           columns: movementColumns,
           rows: state.movementRows,
+          // رصيد الفترة السابقة أول الجدول ثم تتراكم الحركات عليه
+          // The pre-period balance opens the table, and the movements accumulate on it.
+          opening: _statIds == null || _statIds!.contains('opening')
+              ? ReportTotals.opening(state.stats)
+              : null,
+          // سطر التجميع في نهاية الجدول للكميات والقيم، وما لا مجموع له يبقى فارغاً
+          // The totals row at the table's end for quantities and values; the rest stays blank.
+          totals: ReportTotals.movement(state.movementRows),
         ),
       );
     } else {
       body.add(
         ReportDataTable<StockSummaryRow>(
-          columns: ReportColumns.visible(
-            ReportColumns.summary(filter.groupBy),
-            _chosenFor(template, _summaryColumns),
-          ),
+          columns: summaryColumns,
           rows: state.summaryRows,
+          totals: ReportTotals.summary(state.summaryRows),
         ),
       );
     }
 
-    // إحصاءات نهاية التقرير — totals الخادم لا مجموع ما على الشاشة
-    // The closing statistics are the server's totals, never a sum of what is on screen.
-    body.add(_statsBand(state.stats, title: 'إحصاءات التقرير'));
+    // إحصاءات نهاية التقرير — totals الخادم لا مجموع ما على الشاشة، والحقول كما اختارها المستخدم
+    // The closing statistics are the server's totals, never a sum of what is on screen, and
+    // only the fields the user kept.
+    body.add(
+      ReportStatsBand(
+        // في التقرير الموسّع هذا الإحصاء مجموع **كل** الأقسام لا آخرها: «إجمالي كل الأصناف
+        // الفرعية» في حركة الصنف الرئيسي، وهكذا لكل نطاق بعنوانه
+        // In a sectioned report this band sums EVERY section, not the last one — "the total of
+        // all sub items" in an item statement, and so on, each scope under its own caption.
+        title: isMovement && template.sectioned
+            ? 'إحصاءات التقرير — إجمالي كل ${filter.scope.sectionPlural}'
+            : 'إحصاءات التقرير',
+        fields: ReportStatFields.visible(
+          ReportStatFields.of(state.stats),
+          _statIds,
+        ),
+      ),
+    );
 
     return ReportZoomView(
       child: SingleChildScrollView(
@@ -245,25 +294,75 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
               ],
             ],
           ),
-          // 5) التذييل الرسمي
-          footer: const ReportSignatureFooter(),
+          // 5) التذييل الرسمي — مخازن: أمين المخزن لا أمين الصندوق
+          // 5) the official footer — stores: the storekeeper's slot, not the cashier's.
+          footer: const ReportSignatureFooter(
+            keeper: ReportSignatureFooter.storekeeper,
+          ),
         ),
       ),
     );
   }
 
-  /// أقسام حركة صنف: عنوان القسم ثم جدول ثم إحصاء ذلك القسم
+  /// أقسام الحركة: عنوان القسم ثم جدوله ثم إحصاء ذلك القسم وحده
   /// A movement section: its heading, its table, and that section's own statistics.
+  ///
+  /// ── الإحصاء يُقرن بالقسم بمفتاحه لا بموضعه: قسم بلا حركة في المدى لا يصل أصلاً، ومقارنته
+  ///    بالموضع تُزيح إحصاء كل قسم يليه فيُقرأ رصيد فرع تحت اسم فرع آخر.
+  /// ── Statistics are joined to their section by key, never by position: a section with no
+  ///    movement arrives nowhere at all, and positional matching shifts every later section's
+  ///    figures — one branch's balance printed under another branch's name.
   List<Widget> _movementBlocks(
     ReportTemplate template,
     StoreReportState state,
     List<ReportColumn<StockMovementRow>> columns,
   ) {
+    final openingOn = _statIds == null || _statIds!.contains('opening');
+
+    return [
+      for (final section in _sectionsOf(state)) ...[
+        _sectionHeading(section, state),
+        ReportDataTable<StockMovementRow>(
+          columns: columns,
+          rows: section.rows,
+          // افتتاح القسم قبل أول حركة فيه: به يبدأ عمود الرصيد داخل هذا القسم
+          // The section's opening before its first movement: the balance column of this
+          // section starts here.
+          opening: openingOn ? ReportTotals.opening(section.stats) : null,
+          // تجميع القسم من سطوره هو: مجموع فرع لا يخبر عن فرع آخر
+          // A section's totals come from its own rows: one branch's sum says nothing of another.
+          totals: ReportTotals.movement(section.rows),
+        ),
+        const SizedBox(height: 4),
+        ReportStatsBand.compact(
+          // العنوان باسم وحدة القسم في هذا النطاق: «إحصاءات الصنف الفرعي» داخل حركة صنف
+          // رئيسي، و«إحصاءات المجموعة الفرعية» داخل حركة مجموعة رئيسية
+          // The caption names this scope's section unit: "sub-item statistics" inside an item
+          // statement, "sub-group statistics" inside a main-group one.
+          title:'',// 'إحصاءات ${state.filter!.scope.sectionLabel}',
+          // أربعة أرقام فقط في سطر واحد: السابق · وارد · منصرف · الرصيد الحالي. إحصاء القسم
+          // لا يُعاد فيه كل ما في إحصاء التقرير، وإلا صار لكل فرع تقريراً كاملاً في سطرين.
+          // Four figures on one line only: opening · in · out · closing. A section does not
+          // repeat the whole report summary, or every branch becomes a report of its own.
+          fields: ReportStatFields.visible(
+            ReportStatFields.section(section.stats),
+            _statIds,
+          ),
+        ),
+        const SizedBox(height: 14),
+      ],
+    ];
+  }
+
+  /// تقسيم سطور التقرير إلى أقسامه — الشاشة والـ PDF والـ Excel تقرأ التقسيم نفسه
+  /// Split the report's rows into its sections — screen, PDF and Excel read one split.
+  ///
+  /// ── الترتيب من الخادم لا من الشاشة: السطور مرتّبة بقسمها ثم بتاريخها أصلاً
+  /// ── The order comes from the server: rows already arrive section-major, then by date.
+  List<ReportSection<StockMovementRow>> _sectionsOf(StoreReportState state) {
     final order = <String>[];
     final buckets = <String, List<StockMovementRow>>{};
 
-    // الترتيب من الخادم لا من الشاشة: السطور مرتّبة بقسمها ثم بتاريخها أصلاً
-    // The order comes from the server: rows already arrive section-major, then by date.
     for (final row in state.movementRows) {
       final key = row.sectionKey.isEmpty ? '__all__' : row.sectionKey;
 
@@ -276,37 +375,33 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     }
 
     return [
-      for (int i = 0; i < order.length; i++) ...[
-        _sectionHeading(order[i], buckets[order[i]]!, state, i),
-        ReportDataTable<StockMovementRow>(
-          columns: columns,
-          rows: buckets[order[i]]!,
+      for (final key in order)
+        ReportSection<StockMovementRow>(
+          key: key,
+          label: _labelOf(key, state, buckets[key]!),
+          rows: buckets[key]!,
+          stats: _statsOf(key, state) ?? const ReportStats(),
         ),
-        const SizedBox(height: 8),
-        _statsBand(
-          i < state.sections.length ? state.sections[i].stats : const ReportStats(),
-          title: 'إحصاءات القسم',
-        ),
-        const SizedBox(height: 16),
-      ],
     ];
   }
 
+  /// إحصاء قسم بمفتاحه من بيانات الخادم
+  /// A section's statistics by its key, straight from the server's meta.
+  ReportStats? _statsOf(String key, StoreReportState state) {
+    for (final section in state.sections) {
+      if (section.key == key) return section.stats;
+    }
+
+    // قسم بلا إحصاء في الرد (مفتاح غائب) لا يورث إحصاء جاره
+    // A section with no statistics in the reply inherits nothing from its neighbour.
+    return null;
+  }
+
   Widget _sectionHeading(
-    String key,
-    List<StockMovementRow> rows,
+    ReportSection<StockMovementRow> section,
     StoreReportState state,
-    int index,
   ) {
-    final fromRow = rows.first.sectionLabel.trim();
-    final fromMeta = index < state.sections.length
-        ? state.sections[index].label.trim()
-        : '';
-    final label = fromRow.isNotEmpty
-        ? fromRow
-        : fromMeta.isNotEmpty
-        ? fromMeta
-        : state.filter!.scope.label;
+    final scope = state.filter!.scope;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 4),
@@ -319,7 +414,9 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         children: [
           Expanded(
             child: Text(
-              '${state.filter!.scope == StoreReportScope.item ? 'الفرع' : 'القسم'}: $label',
+              // العنوان يُسمّى بما هو: «الصنف الفرعي: قماش شاهر» أو «المجموعة الفرعية: الأقمشة»
+              // The heading names what it is: "sub item: Shaher cloth" or "sub group: fabrics".
+              '${scope.sectionLabel}: ${section.label}',
               style: TextStyle(
                 fontSize: 11.5,
                 fontWeight: FontWeight.w800,
@@ -328,7 +425,7 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
             ),
           ),
           Text(
-            '${rows.length} حركة',
+            '${section.rows.length} حركة',
             style: const TextStyle(
               fontSize: 10,
               color: AppColors.textMuted,
@@ -338,6 +435,26 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         ],
       ),
     );
+  }
+
+  /// عنوان قسم: من السطور أولاً، ومن بيانات الخادم احتياطاً، ثم مفتاحه
+  /// A section's label: from its rows first, from the server's meta as a fallback, then its key.
+  String _labelOf(
+    String key,
+    StoreReportState state,
+    List<StockMovementRow> rows,
+  ) {
+    final fromRow = rows.isEmpty ? '' : rows.first.sectionLabel.trim();
+
+    if (fromRow.isNotEmpty) return fromRow;
+
+    for (final section in state.sections) {
+      if (section.key == key && section.label.trim().isNotEmpty) {
+        return section.label.trim();
+      }
+    }
+
+    return key;
   }
 
   Widget _title(
@@ -388,108 +505,34 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     );
   }
 
-  /// شريط الإحصاءات — السابق والوارد والمنصرف والصافي والحالي، كمية وقيمة
-  /// The statistics band: opening, inbound, outbound, net and closing, quantity and value.
+  /// ترتيب الأعمدة الظاهرة: اختيار المستخدم إن وُجد، وإلا أساسيات القالب
+  /// The visible column order: the user's own if set, otherwise the template's basics.
   ///
-  /// ── الأرقام من الخادم وحده: الرصيد السابق لا يُعرف من السطور المعروضة، ولو حُسب هنا
-  ///    لكان رقمًا من تأليف الواجهة.
-  /// ── Every figure comes from the server: the opening balance cannot be known from the
-  ///    visible rows, so computing it here would be the screen inventing a number.
-  Widget _statsBand(ReportStats stats, {required String title}) {
-    final cells = <(String, String, Color)>[      
-      ('الرصيد السابق', StoreFormat.qty(stats.openingQty), AppColors.textPrimary),
-      ('إجمالي الوارد', StoreFormat.qty(stats.qtyIn), AppColors.success),
-      (
-        'قيمة الوارد',
-        stats.qtyInValue == 0 ? '—' : StoreFormat.money(stats.qtyInValue),
-        AppColors.success,
-      ),
-      ('إجمالي المنصرف', StoreFormat.qty(stats.qtyOut), AppColors.error),
-      (
-        'قيمة المنصرف',
-        stats.qtyOutValue == 0 ? '—' : StoreFormat.money(stats.qtyOutValue),
-        AppColors.error,
-      ),
-      ('صافي الفترة', StoreFormat.qty(stats.netQty), AppColors.textPrimary),
-      ('الرصيد الحالي', StoreFormat.qty(stats.closingQty), AppColors.primary),
-      if (stats.closingValue != 0)
-        ('قيمة الرصيد', StoreFormat.money(stats.closingValue), AppColors.primary),
-    ];
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            // لا const: `primary` قيمة مشتقة من لوحة الألوان لا ثابت
-            // No const: primary is a derived palette value, not a literal.
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 16,
-            runSpacing: 4,
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              for (final cell in cells)
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  textDirection: TextDirection.rtl,
-                  children: [
-                    Text(
-                      '${cell.$1}: ',
-                      style: const TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                    Text(
-                      cell.$2,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: cell.$3,
-                      ),
-                    ),
-                  ],
-                ),
-            ],
-          ),
-        ],
-      ),
-    );
+  /// ── «الأساسي» نقطة بداية لا قفل: التقرير يفتح على الأعمدة السبعة التي يقرأها الميدان،
+  ///    ثم يبقى للمستخدم أن يخفي منها ما لا يخصّه ويقدّم ما يهمّه.
+  /// ── "Basic" is a starting point, not a lock: the report opens on the seven columns the
+  ///    floor reads, and the user may hide what does not apply and bring forward what does.
+  List<String> _orderFor(ReportTemplate template, {required bool isMovement}) {
+    return (isMovement ? _movementOrder : _summaryOrder) ?? template.defaultIds;
   }
 
-  /// الأعمدة الظاهرة لقالب: الأساسية دائماً + ما اختاره المستخدم من الاختيارية
-  /// The columns a template shows: the basics always, plus whatever the user picked.
+  /// الأقسام التي يراها المُصدِّر — فارغة في التقرير المسطّح أو الخلاصة
+  /// The sections an exporter sees — empty for a flat statement or a summary.
   ///
-  /// ── الأساسية لا تُخفى: إخفاء «الرصيد» من تقرير حركة يترك مستنداً لا يقول أين انتهى
-  ///    الأمر، والقالب هو من يحدّد ماذا يبقى لا المستخدم.
-  /// ── The basics cannot be hidden: hiding "balance" from a movement report leaves a document
-  ///    that never says where things ended up. The template decides what stays, not the user.
-  Set<String> _chosenFor(ReportTemplate template, Set<String>? chosen) {
-    return {
-      ...template.basic,
-      if (chosen != null)
-        for (final id in chosen)
-          if (template.optional.contains(id)) id,
-    };
+  /// ── `sectioned` وحده يحكم: التقرير المسطّح يُصدَّر جدولاً واحداً بسطر افتتاحه، والموسّع
+  ///    يُصدَّر أقساماً — وهو الفرق بعينه بين «حركة صنف فرعي» و«حركة صنف رئيسي».
+  /// ── `sectioned` alone decides: a flat statement exports as one table with its opening line,
+  ///    a scoped one as sections — exactly the difference between the two movement reports.
+  List<ReportSection<StockMovementRow>> _sectionsFor(StoreReportState state) {
+    final filter = state.filter;
+
+    if (filter == null ||
+        filter.kind != StoreReportKind.movement ||
+        !filter.scope.sectioned) {
+      return const [];
+    }
+
+    return _sectionsOf(state);
   }
 
   /// معرّفات الأعمدة الظاهرة — تُمرَّرة للتصدير فيطابق المطبوع ما على الشاشة
@@ -498,13 +541,13 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     final template = ReportTemplates.of(filter);
 
     final columns = filter.kind == StoreReportKind.movement
-        ? ReportColumns.visible(
+        ? ReportColumns.ordered(
             ReportColumns.movement(),
-            _chosenFor(template, _movementColumns),
+            _orderFor(template, isMovement: true),
           )
-        : ReportColumns.visible(
+        : ReportColumns.ordered(
             ReportColumns.summary(filter.groupBy),
-            _chosenFor(template, _summaryColumns),
+            _orderFor(template, isMovement: false),
           );
 
     return [
@@ -525,33 +568,31 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         ? ReportColumns.movement()
         : ReportColumns.summary(filter.groupBy);
 
-    // الأساسية تُعرض موصولة دائماً: القالب هو من يحدّدها لا القائمة المنسدلة
-    // The basics are always shown and always on: the template defines them, not the sheet.
     // لا `cast<Object>` هنا: الأعمدة أنواعها الحقيقية، ولو مُحيَت لانفجر القارئ وقت الرسم.
     // No `cast<Object>` here: columns keep their real types — erasing them explodes at paint.
     final labels = <(String, String)>[
-      for (final column in all)
-        if (report.basic.contains(column.id) ||
-            report.optional.contains(column.id))
-          (column.id, column.label),
+      for (final column in all) (column.id, column.label),
     ];
 
-    final next = await ReportColumnsSheet.show(
+    final choice = await ReportColumnsSheet.show(
       context,
       labels: labels,
-      locked: report.basic,
-      defaults: report.basic,
-      initial: _chosenFor(report, isMovement ? _movementColumns : _summaryColumns),
+      visible: _orderFor(report, isMovement: isMovement),
+      statLabels: ReportStatFields.labels,
+      visibleStats: _statIds,
+      title: isMovement ? 'أعمدة تقرير الحركة' : 'أعمدة تقرير الخلاصة',
     );
 
-    if (next == null) return;
+    if (choice == null) return;
 
     setState(() {
       if (isMovement) {
-        _movementColumns = next;
+        _movementOrder = choice.columnIds;
       } else {
-        _summaryColumns = next;
+        _summaryOrder = choice.columnIds;
       }
+
+      _statIds = choice.statIds;
     });
   }
 
@@ -613,6 +654,14 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         totalOut: state.totalOut,
         totalValue: state.totalValue,
         columnIds: _columnIds(state.filter!),
+        // حقول الإحصاءات التي يهتم بها المستخدم — يخفيها في المطبوع كما أخفاها في الشاشة
+        // The statistic fields the user cares about — hidden in print as they are on screen.
+        statIds: _statIds,
+        // التقسيم نفسه الذي على الشاشة: المطبوع نسخة منها لا جدول واحد يمحو الأقسام
+        // The very split shown on screen: the printout is a copy, never one table that
+        // erases the sections.
+        sections: _sectionsFor(state),
+        opening: ReportTotals.opening(state.stats),
       );
 
       final fileName =
@@ -656,6 +705,8 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         totalOut: state.totalOut,
         totalValue: state.totalValue,
         columnIds: _columnIds(state.filter!),
+        sections: _sectionsFor(state),
+        opening: ReportTotals.opening(state.stats),
       );
 
       await StoreExporter.shareXlsx(
