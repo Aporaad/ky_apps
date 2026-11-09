@@ -2483,3 +2483,17 @@ SELECT * FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE I_DATE >= TO_DATE(:from,'YYYY-MM-DD
   والقراءة بحروف كبيرة تُنتج `Undefined array key` في لارافيل — تُقرأ المفاتيح بحالتين دائماً.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-09 08:08 · **DDL:** لا · **DML:** لا.
+
+
+---
+
+## 2026-11-09 10:06 — دلالة أعمدة المال في `SALES_BILL` (ملاحظة تحليلية، لا تغيير بنيوي)
+
+- `TOTAL`, `DISCOUNT`, `NET`, `AMOUNT_PAID`, `OTHERS_PAYMENTS` كلها NUMBER.
+- قياس على 1,200 فاتورة تفصيل: `NET == TOTAL` في 1192، `NET < TOTAL` في 4، `NET > TOTAL` في 4.
+  ⇒ عمود `NET` خام (يطابق الإجمالي) ولا يعكس الخصم ولا الدفع، فلا يصح اعتماده صافياً أو متبقياً.
+- المتبقي الحقيقي = TOTAL − DISCOUNT − AMOUNT_PAID − OTHERS_PAYMENTS (يُصفّر عند السداد).
+- `CUTTING_OR_SLAES` عدد وليس نصاً (قيم 1 و2)، فلا يُفلتَر بـ 'cutting'؛ المصدر الموثوق هو
+  مفاتيح `CUTTING_SALES_BILL_VIEW`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 10:06 · **DDL:** لا · **DML:** لا.

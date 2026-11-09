@@ -139,8 +139,8 @@ class CuttingBillProgressScreen extends ConsumerWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _buildPrototypeBanner(),
-          const SizedBox(height: 12),
+          // _buildPrototypeBanner(),
+          // const SizedBox(height: 12),
           TailoringSectionCard(
             title: 'خط سير الحالات',
             icon: Icons.route_rounded,
@@ -185,33 +185,33 @@ class CuttingBillProgressScreen extends ConsumerWidget {
 
   /// إفصاح صريح أن نقل المراحل لم يُنفَّذ بعد
   /// A plain disclosure that the stage transition is not implemented yet.
-  Widget _buildPrototypeBanner() {
-    return Container(
-      padding: const EdgeInsets.all(11),
-      decoration: BoxDecoration(
-        color: AppColors.warning.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(11),
-        border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.construction_rounded, size: 18, color: AppColors.warning),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'قيد التطوير — المراحل والحركات المعروضة حقيقية، أما أزرار نقل الحالة فغير مفعّلة '
-              'ولا تُكتب أي بيانات في النظام',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.bold,
-                color: AppColors.warning,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+  // Widget _buildPrototypeBanner() {
+  //   return Container(
+  //     padding: const EdgeInsets.all(11),
+  //     decoration: BoxDecoration(
+  //       color: AppColors.warning.withValues(alpha: 0.1),
+  //       borderRadius: BorderRadius.circular(11),
+  //       border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
+  //     ),
+  //     child: Row(
+  //       children: [
+  //         const Icon(Icons.construction_rounded, size: 18, color: AppColors.warning),
+  //         const SizedBox(width: 8),
+  //         // const Expanded(
+  //         //   child: Text(
+  //         //     'قيد التطوير — المراحل والحركات المعروضة حقيقية، أما أزرار نقل الحالة فغير مفعّلة '
+  //         //     'ولا تُكتب أي بيانات في النظام',
+  //         //     style: TextStyle(
+  //         //       fontSize: 11.5,
+  //         //       fontWeight: FontWeight.bold,
+  //         //       color: AppColors.warning,
+  //         //     ),
+  //         //   ),
+  //         // ),
+  //       ],
+  //     ),
+  //   );
+  // }
 
   /// أزرار الإجراء — معطّلة بشرح بدل تعطيل صامت
   /// The action buttons — disabled with an explanation rather than a silent dead state.

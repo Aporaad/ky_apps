@@ -3523,3 +3523,27 @@ SELECT COUNT(*) FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW;  -- 45490
 ```
 
 **النموذج:** Qoder · **الوقت:** 2026-11-09 06:54 · **DDL:** نعم · **DML:** لا.
+
+
+---
+
+## 2026-11-09 10:06 — استعلامات تحليل أعمدة الدفع (قراءة فقط)
+
+```sql
+-- علاقة NET بالإجمالي والدفع على فواتير التفصيل الفعلية
+SELECT s.BILL_NO, s.YEAR, s.TOTAL, s.DISCOUNT, s.NET, s.AMOUNT_PAID, s.OTHERS_PAYMENTS
+  FROM ACCOUNTS.SALES_BILL s
+ WHERE (s.BILL_NO, s.YEAR) IN (
+         SELECT DISTINCT v.BILL_NO, v.YEAR FROM ACCOUNTS.CUTTING_SALES_BILL_VIEW v
+       )
+   AND ROWNUM <= 1200;
+-- النتيجة: NET==TOTAL في 1192/1200، NET<TOTAL في 4، NET>TOTAL في 4.
+
+-- أنواع الأعمدة
+SELECT COLUMN_NAME, DATA_TYPE FROM ALL_TAB_COLUMNS
+ WHERE OWNER='ACCOUNTS' AND TABLE_NAME='SALES_BILL'
+   AND COLUMN_NAME IN ('TOTAL','DISCOUNT','NET','AMOUNT_PAID','OTHERS_PAYMENTS','CUTTING_OR_SLAES');
+-- الكل NUMBER عدا CUTTING_OR_SLAES (قيم 1/2).
+```
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 10:06 · **قراءة فقط** · **لا DDL/DML**.

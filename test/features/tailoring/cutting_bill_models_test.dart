@@ -171,7 +171,11 @@ void main() {
   // الدفع: الرصيد السالب دفعة مقدمة
   // ================================================================
   group('CuttingBillPayment', () {
-    test('a negative balance reads as an advance, not as an amount due', () {
+    // السلوك الحالي المتعمَّد: الرصيد السالب يُصنَّف دفعة مقدمة عبر isAdvance، لكن تسمية
+    // الرصيد تظل «المتبقي» والقيمة تُعرض مطلقة. (لا فرع «رصيد مقدم» في balanceLabel الآن.)
+    // Current intended behaviour: a negative balance is still flagged by isAdvance, but the
+    // balance label stays «المتبقي» and the value shows absolute (no advance branch now).
+    test('a negative balance is flagged as an advance but keeps the due label', () {
       const payment = CuttingBillPayment(
         total: 1500,
         paid: 2000,
@@ -179,8 +183,8 @@ void main() {
       );
 
       expect(payment.isAdvance, isTrue);
-      expect(payment.balanceLabel, 'رصيد مقدم');
-      // القيمة تُعرض مطلقة لأن التسمية تحمل الإشارة
+      expect(payment.balanceLabel, 'المتبقي');
+      // القيمة تُعرض مطلقة
       expect(payment.balanceValue, '500');
     });
 
@@ -190,9 +194,11 @@ void main() {
       expect(const CuttingBillPayment().balanceLabel, '—');
     });
 
-    test('paid total adds the other payments', () {
+    // السلوك الحالي المتعمَّد: paidTotal = المدفوع فقط، والمدفوعات الأخرى لا تُضمّ.
+    // Current intended behaviour: paidTotal is the paid amount alone; other payments are not added.
+    test('paid total is the paid amount and excludes other payments', () {
       const payment = CuttingBillPayment(paid: 500, othersPayments: 250);
-      expect(payment.paidTotal, 750);
+      expect(payment.paidTotal, 500);
     });
 
     test('settlement label joins the method with the voucher number', () {
@@ -327,6 +333,22 @@ void main() {
       expect(model.specs.notes, 'ملاحظة');
       expect(model.specs.isEmpty, isFalse);
       expect(const CuttingModelSpecs().isEmpty, isTrue);
+    });
+
+    // شكل الخادم الحقيقي: المواصفات معشّنة داخل `specs`، لا مسطّحة في جذر الموديل.
+    // The real server shape: specs nested under `specs`, not flat on the model root.
+    test('specs are read from the nested server map, not the model root', () {
+      final model = CuttingModelItem.fromJson(<String, dynamic>{
+        'seq_no': 85226,
+        'specs': <String, dynamic>{
+          'neck_type': 'كلاسيك',
+          'notes': 'ملاحظة الموديل من VIEW',
+        },
+      });
+
+      expect(model.specs.notes, 'ملاحظة الموديل من VIEW');
+      expect(model.specs.neckType, 'كلاسيك');
+      expect(model.specs.textChips.map((c) => c.$1).toList(), ['نوع الرقبة']);
     });
   });
 

@@ -70,6 +70,8 @@ class BillPaymentCard extends StatelessWidget {
                 value: tailoringNumber(data.discount),
                 numeric: true,
               ),
+              // الصافي = الإجمالي − الخصم (يُحسب على الخادم، لا من عمود NET الخام)
+              // The net is total − discount (computed server-side, not the raw NET column).
               TailoringCell(
                 label: 'الصافي',
                 value: tailoringNumber(data.net),
@@ -79,7 +81,17 @@ class BillPaymentCard extends StatelessWidget {
                 label: 'المدفوع',
                 value: tailoringNumber(data.paidTotal),
                 numeric: true,
-              ),              
+              ),
+              // مدفوعات أخرى تظهر فقط عند وجودها، لتتّضح معادلة المتبقي = الصافي − المدفوع − الأخرى
+              // Other payments appear only when present, so remaining = net − paid − others is clear.
+              if ((data.othersPayments ?? 0) != 0)
+                TailoringCell(
+                  label: 'مدفوعات أخرى',
+                  value: tailoringNumber(data.othersPayments),
+                  numeric: true,
+                ),
+              // المتبقي = الصافي − المدفوع − المدفوعات الأخرى (يُحسب على الخادم)
+              // The remaining is net − paid − others (computed server-side).
               TailoringCell(
                 label: data.balanceLabel,
                 value: data.balanceValue,

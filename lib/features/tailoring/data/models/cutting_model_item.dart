@@ -152,7 +152,15 @@ class CuttingModelItem {
       shapeStyleNo: tailoringInt(json, 'shape_style_no'),
       qty: tailoringInt(json, 'qty') ?? 0,
       measurements: _readMeasurements(json),
-      specs: CuttingModelSpecs.fromJson(json),
+      // الخادم يُعشّن المواصفات داخل `specs`، فلا تُقرأ من جذر الموديل وإلا بقيت فارغة.
+      // الاختبارات القديمة تمرّرها مسطّحة في الجذر، لذا يُقبل الموضعان.
+      // The server nests specs under `specs`; reading them from the model root left them blank.
+      // Older tests pass them flat at the root, so both shapes are accepted.
+      specs: CuttingModelSpecs.fromJson(
+        json['specs'] is Map
+            ? Map<String, dynamic>.from(json['specs'] as Map)
+            : json,
+      ),
       pieces: (json['pieces'] as List? ?? const [])
           .whereType<Map<String, dynamic>>()
           .map(CuttingPieceItem.fromJson)

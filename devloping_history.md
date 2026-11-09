@@ -6343,3 +6343,66 @@ Pest `Tailoring` 11/187 · Flutter 59 · analyze نظيف · pint PASS.
   فأُعيد ليطابق الاختبار والسلوك المعتمد.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-09 08:08 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-11-09 09:11 — التفصيل: قراءة المواصفات من عشّان الخادم لا من جذر الموديل
+
+### السبب (عميل لا خادم)
+
+- الإثبات الحيّ: `_probe` لـ `bill 21514 / seq 85226` — الـ VIEW يعيد `MODEL_NOTES` بطول 28،
+  والمتحكم يعيد `models[85226].specs.notes` بطول 28. إذن الخادم سليم.
+- العطب: `CuttingModelItem.fromJson` كان يستدعي `CuttingModelSpecs.fromJson(json)` حيث `json`
+  هو **جذر الموديل**، بينما البنية الحقيقية تضع `notes` و`neck_type` تحت `json['specs']`
+  (انظر `TailoringController::groupModels` السطر `'specs' => $this->specs($row)`).
+- لماذا لم يكشفه الاختبار؟ لأن الـ fixture كان يكتب المواصفات مسطّحة في الجذر، فتطابق parser
+  مع fixture لا مع الخادم.
+
+### الإصلاح
+
+- `cutting_model_item.dart`: `specs: CuttingModelSpecs.fromJson(json['specs'] is Map ?
+  Map<String,dynamic>.from(json['specs']) : json)` — يعشّن من `specs` ويرجع للجذر توافقاً.
+- اختبار جديد `specs are read from the nested server map, not the model root`.
+
+### قرار المستخدم (اختبارات الدفع)
+
+- أبقى المستخدم نموذجه بلا فرع «رصيد مقدم» وبلا جمع `othersPayments` في `paidTotal`؛
+  فحُدِّث اختبارا الدفع: الرصيد السالب ⇒ `balanceLabel` «المتبقي» و`isAdvance` صحيح،
+  و`paidTotal` = المدفوع فقط.
+
+### التحقق
+
+Flutter **60** ناجحة · `flutter analyze lib` = **No issues found!**.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 09:11 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-11-09 10:06 — التفصيل: الصافي والمتبقي يُحسبان ولا يُقرآن من عمود NET
+
+### العلة
+
+- `paymentPayload` كان: `net = NET` و`remaining = NET - AMOUNT_PAID`.
+- التحليل الحيّ على 1,200 فاتورة: `NET == TOTAL` في 1192، و`NET < TOTAL` في 4 فقط، أي أن NET
+  نسخة من الإجمالي الخام ولا يتتبّع الدفع. لذا كان الصافي يتجاهل الخصم، والمتبقي يتجاهل الخصم
+  والمدفوعات الأخرى ⇒ قيم خاطئة.
+
+### المعادلة المستنتجة (مُتحقَّق منها على كل عيّنة)
+
+- الصافي = TOTAL − DISCOUNT
+- المتبقي = الصافي − AMOUNT_PAID − OTHERS_PAYMENTS  (تُطرح القناتان ليصفرّ عند السداد)
+
+### ما تغيّر
+
+- `TailoringController::paymentPayload`: حساب `net` و`remaining` بالمعادلة، مع الحفاظ على دلالة
+  null (إن غاب الإجمالي والخصم ⇒ الصافي null).
+- `bill_payment_card.dart`: خلية «مدفوعات أخرى» مشروطة، وشرح المعادلة بتعليقات.
+- `TailoringTest.php`: اختبار متساويتين على أول فاتورة في القائمة.
+
+### التحقق
+
+Pest 12/189 · Flutter 60 · analyze نظيف · pint PASS.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-09 10:06 · **لا commit** (لم يُطلب).
