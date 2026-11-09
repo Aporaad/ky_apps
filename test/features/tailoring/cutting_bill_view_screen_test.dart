@@ -189,6 +189,14 @@ void main() {
       // The figures appear because the server sent the payment (the label reads "الإجمالي:").
       expect(find.textContaining('الإجمالي'), findsOneWidget);
       expect(find.text('1,500'), findsWidgets);
+
+      // قرار صاحب المؤسسة: العربون والمتبقي فقط، وحذف الخصم والصافي ومدفوعات أخرى
+      // The owner's call: deposit and remaining only; discount, net and other payments removed.
+      expect(find.text('العربون'), findsOneWidget);
+      expect(find.text('المتبقي'), findsOneWidget);
+      expect(find.text('الخصم'), findsNothing);
+      expect(find.text('الصافي'), findsNothing);
+      expect(find.text('مدفوعات أخرى'), findsNothing);
     });
 
     testWidgets('choosing another model switches measurements, specs and fabrics',
@@ -539,8 +547,6 @@ CuttingBillDetail _detail({
     'payment': withPayment
         ? {
             'total': '1500',
-            'discount': '0',
-            'net': '1500',
             'paid': '500',
             'remaining': '1000',
             'payment_method': 'نقداً',

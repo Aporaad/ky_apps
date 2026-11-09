@@ -55,8 +55,8 @@ class BillPaymentCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           TailoringCellGrid(
-            // سطر واحد: الحقول كلها في صف واحد بحصص متساوية وقيم مقياسية
-            // One row: all fields in a single line with equal shares and scaled values.
+            // سطر واحد: ثلاثة حقول مالية فقط — الإجمالي · العربون · المتبقي (+ رقم السند)
+            // One row: three money fields only — total · deposit · remaining (+ voucher no).
             rows: 1,
             minCellWidth: 80,
             cells: [
@@ -65,42 +65,24 @@ class BillPaymentCard extends StatelessWidget {
                 value: tailoringNumber(data.total),
                 numeric: true,
               ),
+              // العربون = المبلغ المدفوع (AMOUNT_PAID) وحده، بلا مدفوعات أخرى
+              // The deposit is AMOUNT_PAID alone, without the other payments.
               TailoringCell(
-                label: 'الخصم',
-                value: tailoringNumber(data.discount),
+                label: 'العربون',
+                value: tailoringNumber(data.paid),
                 numeric: true,
               ),
-              // الصافي = الإجمالي − الخصم (يُحسب على الخادم، لا من عمود NET الخام)
-              // The net is total − discount (computed server-side, not the raw NET column).
+              // المتبقي = الإجمالي − العربون فقط (يُحسب على الخادم)
+              // The remaining is total − deposit only (computed server-side).
               TailoringCell(
-                label: 'الصافي',
-                value: tailoringNumber(data.net),
+                label: 'المتبقي',
+                value: tailoringNumber(data.remaining),
                 numeric: true,
-              ),
-              TailoringCell(
-                label: 'المدفوع',
-                value: tailoringNumber(data.paidTotal),
-                numeric: true,
-              ),
-              // مدفوعات أخرى تظهر فقط عند وجودها، لتتّضح معادلة المتبقي = الصافي − المدفوع − الأخرى
-              // Other payments appear only when present, so remaining = net − paid − others is clear.
-              if ((data.othersPayments ?? 0) != 0)
-                TailoringCell(
-                  label: 'مدفوعات أخرى',
-                  value: tailoringNumber(data.othersPayments),
-                  numeric: true,
-                ),
-              // المتبقي = الصافي − المدفوع − المدفوعات الأخرى (يُحسب على الخادم)
-              // The remaining is net − paid − others (computed server-side).
-              TailoringCell(
-                label: data.balanceLabel,
-                value: data.balanceValue,
-                numeric: true,
-                // الرصيد السالب دفعة مقدمة — لونه أخضر لأنه لصالح العميل لا عليه
-                // A negative balance is an advance — green because it favours the customer.
-                valueColor: data.isAdvance
+                // صفر أو سالب ⇒ مسدَّد (أخضر)، موجب ⇒ باقٍ على العميل (أحمر)
+                // Zero or negative means settled (green); positive is still owed (red).
+                valueColor: (data.remaining ?? 0) <= 0
                     ? AppColors.success
-                    : (data.remaining == 0 ? AppColors.success : AppColors.error),
+                    : AppColors.error,
               ),
               TailoringCell(
                 label: 'رقم السند',

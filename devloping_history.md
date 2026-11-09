@@ -6406,3 +6406,27 @@ Flutter **60** ناجحة · `flutter analyze lib` = **No issues found!**.
 Pest 12/189 · Flutter 60 · analyze نظيف · pint PASS.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-09 10:06 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-11-10 00:44 — التفصيل: تفاصيل الدفع بثلاثة حقول بقرار المالك
+
+### ما تغيّر
+
+- `TailoringController::paymentPayload`: حُذف `discount` و`net` و`others_payments`؛ بقي
+  `total` و`paid` (=AMOUNT_PAID، وهو العربون) و`remaining = total - paid`، مع الحقول الوصفية
+  (is_giving/giving_date/payment_method/voucher_no/currency_*).
+- `bill_payment_card.dart`: صفّ واحد بأربع خلايا — الإجمالي · العربون · المتبقي · رقم السند.
+  لون المتبقي: `<=0` أخضر (مسدَّد/مقدَّم)، موجب أحمر (باقٍ).
+
+### ملاحظة على التراجع السابق
+
+- هذه حلّ محلّ صيغة «الصافي = الإجمالي − الخصم» و«المتبقي = الصافي − المدفوع − الأخرى» المؤقتة؛
+  المالك يريد المتبقي = الإجمالي − العربون فقط. عمود `NET` لم يعد يُقرأ إطلاقاً.
+
+### التحقق
+
+Pest 12/190 · Flutter 60 · analyze نظيف · pint PASS.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-10 00:44 · **لا commit** (لم يُطلب).
