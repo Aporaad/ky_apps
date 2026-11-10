@@ -3,30 +3,52 @@ import 'package:flutter/material.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../data/models/tailoring_reference_model.dart';
 
-/// خط سير حالات الفاتورة — المراحل من قاموس ORDSTATE الحقيقي
-/// The invoice workflow path — the stages come from the real ORDSTATE dictionary.
+/// خط سير حالات القماش — المراحل من قاموس ORDSTATE الحقيقي
+/// The fabric workflow path — the stages come from the real ORDSTATE dictionary.
 ///
 /// لا تُكتب المراحل في الشاشة: تُقرأ من القاموس مرتّبة برقمها، فيرافق أي تعديل يقوم به
 /// النظام القديم على الحالات يتغيّر الخط تلقائياً بلا تعديل كود.
 /// The stages are never hard-coded: they are read from the dictionary in numeric order, so any
 /// change the legacy system makes to the stages is reflected without a code change.
-class WorkflowStepper extends StatelessWidget {
+///
+/// العرض المطبَّق: تُظهر الشاشة كل المراحل المنجزة مع **مرحلة واحدة قادمة** فقط، وتُخفي
+/// البقية خلف زر «إظهار» صغير يكشفها عند النقر. وبجانب اسم كل مرحلة تُعرض بياناتها (تاريخها
+/// ومنفّذها) إن وصلت من سجل حركة القماش.
+/// The applied display: every completed stage plus **one upcoming** is shown, the rest hidden
+/// behind a small "show" button that reveals them on tap. Beside each stage name its own data
+/// (its date and executor) appears when the fabric's movement log supplies it.
+class WorkflowStepper extends StatefulWidget {
   /// المراحل الفعّالة مرتّبة — تُمرَّر من المرجعيات
   /// The active stages in order — passed in from the reference data.
   final List<TailoringStage> stages;
 
-  /// الحالة الحالية للفاتورة (ORDSDID)؛ الصفر يعني «بلا حالة»
-  /// The bill's current stage (ORDSDID); zero means "no stage".
+  /// الحالة الحالية للقماش (ORDSID)؛ الصفر يعني «بلا حالة»
+  /// The fabric's current stage (ORDSID); zero means "no stage".
   final int currentOrdsid;
+
+  /// بيانات كل مرحلة بمفتاحها: نصّ قصير (تاريخ · منفّذ) يظهر بجانب الاسم
+  /// Per-stage data keyed by ORSID: a short text (date · executor) shown beside the name.
+  final Map<int, String>? stageMeta;
 
   const WorkflowStepper({
     super.key,
     required this.stages,
     required this.currentOrdsid,
+    this.stageMeta,
   });
 
   @override
+  State<WorkflowStepper> createState() => _WorkflowStepperState();
+}
+
+class _WorkflowStepperState extends State<WorkflowStepper> {
+  /// هل كُشفت المراحل المخفية؟
+  /// Whether the hidden stages have been revealed.
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final stages = widget.stages;
     if (stages.isEmpty) {
       return const Padding(
         padding: EdgeInsets.symmetric(vertical: 8),
@@ -37,35 +59,55 @@ class WorkflowStepper extends StatelessWidget {
       );
     }
 
-    // موقع الحالة الحالية: مطابقة تامة، وإلا موضعها النسبي بين المراحل المرتّبة
-    // The current stage's position: an exact match, otherwise its relative place among
-    // the ordered stages.
     final currentIndex = _currentIndex();
+
+    // الظاهر = كل المنجزة + الحالية + مرحلة واحدة قادمة (فهرس currentIndex+1)
+    // Visible = every completed stage + the current + one upcoming (index currentIndex+1).
+    final reached = currentIndex < 0 ? -1 : currentIndex;
+    final collapsedCount = (reached + 2).clamp(1, stages.length);
+    final showAll = _expanded || collapsedCount >= stages.length;
+    final shownCount = showAll ? stages.length : collapsedCount;
+    final hiddenCount = stages.length - shownCount;
 
     return Column(
       children: [
-        for (var i = 0; i < stages.length; i++)
+        for (var i = 0; i < shownCount; i++)
           _StepRow(
             stage: stages[i],
             index: i,
-            isLast: i == stages.length - 1,
+            // الخط الرابط يختفي فقط بعد آخر مرحلة عند كشف الكل
+            // The connector lane ends only after the last stage once everything is shown.
+            isLast: showAll && i == stages.length - 1,
             state: _stateFor(i, currentIndex),
+            meta: widget.stageMeta?[stages[i].ordsid],
+          ),
+        if (hiddenCount > 0)
+          _ToggleRow(
+            label: 'إظهار المراحل التالية (${hiddenCount > 1 ? '$hiddenCount مراحل' : 'مرحلة واحدة'})',
+            icon: Icons.expand_more_rounded,
+            onTap: () => setState(() => _expanded = true),
+          ),
+        if (_expanded && stages.length > collapsedCount)
+          _ToggleRow(
+            label: 'إخفاء المراحل',
+            icon: Icons.expand_less_rounded,
+            onTap: () => setState(() => _expanded = false),
           ),
       ],
     );
   }
 
   int _currentIndex() {
-    if (currentOrdsid == 0) return -1;
+    if (widget.currentOrdsid == 0) return -1;
 
-    final exact = stages.indexWhere((s) => s.ordsid == currentOrdsid);
+    final exact = widget.stages.indexWhere((s) => s.ordsid == widget.currentOrdsid);
     if (exact >= 0) return exact;
 
     // الحالة بين مرحلتين معروفتين: تُحسب منتهية كل ما قبلها
     // A stage between two known ones: everything before it counts as completed.
     var last = -1;
-    for (var i = 0; i < stages.length; i++) {
-      if (stages[i].ordsid < currentOrdsid) last = i;
+    for (var i = 0; i < widget.stages.length; i++) {
+      if (widget.stages[i].ordsid < widget.currentOrdsid) last = i;
     }
     return last;
   }
@@ -80,17 +122,21 @@ class WorkflowStepper extends StatelessWidget {
 
 enum _StepState { done, current, pending }
 
+/// صف مرحلة: المؤشر والخط، الاسم، وبجانبه بياناتها (تاريخ · منفّذ) عند توفرها
+/// A stage row: marker and lane, the name, and beside it its data (date · executor) when present.
 class _StepRow extends StatelessWidget {
   final TailoringStage stage;
   final int index;
   final bool isLast;
   final _StepState state;
+  final String? meta;
 
   const _StepRow({
     required this.stage,
     required this.index,
     required this.isLast,
     required this.state,
+    this.meta,
   });
 
   @override
@@ -121,7 +167,8 @@ class _StepRow extends StatelessWidget {
                   width: 20,
                   height: 20,
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: state == _StepState.pending ? 0.08 : 0.15),
+                    color: color.withValues(
+                        alpha: state == _StepState.pending ? 0.08 : 0.15),
                     shape: BoxShape.circle,
                     border: Border.all(color: color, width: 1.2),
                   ),
@@ -193,6 +240,22 @@ class _StepRow extends StatelessWidget {
                       ),
                     ],
                   ),
+                  // بيانات المرحلة بجانب اسمها: تاريخها ومنفّذها من سجل حركة القماش
+                  // The stage's data beside its name: its date and executor from the fabric log.
+                  if (meta != null && meta!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 1),
+                      child: Text(
+                        meta!,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   if (stage.nextOrdsid != null)
                     Text(
                       'التالية: ${stage.nextOrdsid}',
@@ -206,6 +269,39 @@ class _StepRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// زر صغير لكشف/طيّ المراحل المتبقية
+/// A small button to reveal or collapse the remaining stages.
+class _ToggleRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _ToggleRow({
+    required this.label,
+    required this.icon,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(top: 2, start: 34),
+      child: TextButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 16),
+        label: Text(label, style: const TextStyle(fontSize: 11)),
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          visualDensity: VisualDensity.compact,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          minimumSize: Size.zero,
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
       ),
     );
   }

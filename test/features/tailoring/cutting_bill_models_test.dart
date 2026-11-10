@@ -329,7 +329,9 @@ void main() {
       // المواصفات تُسمّى بوصفها خصائص قطعة: نوع الرقبة، نوع الأزرار…
       // Specs are named as garment properties: neck type, button type…
       expect(labels, ['نوع الرقبة']);
-      expect(codes, ['نموذج الرقبة']);
+      // الأكواد الرقمية معطّلة حالياً في النموذج (طُبعت داخل الشرائح النصية)، فالقائمة فارغة
+      // Numeric codes are disabled in the model now (folded into the text chips): the list is empty.
+      expect(codes, isEmpty);
       expect(model.specs.notes, 'ملاحظة');
       expect(model.specs.isEmpty, isFalse);
       expect(const CuttingModelSpecs().isEmpty, isTrue);

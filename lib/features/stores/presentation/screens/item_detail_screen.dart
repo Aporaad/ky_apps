@@ -5,12 +5,13 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/item_model.dart';
+import '../../data/models/report_model.dart';
 import '../../data/repositories/store_items_repository.dart';
 import '../providers/items_providers.dart';
 import '../widgets/store_ui.dart';
 import '../widgets/sub_item_dialog.dart';
 import 'item_form_screen.dart';
-import 'item_movement_screen.dart';
+import 'store_reports_screen.dart';
 import 'sub_item_detail_screen.dart';
 
 /// تفصيل صنف في تبويب واحد: البيانات ثم الأصناف الفرعية بكمياتها
@@ -80,15 +81,22 @@ class ItemDetailScreen extends ConsumerWidget {
           //    تكرار الزر نفسه في موضعين يجعل المستخدم يبحث عن أيهما يضغط.
           // ── Actions live in the app bar as icons only, never also inside the card:
           //    repeating the same button in two places makes the user wonder which one to press.
+          // ── كشف الحركة = تقرير «حركة صنف رئيسي» من تقارير المخازن، يُفتح بمعطياته
+          //    مباشرة أقساماً لكل فرع مع أرصدتها — لا شاشة كشف موازية بقالب ثانٍ.
+          // ── The statement IS the stores-reports "main item movement" template: opened
+          //    with its parameters, sectioned per branch with balances — not a parallel
+          //    screen with a second-class template.
           IconButton(
             tooltip: 'كشف حركة',
             onPressed:
                 () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder:
-                        (_) => ItemMovementScreen(
-                          sanfNo: sanfNo,
-                          itemName: detail.value?.item.name ?? 'صنف $sanfNo',
+                        (_) => StoreReportsScreen(
+                          initialFilter: StoreReportFilter.forItemStatement(
+                            sanfNo: sanfNo,
+                            itemName: detail.value?.item.name ?? 'صنف $sanfNo',
+                          ),
                         ),
                   ),
                 ),
@@ -234,11 +242,15 @@ class _ItemBody extends ConsumerWidget {
                   visualDensity: VisualDensity.compact,
                   onPressed:
                       () => Navigator.of(context).push(
+                        // نفس الطريق في التخطيط العريض: القالب نفسه بمعطياته
+                        // The same path on the wide layout: the very template, preset.
                         MaterialPageRoute(
                           builder:
-                              (_) => ItemMovementScreen(
-                                sanfNo: sanfNo,
-                                itemName: item.name,
+                              (_) => StoreReportsScreen(
+                                initialFilter: StoreReportFilter.forItemStatement(
+                                  sanfNo: sanfNo,
+                                  itemName: item.name,
+                                ),
                               ),
                         ),
                       ),
@@ -561,13 +573,19 @@ class _ItemBody extends ConsumerWidget {
                     visualDensity: VisualDensity.compact,
                     onPressed:
                         () => Navigator.of(context).push(
+                          // فرع بعينه = قالب «حركة صنف فرعي»: جدول واحد برصيد جارٍ
+                          // One exact branch = the "sub item movement" template: one
+                          // flat table with its running balance.
                           MaterialPageRoute(
                             builder:
-                                (_) => ItemMovementScreen(
-                                  sanfNo: sanfNo,
-                                  itemName: bundle.item.name,
-                                  subDno: sub.sanfDno,
-                                  subLabel: sub.name ?? sub.sizeLabel,
+                                (_) => StoreReportsScreen(
+                                  initialFilter: StoreReportFilter.forBranchStatement(
+                                    sanfNo: sanfNo,
+                                    sanfDno: sub.sanfDno,
+                                    // `sizeLabel` لا يكون فارغاً: يحمل احتياطه داخلها
+                                    // sizeLabel is never empty: it carries its own fallback.
+                                    branchLabel: sub.name ?? sub.sizeLabel,
+                                  ),
                                 ),
                           ),
                         ),

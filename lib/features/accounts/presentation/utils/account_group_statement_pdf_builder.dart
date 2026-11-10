@@ -30,7 +30,11 @@ Future<Uint8List> buildAccountGroupStatementPdf({
       // سقف الصفحات الصريح — الافتراضي 20 يُسقط ميزان المراجعة الكبير
       // Explicit page ceiling — the 20-page default aborts a large trial balance.
       maxPages: kReportPdfMaxPages,
-      pageFormat: PdfPageFormat.a4.landscape,
+      // صفحة طولية تطابق ورق الطابعة: الصفحة الأفقية تُصغَّر إلى عرض الورقة فيبقى
+      // نصفها بياضاً — وهو عطل «التقرير في نص الصفحة»
+      // A portrait page that matches the paper: a landscape sheet is scaled to the paper's
+      // width and half of it comes out blank.
+      pageFormat: PdfPageFormat.a4,
       margin: const pw.EdgeInsets.all(20),
       textDirection: pw.TextDirection.rtl,
       header: (context) => buildReportPdfHeader(

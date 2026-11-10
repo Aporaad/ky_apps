@@ -163,7 +163,8 @@ class ReportStatFields {
   static const List<String> defaultIds = <String>[
     'opening',
     'in',
-    'out',    
+    'out',
+    'net',
     'closing',
   ];
 

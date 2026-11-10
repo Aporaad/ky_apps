@@ -432,9 +432,16 @@ class _StockBalancesScreenState extends ConsumerState<StockBalancesScreen> {
                 netValue: row.value,
               ),
           ],
-          totalIn: 0,
-          totalOut: 0,
-          totalValue: state.totalValue,
+          // أرصدة اللحظة لا حركة فيها: الشريط يحمل الرصيد الحالي وقيمته فقط، ولا يختلق
+          // واردًا ولا منصرفًا لا وجود لهما في هذا العرض
+          // Balances are "now" with nothing moved: the strip carries the closing quantity and
+          // its value only, inventing no inbound or outbound that this view never showed.
+          stats: ReportStats(
+            rows: state.rows.length,
+            closingQty: state.rows.fold<double>(0, (sum, row) => sum + row.qty),
+            closingValue: state.totalValue,
+          ),
+          statIds: const ['closing', 'closingValue'],
         );
 
         await StoreExporter.print(

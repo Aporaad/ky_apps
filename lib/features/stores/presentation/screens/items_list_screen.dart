@@ -5,12 +5,13 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/item_model.dart';
+import '../../data/models/report_model.dart';
 import '../providers/items_providers.dart';
 import '../providers/stores_providers.dart';
 import '../widgets/store_ui.dart';
 import 'item_detail_screen.dart';
 import 'item_form_screen.dart';
-import 'item_movement_screen.dart';
+import 'store_reports_screen.dart';
 import 'sub_item_detail_screen.dart';
 
 /// واجهة الأصناف في تبويبين: الرئيسية والفرعية
@@ -93,10 +94,16 @@ class _ItemsListScreenState extends ConsumerState<ItemsListScreen>
       appBar: AppBar(
         title: const Text('الأصناف'),
         actions: [
-          if (_tabs.index == 0)
+          // ── الترتيب لكل تبويب لا للرئيسية فقط: تبويب الفروع كان بلا أي خيار فرز أصلاً،
+          //    فطلب المستخدم «تصاعدي/تنازلي لكل خيار» يشمل القائمة كلها.
+          // ── Sorting for every tab, not just the main one: the branches tab had no sort
+          //    option at all, and "asc/desc for every choice" plainly covers both lists.
+          if (_tabs.index == 0 || _tabs.index == 1)
             IconButton(
               tooltip: 'ترتيب',
-              onPressed: () => _openSort(context),
+              onPressed: () => _tabs.index == 0
+                  ? _openSort(context)
+                  : _openSubSort(context),
               icon: const Icon(Icons.sort_rounded),
             ),
         ],
@@ -363,13 +370,21 @@ class _ItemsListScreenState extends ConsumerState<ItemsListScreen>
                       ),
                   onMovement:
                       () => Navigator.of(context).push(
+                        // ── كشف حركة الفرع = تقرير «حركة صنف فرعي» من تقارير المخازن
+                        //    يُفتح مباشرة بمعطياته، لا شاشة كشف منفصلة بقالب أضعف.
+                        // ── A branch statement IS the stores-reports "sub item movement"
+                        //    template — opened directly with its parameters, not a weaker
+                        //    side screen.
                         MaterialPageRoute(
                           builder:
-                              (_) => ItemMovementScreen(
-                                sanfNo: sub.sanfNo,
-                                itemName: sub.parentName ?? 'صنف ${sub.sanfNo}',
-                                subDno: sub.sanfDno,
-                                subLabel: sub.name ?? sub.sizeLabel,
+                              (_) => StoreReportsScreen(
+                                initialFilter: StoreReportFilter.forBranchStatement(
+                                  sanfNo: sub.sanfNo,
+                                  sanfDno: sub.sanfDno,
+                                  // `sizeLabel` لا يكون فارغاً: يحمل احتياطه داخلها
+                                  // sizeLabel is never empty: it carries its own fallback.
+                                  branchLabel: sub.name ?? sub.sizeLabel,
+                                ),
                               ),
                         ),
                       ),
@@ -490,45 +505,151 @@ class _ItemsListScreenState extends ConsumerState<ItemsListScreen>
     );
   }
 
-  /// ترتيب قائمة الأصناف الرئيسية
-  /// Sort the main items list.
-  Future<void> _openSort(BuildContext context) async {
-    final notifier = ref.read(itemsListProvider.notifier);
+  // ================================================================
+  // الترتيب — ورشة مشتركة للتبويبين
+  // Sorting — one workshop shared by both tabs
+  // ================================================================
+
+  /// تسمية اتجاه الترتيب بالعربية — تُعرض بجانب كل خيار وفي الزر
+  /// The Arabic caption of the sort direction — shown beside the active option and on the button.
+  static String _dirLabel(String dir) => dir == 'desc' ? 'تنازلي' : 'تصاعدي';
+
+  static IconData _dirIcon(String dir) =>
+      dir == 'desc' ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded;
+
+  /// ورقة ترتيب موحّدة: الخيار النشط معلَّم، والاتجاه يُبدَّل من رأس الورقة ويُنقل لكل
+  /// النقرات التالية، والاختيار يُطبَّق فوراً فيبقى المفتوح هو المختار
+  /// One unified sort sheet: the active option is ticked, the direction toggles from the header
+  /// and carries into every later pick, and each pick applies immediately so the tick always
+  /// reflects what is on screen.
+  ///
+  /// ── العطل المُصلَح: كانت النسخة القديمة تُعيد الاتجاه إلى «تصاعدي» عند اختيار أي خيار
+  ///    (منطق `ascending = true` ثابت)، فلا يمكن الوصول إلى الترتيب التنازلي إطلاقاً رغم أن
+  ///    الخادم يقبله منذ زمن.
+  /// ── The fixed defect: the old sheet reset every pick to ascending (a hard-coded
+  ///    `ascending = true`), so descending was unreachable even though the server has always
+  ///    accepted it.
+  Future<void> _openSortSheet({
+    required String title,
+    required String currentSort,
+    required String currentDir,
+    required List<(String, String)> options,
+    required Future<void> Function(String field, String dir) apply,
+    required Future<void> Function() toggleDir,
+  }) async {
+    var sort = currentSort;
+    var dir = currentDir;
 
     await showModalBottomSheet<void>(
       context: context,
       useSafeArea: true,
+      backgroundColor: Colors.white,
       builder:
-          (context) => SafeArea(
+          (sheetContext) => SafeArea(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(16, 14, 16, 6),
-                  child: Text(
-                    'ترتيب الأصناف',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      // تبديل الاتجاه وحده — بلا تغيير الخيار: يعمل حتى قبل اختيار أي خيار
+                      // Direction-only toggle — no field change: works even before a pick.
+                      TextButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetContext);
+                          toggleDir();
+                        },
+                        icon: Icon(_dirIcon(dir), size: 17),
+                        label: Text(_dirLabel(dir)),
+                      ),
+                    ],
                   ),
                 ),
-                for (final option in const [
-                  ('name', 'بالاسم'),
-                  ('part', 'بالكود'),
-                  ('no', 'برقم الصنف'),
-                  ('qty', 'بالرصيد'),
-                  ('value', 'بالقيمة'),
-                ])
+                const Divider(height: 1, color: AppColors.border),
+                for (final option in options)
                   ListTile(
                     dense: true,
-                    leading: const Icon(Icons.sort_rounded, size: 18),
-                    title: Text(option.$2),
+                    selected: option.$1 == sort,
+                    leading: Icon(
+                      option.$1 == sort
+                          ? Icons.check_rounded
+                          : Icons.sort_rounded,
+                      size: 18,
+                      color:
+                          option.$1 == sort
+                              ? AppColors.primary
+                              : AppColors.textMuted,
+                    ),
+                    // الخيار النشط يحمل سهم الاتجاه نفسه: يُقرأ الوضع الحالي بلا شرح
+                    // The active option carries the direction arrow itself: current state reads at a glance.
+                    title: Text(
+                      option.$1 == sort
+                          ? '${option.$2} (${_dirLabel(dir)})'
+                          : option.$2,
+                    ),
                     onTap: () {
-                      Navigator.pop(context);
-                      notifier.sortBy(option.$1);
+                      Navigator.pop(sheetContext);
+                      apply(option.$1, dir);
                     },
                   ),
+                const SizedBox(height: 6),
               ],
             ),
           ),
+    );
+  }
+
+  /// ترتيب قائمة الأصناف الرئيسية
+  /// Sort the main items list.
+  Future<void> _openSort(BuildContext context) {
+    final notifier = ref.read(itemsListProvider.notifier);
+    final state = ref.read(itemsListProvider);
+
+    return _openSortSheet(
+      title: 'ترتيب الأصناف',
+      currentSort: state.sort,
+      currentDir: state.dir,
+      options: const [
+        ('name', 'بالاسم'),
+        ('part', 'بالكود'),
+        ('no', 'برقم الصنف'),
+        ('qty', 'بالرصيد'),
+        ('value', 'بالقيمة'),
+      ],
+      apply: notifier.sortBy,
+      toggleDir: notifier.toggleSortDir,
+    );
+  }
+
+  /// ترتيب تبويب الأصناف الفرعية — نفس الورشة بخيارات الفروع
+  /// Sort the sub-items tab — the same workshop with branch options.
+  Future<void> _openSubSort(BuildContext context) {
+    final notifier = ref.read(subItemsListProvider.notifier);
+    final state = ref.read(subItemsListProvider);
+
+    return _openSortSheet(
+      title: 'ترتيب الأصناف الفرعية',
+      currentSort: state.sort,
+      currentDir: state.dir,
+      options: const [
+        ('parent', 'باسم الصنف الرئيسي'),
+        ('no', 'برقم الصنف الفرعي'),
+        ('color', 'باللون'),
+        ('qty', 'بالرصيد'),
+        ('value', 'بالقيمة'),
+      ],
+      apply: notifier.sortBy,
+      toggleDir: notifier.toggleSortDir,
     );
   }
 
@@ -875,11 +996,18 @@ class _ItemsListScreenState extends ConsumerState<ItemsListScreen>
     ref.read(itemsListProvider.notifier).refreshCurrent();
   }
 
+  /// كشف حركة صنف رئيسي — يفتح تقرير «حركة صنف رئيسي» التابع لتقارير المخازن مباشرة
+  /// A main item's statement — opens the stores-reports "main item movement" template at once.
   Future<void> _openMovement(BuildContext context, ItemModel item) async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder:
-            (_) => ItemMovementScreen(sanfNo: item.sanfNo, itemName: item.name),
+            (_) => StoreReportsScreen(
+              initialFilter: StoreReportFilter.forItemStatement(
+                sanfNo: item.sanfNo,
+                itemName: item.name,
+              ),
+            ),
       ),
     );
   }
@@ -1045,8 +1173,7 @@ class _ItemCard extends StatelessWidget {
                     const SizedBox(height: 3),
                     Text(
                       [
-                        'كود ${item.partNo}',
-                        if (item.groupName != null) item.groupName!,
+                        'كود ${item.partNo}',                        
                         if (item.typeName != null) item.typeName!,
                       ].join(' · '),
                       style: const TextStyle(
@@ -1062,7 +1189,7 @@ class _ItemCard extends StatelessWidget {
                       runSpacing: 4,
                       children: [
                         StoreTag(
-                          label: '${item.subs} فرع',
+                          label: '${item.subs} فرعية',
                           icon: Icons.account_tree_outlined,
                           color: AppColors.info,
                         ),
@@ -1071,10 +1198,10 @@ class _ItemCard extends StatelessWidget {
                             label: item.unitName!,
                             icon: Icons.straighten_rounded,
                           ),
-                        StoreTag(
-                          label: StoreFormat.money(item.salePrice),
-                          icon: Icons.sell_outlined,
-                        ),
+                        // StoreTag(
+                        //   label: StoreFormat.money(item.salePrice),
+                        //   icon: Icons.sell_outlined,
+                        // ),
                       ],
                     ),
                   ],
@@ -1128,7 +1255,7 @@ class _ItemCard extends StatelessWidget {
                     (context) => [
                       const PopupMenuItem(
                         value: 'detail',
-                        child: Text('عرض التفصيل'),
+                        child: Text('عرض التفاصيل'),
                       ),
                       const PopupMenuItem(
                         value: 'movement',

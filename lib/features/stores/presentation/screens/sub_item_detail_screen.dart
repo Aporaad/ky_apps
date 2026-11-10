@@ -5,11 +5,12 @@ import '../../../../core/constants/permission_codes.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
 import '../../data/models/item_model.dart';
+import '../../data/models/report_model.dart';
 import '../providers/items_providers.dart';
 import '../widgets/store_ui.dart';
 import '../widgets/sub_item_dialog.dart';
 import 'item_detail_screen.dart';
-import 'item_movement_screen.dart';
+import 'store_reports_screen.dart';
 
 /// استعراض صنف فرعي — تفاصيل الفرع وحده، لا تفاصيل أصنه الأب
 /// A sub item screen — the branch's own details, never its parent's.
@@ -55,13 +56,21 @@ class SubItemDetailScreen extends ConsumerWidget {
             tooltip: 'كشف حركة الفرع',
             onPressed:
                 () => Navigator.of(context).push(
+                  // ── استعراض الفرع ثم كشف حركته = قالب «حركة صنف فرعي» من تقارير
+                  //    المخازن يُفتح بمعطياته مباشرة — لا شاشة كشف موازية.
+                  // ── From the branch view, its statement is the stores-reports
+                  //    "sub item movement" template, opened preset with its parameters.
                   MaterialPageRoute(
                     builder:
-                        (_) => ItemMovementScreen(
-                          sanfNo: sanfNo,
-                          itemName: sub?.parentName ?? 'صنف $sanfNo',
-                          subDno: sanfDno,
-                          subLabel: sub?.name ?? sub?.sizeLabel,
+                        (_) => StoreReportsScreen(
+                          initialFilter: StoreReportFilter.forBranchStatement(
+                            sanfNo: sanfNo,
+                            sanfDno: sanfDno,
+                            branchLabel:
+                                sub?.name ??
+                                sub?.sizeLabel ??
+                                'فرع $sanfDno',
+                          ),
                         ),
                   ),
                 ),

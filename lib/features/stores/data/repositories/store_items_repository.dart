@@ -309,6 +309,8 @@ class StoreItemsRepository {
     int? typeNo,
     int? sanfNo,
     String active = 'all',
+    String sort = 'parent',
+    String dir = 'asc',
     CancelToken? cancelToken,
   }) async {
     try {
@@ -322,6 +324,12 @@ class StoreItemsRepository {
           if (typeNo != null) 'type_no': typeNo,
           if (sanfNo != null) 'sanf_no': sanfNo,
           if (active != 'all') 'active': active,
+          // ترتيب الفروع يُرسل دائماً كما في قائمة الرئيسية: الخادم يحرسه بقائمة
+          // بيضاء فلا يصل أي مدخل حر إلى SQL
+          // Branch sorting is always sent, exactly like the main list: the server whitelists
+          // it, so no raw input ever reaches the SQL.
+          'sort': sort,
+          'dir': dir,
         },
         cancelToken: cancelToken,
       );

@@ -40,20 +40,15 @@ class MeasurementSpecsPanel extends StatelessWidget {
     // cell that can never fill is not information, and it costs height on a screen built to be
     // compact.
     final items = <(String, String?, IconData?)>[
-      ('نوع الأزرار', specs.buttonType, Icons.radio_button_checked_rounded),
-      ('نوع الكم', specs.tipperType, Icons.straighten_rounded),
-      ('نوع الرقبة', specs.neckType, Icons.accessibility_new_rounded),
-      ('جيب جانبي', specs.pocketOrWithout, Icons.category_rounded),
-      ('نوع الجبزور', specs.gabzorType, Icons.brush_rounded),
-      (
-        'جيب الصدر',
-        specs.shapePocketUpNo?.toString(),
-        Icons.inventory_2_rounded,
-      ),
-      ('نوع الكباك', specs.comCabakType, Icons.settings_brightness_rounded),
-      ('عدد الأزرار', specs.buttonNo, Icons.format_list_numbered_rounded),
-      ('جيب الجوال', specs.mobilePocket, Icons.smartphone_rounded),
-      ('نوع الحجازي', specs.hegaziType, Icons.pattern_rounded),
+      ('نوع الكم', specs.comCabakType!, Icons.check_circle_outline),
+      if (specs.neckType != null) ('نوع الرقبة', specs.neckType!,Icons.check_circle_outline),
+      if (specs.pocketOrWithout != null) ('الجيوب', specs.pocketOrWithout!, Icons.check_circle_outline),
+      if (specs.gabzorType != null) ('نوع الجبزور', specs.gabzorType!, Icons.check_circle_outline),
+      if (specs.mobilePocket != null) ('جيب الصدر ', specs.mobilePocket!, Icons.check_circle_outline),
+      if (specs.buttonType != null) ('نوع الأزرار', specs.buttonType!, Icons.check_circle_outline),
+      if (specs.buttonNo != null) ('رقم الأزرار', specs.buttonNo!, Icons.check_circle_outline),
+      if (specs.shapeGabzorNo != null && specs.shapeGabzorNo==1) ('جبزور يد', '✔️', null),
+      if (specs.tipperType != null) (' فئة الخياط', specs.tipperType!, null),
     ];
 
     // الفارغ لا يُعرض: اثنتا عشرة خانة «—» تحوّل المواصفات إلى جدول فراغات

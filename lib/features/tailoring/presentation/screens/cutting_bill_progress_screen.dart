@@ -15,16 +15,17 @@ import '../widgets/model_movements_table.dart';
 import '../widgets/tailoring_section_card.dart';
 import '../widgets/workflow_stepper.dart';
 
-/// شاشة متابعة سير فاتورة تفصيل — نموذج أولي ببيانات حقيقية
-/// The cutting-bill progress screen — a prototype backed by real data.
+/// شاشة متابعة سير فاتورة تفصيل — التتبّع على مستوى **القماش** لا الموديل ولا الفاتورة.
+/// The cutting-bill progress screen — tracking is per **fabric**, not per model or bill.
 ///
-/// المراحل تُقرأ من قاموس `ORDSTATE` الفعلي، وحالة كل قطعة من أعلام الإنجاز في الـ VIEW،
-/// وسجل الحركة من `CUTING_TRANSD`. ما هو «قيد التطوير» هو نقل الحالة بين المراحل فقط:
-/// الأزرار معطّلة صراحةً ولا يُرسل أي إجراء إلى الخادم.
-/// The stages come from the live `ORDSTATE` dictionary, each piece's state from the view's
-/// completion flags, and the log from `CUTING_TRANSD`. Only the stage transition is still under
-/// development: its buttons are plainly disabled and nothing is sent to the server.
-class CuttingBillProgressScreen extends ConsumerWidget {
+/// رأس الشاشة جدول أقمشة الفاتورة بخمسة أعمدة فقط (رقم الطلب · الموديل · العميل/المستفيد ·
+/// اسم القماش · اللون)، وكل صف قابل للتحديد. المخطط وسجل الحركة يُبنى كلُّهما على رقم طلب
+/// القماش المحدد (OHDID) وحده، لأن الحركة تخصّ القماش لا الموديل ولا الفاتورة.
+/// The header is the bill's fabrics table with five columns only (order id · model ·
+/// customer/beneficiary · cloth name · colour), every row selectable. The workflow chart and the
+/// movement log are both built on the selected fabric's order id (OHDID) alone, because the
+/// movement belongs to the fabric, not the model or the bill.
+class CuttingBillProgressScreen extends ConsumerStatefulWidget {
   /// هوية الفاتورة المركّبة (رقم، سنة)
   /// The composite bill identity (number, year).
   final CuttingBillKey billKey;
@@ -32,8 +33,19 @@ class CuttingBillProgressScreen extends ConsumerWidget {
   const CuttingBillProgressScreen({super.key, required this.billKey});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final detail = ref.watch(cuttingBillDetailProvider(billKey));
+  ConsumerState<CuttingBillProgressScreen> createState() =>
+      _CuttingBillProgressScreenState();
+}
+
+class _CuttingBillProgressScreenState
+    extends ConsumerState<CuttingBillProgressScreen> {
+  /// القماش المحدد (OHDID) — يقود المخطط والسجل معاً
+  /// The selected fabric (OHDID) — it drives both the chart and the log.
+  int? _selectedOhdId;
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = ref.watch(cuttingBillDetailProvider(widget.billKey));
     final reference = ref.watch(tailoringReferenceProvider);
 
     return Scaffold(
@@ -49,15 +61,16 @@ class CuttingBillProgressScreen extends ConsumerWidget {
         ),
         title: Row(
           children: [
-            const Icon(Icons.timeline_rounded, color: AppColors.warning, size: 21),
+            const Icon(Icons.timeline_rounded,
+                color: AppColors.warning, size: 21),
             const SizedBox(width: 9),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'متابعة سير فاتورة ${billKey.id}',
-                    style:  TextStyle(
+                    'متابعة سير فاتورة ${widget.billKey.id}',
+                    style: TextStyle(
                       fontSize: 14.5,
                       fontWeight: FontWeight.bold,
                       color: AppColors.textPrimary,
@@ -66,7 +79,7 @@ class CuttingBillProgressScreen extends ConsumerWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const Text(
-                    'نموذج أولي — نقل الحالات غير مفعّل',
+                    'التتبّع على مستوى القماش المحدد',
                     style: TextStyle(fontSize: 10.5, color: AppColors.textMuted),
                   ),
                 ],
@@ -77,7 +90,7 @@ class CuttingBillProgressScreen extends ConsumerWidget {
         actions: [
           IconButton(
             onPressed: () {
-              ref.invalidate(cuttingBillDetailProvider(billKey));
+              ref.invalidate(cuttingBillDetailProvider(widget.billKey));
               ref.invalidate(tailoringReferenceProvider);
             },
             icon: const Icon(Icons.refresh_rounded, size: 21),
@@ -103,9 +116,8 @@ class CuttingBillProgressScreen extends ConsumerWidget {
               ],
             ),
           ),
-          error: (error, _) => _buildError(context, ref, error),
+          error: (error, _) => _buildError(context, error),
           data: (data) => _buildBody(
-            context,
             data,
             reference.value ?? TailoringReference.empty,
           ),
@@ -114,107 +126,147 @@ class CuttingBillProgressScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildBody(
-    BuildContext context,
-    CuttingBillDetail detail,
-    TailoringReference reference,
-  ) {
-    // كل قطع الفاتورة مسطّحة: سجل الحركة واحد للفاتورة كلها لا طلب لكل موديل
-    // Every piece of the bill, flattened: one movement request for the whole bill rather than
-    // one per model.
-    final pieces = <(CuttingModelItem, CuttingPieceItem)>[
+  Widget _buildBody(CuttingBillDetail detail, TailoringReference reference) {
+    // أقمشة الفاتورة كلها مسطّحة: صف لكل قطعة عبر كل الموديلات
+    // Every fabric of the bill, flattened: one row per piece across all models.
+    final fabrics = <_ProgressFabric>[
       for (final model in detail.models)
-        for (final piece in model.pieces) (model, piece),
+        for (final piece in model.pieces)
+          _ProgressFabric(
+            model: model,
+            piece: piece,
+            customerName: detail.header.custName,
+          ),
     ];
-    // سجل الحركة يُطلب بأرقام طلبات الأقمشة (OHDID) لا بأرقام الموديلات
-    // The movement log is requested by fabric order ids (OHDID), not model numbers.
-    final ohdIds = pieces
-        .map((row) => row.$2.ohdId)
-        .whereType<int>()
-        .where((n) => n > 0)
-        .toList();
+
+    // التحديد الافتراضي: أول قماش يحمل رقم طلب صالحاً (OHDID)
+    // Default choice: the first fabric carrying a valid order id (OHDID).
+    final firstValid = fabrics
+        .map((f) => f.ohdId)
+        .firstWhere((id) => id != null && id > 0, orElse: () => null);
+    final selectedOhdId = _selectedOhdId ?? firstValid;
+    _ProgressFabric? selected;
+    for (final f in fabrics) {
+      if (f.ohdId != null && f.ohdId == selectedOhdId) {
+        selected = f;
+        break;
+      }
+    }
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // _buildPrototypeBanner(),
-          // const SizedBox(height: 12),
+          // رأس الشاشة: جدول أقمشة الفاتورة بخمسة أعمدة، قابل للتحديد
+          // The header: the bill fabrics table with five columns, selectable.
           TailoringSectionCard(
-            title: 'خط سير الحالات',
+            title: 'أقمشة الفاتورة',
+            icon: Icons.dry_cleaning_rounded,
+            accent: AppColors.accentLight,
+            trailing: TailoringChip(
+              label: '${fabrics.length} قماش',
+              color: AppColors.accent,
+            ),
+            child: _FabricsFlowTable(
+              fabrics: fabrics,
+              selectedOhdId: selectedOhdId,
+              onSelected: (ohdId) => setState(() => _selectedOhdId = ohdId),
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // المخطط: سير الحالات للقماش المحدد وحده
+          // The chart: the workflow path of the selected fabric alone.
+          TailoringSectionCard(
+            title: selected == null
+                ? 'مخطط سير القماش'
+                : 'مخطط سير القماش — ${selected.clothLabel}',
             icon: Icons.route_rounded,
             accent: AppColors.warning,
-            trailing: TailoringChip(
-              label: detail.header.ordsName ?? 'الحالة',
-              value: detail.header.ordsdid == 0
-                  ? 'غير محددة'
-                  : '${detail.header.ordsdid}',
-              color: AppColors.warning,
-            ),
-            child: WorkflowStepper(
-              stages: reference.activeStages,
-              currentOrdsid: detail.header.ordsdid,
-            ),
+            trailing: selected == null
+                ? null
+                : TailoringChip(
+                    label: selected.piece.stage.label,
+                    color: _stageColor(selected.piece.stage),
+                  ),
+            child: _buildChart(selectedOhdId, reference),
           ),
           const SizedBox(height: 12),
-          TailoringSectionCard(
-            title: 'حالة القطع',
-            icon: Icons.checkroom_rounded,
-            accent: AppColors.primary,
-            trailing: TailoringChip(
-              label: '${pieces.length} قطعة',
-              color: AppColors.primary,
-            ),
-            child: _PieceStatusList(rows: pieces),
-          ),
-          const SizedBox(height: 12),
+
+          // السجل: حركة القماش المحدد (OHDID) — لا الموديل ولا الفاتورة
+          // The log: the selected fabric's movements (OHDID) — not the model, not the bill.
           ModelMovementsTable(
             model: null,
-            billNo: billKey.billNo,
-            year: billKey.year,
-            ohdIds: ohdIds,
-            title: 'سجل حركة أقمشة الفاتورة',
+            billNo: widget.billKey.billNo,
+            year: widget.billKey.year,
+            ohdId: selectedOhdId,
+            fabricName: selected?.clothLabel,
+            title: selected == null
+                ? 'سجل حركة القماش المحدد'
+                : 'سجل حركة القماش — ${selected.clothLabel}',
           ),
           const SizedBox(height: 12),
+
           _buildActionsCard(detail),
         ],
       ),
     );
   }
 
-  /// إفصاح صريح أن نقل المراحل لم يُنفَّذ بعد
-  /// A plain disclosure that the stage transition is not implemented yet.
-  // Widget _buildPrototypeBanner() {
-  //   return Container(
-  //     padding: const EdgeInsets.all(11),
-  //     decoration: BoxDecoration(
-  //       color: AppColors.warning.withValues(alpha: 0.1),
-  //       borderRadius: BorderRadius.circular(11),
-  //       border: Border.all(color: AppColors.warning.withValues(alpha: 0.35)),
-  //     ),
-  //     child: Row(
-  //       children: [
-  //         const Icon(Icons.construction_rounded, size: 18, color: AppColors.warning),
-  //         const SizedBox(width: 8),
-  //         // const Expanded(
-  //         //   child: Text(
-  //         //     'قيد التطوير — المراحل والحركات المعروضة حقيقية، أما أزرار نقل الحالة فغير مفعّلة '
-  //         //     'ولا تُكتب أي بيانات في النظام',
-  //         //     style: TextStyle(
-  //         //       fontSize: 11.5,
-  //         //       fontWeight: FontWeight.bold,
-  //         //       color: AppColors.warning,
-  //         //     ),
-  //         //   ),
-  //         // ),
-  //       ],
-  //     ),
-  //   );
-  // }
+  /// المخطط مبنيٌّ على حالة القماش المحدد: أعلى حالة reached في سجل حركته
+  /// The chart reflects the selected fabric's stage: the highest stage in its movement log.
+  Widget _buildChart(int? selectedOhdId, TailoringReference reference) {
+    if (selectedOhdId == null || selectedOhdId <= 0) {
+      return Text(
+        'اختر قماشاً من الجدول أعلاه لعرض مخطط سيره',
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textSecondary,
+        ),
+      );
+    }
 
-  /// أزرار الإجراء — معطّلة بشرح بدل تعطيل صامت
-  /// The action buttons — disabled with an explanation rather than a silent dead state.
+    final movements = ref.watch(
+      cuttingMovementsProvider(
+        CuttingMovementsKey(
+          billNo: widget.billKey.billNo,
+          year: widget.billKey.year,
+          ohdIds: [selectedOhdId],
+        ),
+      ),
+    );
+
+    // الحالة الحالية للقماش = أكبر ORDSID بين حركاته (المراحل رقمية متصاعدة)،
+    // وبيانات كل مرحلة = تاريخها ومنفّذها من سجل حركتها.
+    // The fabric's current stage = the greatest ORDSID among its movements (stages ascend), and
+    // each stage's data = its date and executor from its movement.
+    int currentOrdsid = 0;
+    final stageMeta = <int, String>{};
+    movements.maybeWhen(
+      data: (rows) {
+        for (final r in rows) {
+          if (r.ordsid > currentOrdsid) currentOrdsid = r.ordsid;
+          final info = <String>[
+            if (r.dateLabel != '—') r.dateLabel,
+            if (r.executorLabel != '—') r.executorLabel,
+          ].join(' · ');
+          if (info.isNotEmpty) stageMeta[r.ordsid] = info;
+        }
+      },
+      orElse: () {},
+    );
+
+    return WorkflowStepper(
+      stages: reference.activeStages,
+      currentOrdsid: currentOrdsid,
+      stageMeta: stageMeta,
+    );
+  }
+
+  /// أزرار الإجراء — معطّلة بشرح: نقل الحالة يحتاج مسار كتابة على الخادم لم يُنفَّذ بعد
+  /// Action buttons — disabled with an explanation: the transition needs a server write path.
   Widget _buildActionsCard(CuttingBillDetail detail) {
     return TailoringSectionCard(
       title: 'إجراءات السير',
@@ -225,9 +277,9 @@ class CuttingBillProgressScreen extends ConsumerWidget {
         children: [
           Text(
             detail.header.ordsName == null
-                ? 'الحالة الحالية غير معروفة — لا توجد حالة مُسجّلة على الفاتورة'
+                ? 'الحالة الحالية للفاتورة غير معروفة'
                 : 'الفاتورة الآن: ${detail.header.ordsName}',
-            style:  TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -262,7 +314,7 @@ class CuttingBillProgressScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildError(BuildContext context, WidgetRef ref, Object error) {
+  Widget _buildError(BuildContext context, Object error) {
     final isNotFound = error is TailoringException && error.notFoundInView;
     final message = error is TailoringException
         ? error.displayMessage
@@ -282,7 +334,7 @@ class CuttingBillProgressScreen extends ConsumerWidget {
             const SizedBox(height: 14),
             Text(
               isNotFound ? 'الفاتورة غير متاحة للمتابعة' : 'تعذّر تحميل سير الفاتورة',
-              style:  TextStyle(
+              style: TextStyle(
                 fontSize: 15.5,
                 fontWeight: FontWeight.bold,
                 color: AppColors.textPrimary,
@@ -295,11 +347,12 @@ class CuttingBillProgressScreen extends ConsumerWidget {
                         'يعرضها مصدر البيانات. الرقم قد يكون صحيحاً لكن الفاتورة خارج نطاق العرض.'
                   : message,
               textAlign: TextAlign.center,
-              style:  TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 16),
             ElevatedButton.icon(
-              onPressed: () => ref.invalidate(cuttingBillDetailProvider(billKey)),
+              onPressed: () =>
+                  ref.invalidate(cuttingBillDetailProvider(widget.billKey)),
               icon: const Icon(Icons.refresh_rounded),
               label: const Text('إعادة المحاولة'),
               style: ElevatedButton.styleFrom(
@@ -314,242 +367,234 @@ class CuttingBillProgressScreen extends ConsumerWidget {
   }
 }
 
-/// حالة كل قطعة من الـ VIEW — جدول على العريض وبطاقات على الضيق
-/// Each piece's state from the view — a table when wide, cards when narrow.
-class _PieceStatusList extends StatelessWidget {
-  final List<(CuttingModelItem, CuttingPieceItem)> rows;
+/// قماش واحد في شاشة المتابعة — يجمع بيانات الصف من الموديل والقطعة والترويسة
+/// One fabric in the progress screen — it joins the row data from the model, piece and header.
+class _ProgressFabric {
+  final CuttingModelItem model;
+  final CuttingPieceItem piece;
+  final String? customerName;
 
-  const _PieceStatusList({required this.rows});
+  const _ProgressFabric({
+    required this.model,
+    required this.piece,
+    required this.customerName,
+  });
 
-  @override
-  Widget build(BuildContext context) {
-    if (rows.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 8),
-        child: Text(
-          'لا توجد قطع في هذه الفاتورة',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-        ),
-      );
-    }
+  int? get ohdId => piece.ohdId;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildStageSummary(),
-        const SizedBox(height: 10),
-        LayoutBuilder(
-          builder: (ctx, constraints) {
-            if (constraints.maxWidth < 720) {
-              return Column(
-                children: [
-                  for (var i = 0; i < rows.length; i++)
-                    Padding(
-                      padding: EdgeInsets.only(bottom: i == rows.length - 1 ? 0 : 8),
-                      child: _PieceCard(
-                        model: rows[i].$1,
-                        piece: rows[i].$2,
-                      ),
-                    ),
-                ],
-              );
-            }
-            return _buildTable();
-          },
-        ),
-      ],
-    );
+  /// رقم الطلب — OHDID، وبغيابه رقم القطعة
+  /// The order id — OHDID, falling back to the piece number when absent.
+  String get orderLabel => piece.ohdId?.toString() ?? '${piece.seqNo1}';
+
+  /// الموديل — نوع الموديل أو رقمه
+  /// The model — its type name, or its number.
+  String get modelLabel => model.displayName;
+
+  /// العميل أو المستفيد: المستفيد إن وُجد، وإلا اسم العميل الأصلي
+  /// Customer or beneficiary: the beneficiary when present, else the original customer name.
+  String get personLabel {
+    final beneficiary = model.beneficiary?.trim();
+    if (beneficiary != null && beneficiary.isNotEmpty) return beneficiary;
+    final customer = customerName?.trim();
+    if (customer != null && customer.isNotEmpty) return customer;
+    return '—';
   }
 
-  /// ملخّص المراحل بشرائح — يعطي صورة فورية قبل قراءة الصفوف
-  /// The stage summary as chips — an instant picture before reading the rows.
-  Widget _buildStageSummary() {
-    final counts = <CuttingPieceStage, int>{};
-    for (final row in rows) {
-      counts.update(row.$2.stage, (v) => v + 1, ifAbsent: () => 1);
-    }
+  /// اسم القماش / the cloth name
+  String get clothLabel =>
+      (piece.clothName?.trim().isNotEmpty ?? false) ? piece.clothName!.trim() : '—';
 
-    return Wrap(
-      spacing: 6,
-      runSpacing: 6,
-      children: [
-        for (final stage in CuttingPieceStage.values)
-          if ((counts[stage] ?? 0) > 0)
-            TailoringChip(
-              label: stage.label,
-              value: '${counts[stage]}',
-              color: _stageColor(stage),
-            ),
-      ],
-    );
-  }
-
-  Widget _buildTable() {
-    return Table(
-      border: TableBorder.all(
-        color: AppColors.border,
-        width: 0.7,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      columnWidths: const {
-        0: FixedColumnWidth(62),
-        1: FixedColumnWidth(62),
-        2: FlexColumnWidth(2),
-        3: FlexColumnWidth(1.6),
-        4: FlexColumnWidth(1.4),
-        5: FlexColumnWidth(1.4),
-      },
-      children: [
-        TableRow(
-          decoration: const BoxDecoration(color: AppColors.surfaceSubtle),
-          children: [
-            _th('الموديل'),
-            _th('القطعة'),
-            _th('القماش'),
-            _th('المرحلة'),
-            _th('القصّاص'),
-            _th('الخيّاط'),
-          ],
-        ),
-        for (var i = 0; i < rows.length; i++)
-          TableRow(
-            decoration: BoxDecoration(
-              color: i.isEven ? Colors.white : const Color(0xFFFAFBFC),
-            ),
-            children: [
-              _td('${rows[i].$1.seqNo}'),
-              _td('${rows[i].$2.seqNo1}'),
-              _td(rows[i].$2.label),
-              _td(
-                rows[i].$2.stage.label,
-                color: _stageColor(rows[i].$2.stage),
-              ),
-              _td(rows[i].$2.cutterName ?? 'غير مسند'),
-              _td(
-                rows[i].$2.hasTailor ? rows[i].$2.tailorName! : 'غير مسند',
-                color: rows[i].$2.hasTailor ? null : AppColors.textMuted,
-              ),
-            ],
-          ),
-      ],
-    );
-  }
-
-  Widget _th(String text) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 4),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style:  TextStyle(
-          fontSize: 10.5,
-          fontWeight: FontWeight.bold,
-          color: AppColors.textSecondary,
-        ),
-      ),
-    );
-  }
-
-  Widget _td(String text, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      child: Text(
-        text,
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          fontSize: 11,
-          color: color ?? AppColors.textPrimary,
-          fontWeight: color == null ? FontWeight.normal : FontWeight.w600,
-        ),
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-      ),
-    );
+  /// اللون: النص ثم رقم اللون كما تخزّنه القاعدة
+  /// The colour: its text, else the stored colour number.
+  String get colorLabel {
+    final text = piece.colorText?.trim();
+    if (text != null && text.isNotEmpty) return text;
+    return piece.colorNo?.toString() ?? '—';
   }
 }
 
-/// بطاقة قطعة واحدة على الشاشات الضيقة
-/// One piece's card on narrow screens.
-class _PieceCard extends StatelessWidget {
-  final CuttingModelItem model;
-  final CuttingPieceItem piece;
+/// جدول أقمشة الفاتورة: خمسة أعمدة فقط، وكل صف قابل للتحديد ليقود المخطط والسجل
+/// The bill fabrics table: five columns only, and every row is selectable to drive the chart/log.
+class _FabricsFlowTable extends StatelessWidget {
+  final List<_ProgressFabric> fabrics;
+  final int? selectedOhdId;
+  final ValueChanged<int?> onSelected;
 
-  const _PieceCard({required this.model, required this.piece});
+  const _FabricsFlowTable({
+    required this.fabrics,
+    required this.selectedOhdId,
+    required this.onSelected,
+  });
+
+  // الأعمدة الخمسة المطلوبة فقط — الأوزان تُعطي رقم الطلب والموديل والشخص حيّزاً كافياً
+  // The five requested columns only — weights give the order id, model and person enough room.
+  static const List<String> _headings = [
+    'رقم الطلب',
+    'الموديل',
+    'العميل/المستفيد',
+    'اسم القماش',
+    'اللون',
+  ];
+  static const List<double> _weights = [1.7, 1.5, 2.1, 1.9, 1.1];
 
   @override
   Widget build(BuildContext context) {
-    final color = _stageColor(piece.stage);
+    if (fabrics.isEmpty) {
+      return Text(
+        'لا توجد أقمشة في هذه الفاتورة',
+        style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+      );
+    }
 
     return Container(
-      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSubtle,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: AppColors.border, width: 0.7),
+        borderRadius: BorderRadius.circular(8),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Row(
-            children: [
-              Icon(Icons.checkroom_rounded, size: 13, color: color),
-              const SizedBox(width: 5),
-              Expanded(
-                child: Text(
-                  'موديل ${model.seqNo} — قطعة ${piece.seqNo1}',
-                  style:  TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              TailoringChip(label: piece.stage.label, color: color),
-            ],
+          Container(
+            color: AppColors.surfaceSubtle,
+            child: _row(_headings, header: true),
           ),
-          const SizedBox(height: 5),
-          Text(
-            piece.label,
-            style:  TextStyle(fontSize: 11, color: AppColors.textSecondary),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 5),
-          Wrap(
-            spacing: 10,
-            runSpacing: 3,
-            children: [
-              _meta(Icons.content_cut_rounded, piece.cutterName ?? 'غير مسند'),
-              _meta(
-                Icons.local_laundry_service_outlined,
-                piece.hasTailor ? piece.tailorName! : 'غير مسند',
-              ),
-            ],
-          ),
+          for (var i = 0; i < fabrics.length; i++) ...[
+            Container(
+              height: 0.7,
+              color: AppColors.border.withValues(alpha: 0.9),
+            ),
+            _FabricRow(
+              fabric: fabrics[i],
+              selected: fabrics[i].ohdId != null &&
+                  fabrics[i].ohdId == selectedOhdId,
+              onTap: () => onSelected(fabrics[i].ohdId),
+              cells: [
+                fabrics[i].orderLabel,
+                fabrics[i].modelLabel,
+                fabrics[i].personLabel,
+                fabrics[i].clothLabel,
+                fabrics[i].colorLabel,
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _meta(IconData icon, String text) {
+  /// صف بأعمدة مرنة — كل قيمة في سطر واحد داخل تصغير تلقائي فلا التفاف ولا قصّ
+  /// A flex-column row — every value on one line inside automatic scaling, so nothing wraps or cuts.
+  Widget _row(List<String> cells, {bool header = false}) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Icon(icon, size: 11, color: AppColors.textMuted),
-        const SizedBox(width: 3),
-        Text(
-          text,
-          style:  TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
-        ),
+        for (var i = 0; i < cells.length; i++)
+          Expanded(
+            flex: (_weights[i] * 100).round(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 6),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Text(
+                  cells[i],
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  textAlign: TextAlign.center,
+                  style: header
+                      ? TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textSecondary,
+                        )
+                      : TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                ),
+              ),
+            ),
+          ),
       ],
     );
   }
 }
 
-/// لون المرحلة — يتدرّج من الرمادي إلى الأخضر بحسب تقدّم القطعة
-/// The stage colour — from grey to green as the piece advances.
+/// صف قماش قابل للضغط مع تمييز التحديد
+/// A tappable fabric row with a selection highlight.
+class _FabricRow extends StatelessWidget {
+  final _ProgressFabric fabric;
+  final bool selected;
+  final VoidCallback onTap;
+  final List<String> cells;
+
+  const _FabricRow({
+    required this.fabric,
+    required this.selected,
+    required this.onTap,
+    required this.cells,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected
+          ? AppColors.primary.withValues(alpha: 0.08)
+          : AppColors.surface,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          decoration: selected
+              ? BoxDecoration(
+                  // إطار يوضّح القماش المحدد دون الاعتماد على اللون وحده
+                  // A border marks the chosen fabric without relying on colour alone.
+                  border: Border.all(color: AppColors.primary, width: 1.4),
+                  color: AppColors.primary.withValues(alpha: 0.06),
+                )
+              : null,
+          child: _rowContent(),
+        ),
+      ),
+    );
+  }
+
+  Widget _rowContent() {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (var i = 0; i < cells.length; i++)
+          Expanded(
+            flex: (_FabricsFlowTable._weights[i] * 100).round(),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.center,
+                child: Text(
+                  cells[i],
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+                    color: selected ? AppColors.primary : AppColors.textPrimary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// لون المرحلة — يتدرّج من الرمادي إلى الأخضر بحسب تقدّم القماش
+/// The stage colour — grey to green as the fabric advances.
 Color _stageColor(CuttingPieceStage stage) {
   return switch (stage) {
     CuttingPieceStage.waiting => AppColors.textMuted,
@@ -571,9 +616,9 @@ class _NoProgressGrant extends StatelessWidget {
         padding: const EdgeInsets.all(26),
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children:  [
+          children: [
             Icon(Icons.lock_outline_rounded, size: 48, color: AppColors.textMuted),
-            SizedBox(height: 12),
+            const SizedBox(height: 12),
             Text(
               'لا تملك صلاحية متابعة سير فواتير التفصيل',
               textAlign: TextAlign.center,
@@ -583,7 +628,7 @@ class _NoProgressGrant extends StatelessWidget {
                 color: AppColors.textPrimary,
               ),
             ),
-            SizedBox(height: 4),
+            const SizedBox(height: 4),
             Text(
               'راجع مدير النظام لمنحك صلاحية «متابعة سير فاتورة التفصيل»',
               textAlign: TextAlign.center,

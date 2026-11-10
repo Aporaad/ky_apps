@@ -353,11 +353,10 @@ class _ItemMovementScreenState extends ConsumerState<ItemMovementScreen> {
         itemName: widget.itemName,
         branchLabel: _branchLabel,
         rangeText: _rangeText,
-        rows: data.rows,
-        qtyIn: data.qtyIn,
-        qtyOut: data.qtyOut,
-        netQty: data.netQty,
-        totalValue: data.value,
+        // الكشف كاملاً هو المصدر: الجدول والشريط يقرآن نفس النسخة فلا يتفارق الورق
+        // The statement itself is the source: table and strip read one copy, so the paper
+        // cannot drift from the screen.
+        statement: data,
         // المطبوع نسخة مما على الشاشة، لا جدولاً ثانيًا كُتب بيد أخرى
         // The print is a copy of the screen, not a second table written by another hand.
         columnIds: _columnIds(),

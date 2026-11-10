@@ -216,6 +216,51 @@ class StoreReportFilter {
 
   bool get isValid => !from.isAfter(to);
 
+  /// كشف حركة صنف رئيسي — نفس قالب «تقارير المخازن» يفتح مباشرة بمعطياته
+  /// A main-item movement statement — the very stores-reports template, opened with its params.
+  ///
+  /// ── لماذا مصنع هنا لا وسيط في الشاشة؟ لأن المعطيات هي التقرير نفسه: نطاق صنف مقيد
+  ///    بصنفه، والمدى الافتراضي للتقرير (٣٠ يوماً) يبقى «غير مخصص» حتى لا يُطبع في العنوان
+  ///    كان المستخدم اختاره.
+  /// ── Why a factory rather than screen flags? The parameters *are* the report: an item scope
+  ///    bound to its item, and the report's own default 30-day window stays "not customised"
+  ///    so the title never prints a range nobody picked.
+  factory StoreReportFilter.forItemStatement({
+    required int sanfNo,
+    required String itemName,
+  }) {
+    final now = DateTime.now();
+
+    return StoreReportFilter(
+      kind: StoreReportKind.movement,
+      scope: StoreReportScope.item,
+      from: now.subtract(const Duration(days: 30)),
+      to: now,
+      sanfNo: sanfNo,
+      sanfName: itemName,
+    );
+  }
+
+  /// كشف حركة صنف فرعي — نطاق فرع مقيد بفرعه، والعنوان يسمّي الفرع نفسه
+  /// A sub-item (branch) statement — a branch scope bound to that branch, titled by the branch.
+  factory StoreReportFilter.forBranchStatement({
+    required int sanfNo,
+    required int sanfDno,
+    required String branchLabel,
+  }) {
+    final now = DateTime.now();
+
+    return StoreReportFilter(
+      kind: StoreReportKind.movement,
+      scope: StoreReportScope.branch,
+      from: now.subtract(const Duration(days: 30)),
+      to: now,
+      sanfNo: sanfNo,
+      sanfDno: sanfDno,
+      sanfDnoLabel: branchLabel,
+    );
+  }
+
   StoreReportFilter copyWith({
     StoreReportKind? kind,
     StoreReportScope? scope,

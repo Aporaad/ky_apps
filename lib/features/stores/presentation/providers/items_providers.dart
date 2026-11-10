@@ -209,10 +209,16 @@ class ItemsListNotifier extends Notifier<ItemsListState> {
     return load();
   }
 
-  Future<void> sortBy(String field) async {
-    final ascending = state.sort == field ? state.dir == 'asc' : true;
+  Future<void> sortBy(String field, String dir) async {
+    state = state.copyWith(sort: field, dir: dir);
 
-    state = state.copyWith(sort: field, dir: ascending ? 'asc' : 'desc');
+    return load();
+  }
+
+  /// تبديل الاتجاه دون تغيير الحقل — يستخدمه زر «تصاعدي/تنازلي» في ورقة الترتيب
+  /// Toggle direction without changing the field — used by the direction button in the sheet.
+  Future<void> toggleSortDir() async {
+    state = state.copyWith(dir: state.dir == 'asc' ? 'desc' : 'asc');
 
     return load();
   }
@@ -376,6 +382,8 @@ class SubItemsListState {
     this.groupNo,
     this.typeNo,
     this.active = 'all',
+    this.sort = 'parent',
+    this.dir = 'asc',
     this.page = 1,
     this.pages = 1,
     this.total = 0,
@@ -388,6 +396,8 @@ class SubItemsListState {
   final int? groupNo;
   final int? typeNo;
   final String active;
+  final String sort;
+  final String dir;
   final int page;
   final int pages;
   final int total;
@@ -409,6 +419,8 @@ class SubItemsListState {
     int? groupNo,
     int? typeNo,
     String? active,
+    String? sort,
+    String? dir,
     int? page,
     int? pages,
     int? total,
@@ -424,6 +436,8 @@ class SubItemsListState {
       groupNo: clearGroup ? null : groupNo ?? this.groupNo,
       typeNo: clearType ? null : typeNo ?? this.typeNo,
       active: active ?? this.active,
+      sort: sort ?? this.sort,
+      dir: dir ?? this.dir,
       page: page ?? this.page,
       pages: pages ?? this.pages,
       total: total ?? this.total,
@@ -464,6 +478,8 @@ class SubItemsListNotifier extends Notifier<SubItemsListState> {
         groupNo: state.groupNo,
         typeNo: state.typeNo,
         active: state.active,
+        sort: state.sort,
+        dir: state.dir,
         cancelToken: _cancelToken,
       );
 
@@ -504,6 +520,20 @@ class SubItemsListNotifier extends Notifier<SubItemsListState> {
       clearGroup: clearGroup,
       clearType: clearGroup ? true : clearType,
     );
+
+    return load();
+  }
+
+  Future<void> sortBy(String field, String dir) async {
+    state = state.copyWith(sort: field, dir: dir);
+
+    return load();
+  }
+
+  /// تبديل الاتجاه دون تغيير الحقل
+  /// Toggle direction without changing the field.
+  Future<void> toggleSortDir() async {
+    state = state.copyWith(dir: state.dir == 'asc' ? 'desc' : 'asc');
 
     return load();
   }

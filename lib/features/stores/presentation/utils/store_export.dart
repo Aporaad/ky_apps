@@ -11,11 +11,13 @@ import 'package:share_plus/share_plus.dart';
 import '../../../../core/utils/report_letterhead_info.dart';
 import '../../../../core/utils/report_pdf_arabic.dart';
 import '../../../../core/utils/report_pdf_fonts.dart';
+import '../../../../core/utils/report_pdf_grid.dart';
 import '../../../../core/utils/report_pdf_letterhead.dart';
 import '../../../../core/utils/report_pdf_page.dart';
 import '../../data/models/order_model.dart';
 import '../../data/models/report_model.dart';
 import '../../data/models/store_reference.dart';
+import '../../data/repositories/store_result.dart';
 import '../widgets/store_ui.dart';
 import 'report_columns.dart';
 import 'report_parameters.dart';
@@ -78,6 +80,36 @@ class StoreExporter {
         '${now.minute.toString().padLeft(2, '0')}';
   }
 }
+
+/// الورق طولي A4 كما في مستندات المخزن — لا أفقي
+/// The sheet is portrait A4, like the stock documents — never landscape.
+///
+/// ── كانت صفحة التقرير أفقية (842×595) والطابعة/المعاينة ورقها طولي، فتُصغَّر
+///    الصفحة إلى عرض الورقة ويصير ارتفاعها 420 نقطة من 842: نصف الورقة محتوى
+///    ونصفها بياض، والبقية تُدفع إلى صفحة تالية — وهو عطل «التقرير في نص الصفحة».
+///    حين يطابق مقاس الصفحة مقاس الورقة يمتلئ الورق من أوله إلى آخره.
+/// ── The report page was landscape (842×595) while the printer/preview paper is portrait, so
+///    the sheet was scaled down to the paper's width and became 420 pt of an 842 pt page:
+///    half content, half blank, the rest pushed to another page. Matching the page size to
+///    the paper is what fills the sheet.
+const double _reportSideMargin = 16;
+
+/// هامش صفحة التقرير: ضيّق على الجانبين لتأخذ الأعمدة نصيبها، وأعرض أعلاها للترويسة
+/// The report page margin: narrow at the sides so columns get their share, taller on top
+/// for the letterhead.
+const pw.EdgeInsets _reportPageMargin = pw.EdgeInsets.fromLTRB(
+  _reportSideMargin,
+  20,
+  _reportSideMargin,
+  16,
+);
+
+/// العرض المتاح للمحتوى — منه تُحسب عروض الأعمدة، فلا تُقاس الخانات على عرضٍ
+/// وتُطبع على عرضٍ غيره
+/// The width left for content — column widths are computed from it, so nothing is measured
+/// on one width and printed on another.
+double get _reportContentWidth =>
+    pdfGridContentWidth(PdfPageFormat.a4, sideMargin: _reportSideMargin);
 
 /// مولّد PDF لمستند مخزني — نسخة طبق الأصل من قالب «استعراض التوريد»
 /// The stock-document PDF — a faithful replica of the receive-invoice template.
@@ -436,9 +468,10 @@ Future<Uint8List> buildStoreReportPdf({
   StoreReference? reference,
   required List<StockMovementRow> movementRows,
   required List<StockSummaryRow> summaryRows,
-  required double totalIn,
-  required double totalOut,
-  required double totalValue,
+  /// إحصاء التقرير نفسه — نفس مصدر شريط الشاشة، فلا يلفظ الورق لفظاً غيره
+  /// The report's own statistics — the screen strip's very source, so paper cannot word
+  /// them differently.
+  required ReportStats stats,
   List<String>? columnIds,
   List<String>? statIds,
   /// أقسام التقرير الموسّع بترتيبها — فارغة في التقرير المسطّح
@@ -457,12 +490,22 @@ Future<Uint8List> buildStoreReportPdf({
   final doc = pw.Document(theme: theme);
   final logo = await loadPdfLetterheadLogo(height: 46);
   final isMovement = filter.kind == StoreReportKind.movement;
-  final count = isMovement ? movementRows.length : summaryRows.length;
   final title = ReportTitles.of(filter, reference: reference);
+
+  // العرض المتاح بعد هامشي الورقة: هو المقياس الذي تُحسب عليه كل الخانات
+  // The width left after the margins — the measure every cell is computed on.
+  final width = _reportContentWidth;
 
   /// هل يبقى حقل الإحصاء هذا في المطبوع؟ نفس معرّفات نافذة الأعمدة
   /// Whether this statistic survives into the printout — the columns sheet's own ids.
   bool on(String id) => statIds == null || statIds.contains(id);
+
+  // عنوان الشريط كما على الشاشة تماماً: في التقرير الموسّع إجمالي كل الأقسام
+  // The strip's caption exactly as the screen words it: in a sectioned report it totals
+  // every section.
+  final statsTitle = isMovement && sections.isNotEmpty
+      ? 'إحصاءات التقرير — إجمالي كل ${filter.scope.sectionPlural}'
+      : 'إحصاءات التقرير';
 
   final movementColumns = _movementColumns(columnIds);
   final summaryColumns = _summaryColumns(filter.groupBy, columnIds);
@@ -474,8 +517,8 @@ Future<Uint8List> buildStoreReportPdf({
       // Explicit page ceiling: the package default (20 pages per single widget) aborted
       // large store reports, so nothing was printed or exported at all.
       maxPages: kReportPdfMaxPages,
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20),
+      pageFormat: PdfPageFormat.a4,
+      margin: _reportPageMargin,
       textDirection: pw.TextDirection.rtl,
       header: (context) => buildReportPdfHeader(
         letterhead: letterhead,
@@ -500,46 +543,39 @@ Future<Uint8List> buildStoreReportPdf({
               '${filter.scope.sectionLabel}: ${section.label}',
               '${section.rows.length} حركة',
             ),
-            ..._reportPdfBlocks<StockMovementRow>(
-              movementColumns,
-              section.rows,
-              ReportTotals.movement(section.rows),
-              on('opening') ? ReportTotals.opening(section.stats) : null,
+            buildStoreReportGrid<StockMovementRow>(
+              columns: movementColumns,
+              rows: section.rows,
+              totals: ReportTotals.movement(section.rows),
+              opening: on('opening')
+                  ? ReportTotals.opening(section.stats)
+                  : null,
+              width: width,
             ),
             pw.SizedBox(height: 2),
-            _pdfSectionStats(
-              // 'إحصاءات ${filter.scope.sectionLabel}',
-              '',
-              section.stats,
-              statIds,
-            ),
+            _pdfSectionStats(section.stats, statIds),
             pw.SizedBox(height: 10),
           ]
         else if (isMovement)
-          ..._reportPdfBlocks<StockMovementRow>(
-            movementColumns,
-            movementRows,
-            ReportTotals.movement(movementRows),
-            on('opening') ? opening : null,
+          buildStoreReportGrid<StockMovementRow>(
+            columns: movementColumns,
+            rows: movementRows,
+            totals: ReportTotals.movement(movementRows),
+            opening: on('opening') ? opening : null,
+            width: width,
           )
         else
-          ..._reportPdfBlocks<StockSummaryRow>(
-            summaryColumns,
-            summaryRows,
-            ReportTotals.summary(summaryRows),
+          buildStoreReportGrid<StockSummaryRow>(
+            columns: summaryColumns,
+            rows: summaryRows,
+            totals: ReportTotals.summary(summaryRows),
+            width: width,
           ),
         pw.SizedBox(height: 10),
         // 4) ملخص الجدول بعد المتن لا قبله، وبالحقول التي أبقاها المستخدم فقط
         // 4) the table summary, after the body rather than stealing its place, carrying only
         //    the fields the user kept.
-        _reportTotalsStrip(
-          filter,
-          count,
-          totalIn,
-          totalOut,
-          totalValue,
-          statIds,
-        ),
+        _reportStatsStrip(statsTitle, stats, statIds),
         pw.SizedBox(height: 12),
         // 5) التذييل الرسمي — مخازن: أمين المخزن
         // 5) the official footer — stores: the storekeeper's slot.
@@ -607,217 +643,133 @@ pw.Widget _reportTitleLines(ReportTitle title) {
   );
 }
 
-/// سطر المجاميع في المطبوع — بالحقول التي أبقاها المستخدم فقط
-/// The printout's totals line — only the fields the user kept.
+/// شريط إحصاءات المطبوع — خانات مثل الشاشة حرفياً: نفس الحقول ونفس الألفاظ
+/// The printout's statistics strip — the screen's chips literally: same fields, same wording.
 ///
-/// ── نفس معرّفات نافذة الأعمدة: إخفاء «المنصرف» على الشاشة ثم رؤيته مطبوعاً يهدم الثقة
-///    في المستند أكثر من أي خطأ تنسيق.
-/// ── The same ids the columns sheet uses: hiding "outbound" on screen then seeing it printed
-///    destroys trust in the document more than any layout mistake.
-pw.Widget _reportTotalsStrip(
-  StoreReportFilter filter,
-  int count,
-  double totalIn,
-  double totalOut,
-  double totalValue,
-  List<String>? statIds,
-) {
-  bool on(String id) => statIds == null || statIds.contains(id);
-
-  final parts = <String>[
-    if (on('rows')) 'عدد السطور $count',
-    if (on('in')) 'وارد ${StoreFormat.qty(totalIn)}',
-    if (on('out')) 'صادر ${StoreFormat.qty(totalOut)}',
-    if (on('net')) 'الصافي ${StoreFormat.qty(totalIn - totalOut)}',
-    // «القيمة» في المطبوع تجيب عن قيمة الحركة وعن قيمة الرصيد معاً
-    // The PDF's value answers both the movement's value and the balance's value.
-    if (on('value') || on('closingValue'))
-      'القيمة ${StoreFormat.money(totalValue)}',
-  ];
-
-  if (parts.isEmpty) return pw.SizedBox.shrink();
-
-  return pw.Text(
-    pdfArabic(parts.join(' · ')),
-    textDirection: kPdfShapedTextDirection,
-    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+/// ── كان سطراً واحداً بصياغة أخرى («صادر» حيث تقرأ الشاشة «المنصرف»): ورقة لا تطابق
+///    الشاشة في اللفظ لا يُطمأن إلى أرقامها مهما حسُن إطارها.
+/// ── It used to be one differently worded sentence («صادر» where the screen reads
+///    «المنصرف»); a sheet that disagrees with the screen in wording makes its own figures
+///    suspect, however tidy its frame.
+pw.Widget _reportStatsStrip(String title, ReportStats stats, List<String>? statIds) {
+  return pdfStatsStrip(
+    title: title,
+    fields: _statBoxes(
+      ReportStatFields.visible(ReportStatFields.of(stats), statIds),
+    ),
   );
 }
 
-/// جدول الأعمدة المختارة — بأسماء معكوسة لـ RTL كما في كل تقارير القسم
-/// The chosen-column table, reversed for RTL like every other report in the module.
+/// حقول الشاشة جاهزة للخانات — عنوان وقيمة ولون بلا أي ترجمة ثانية
+/// The screen's fields turned into print boxes — caption, value and colour, never a second
+/// translation of any of them.
+List<PdfStatBox> _statBoxes(List<ReportStatField> fields) {
+  return [
+    for (final field in fields)
+      PdfStatBox(
+        field.label,
+        field.value,
+        tone: field.color,
+        emphasis: field.emphasis,
+      ),
+  ];
+}
+
+/// جدول التقرير في المطبوع — `pw.Table` واحدة برأس واحد وسطر واحد لكل خانة
+/// The report's print table — ONE `pw.Table`, one head, one line per cell.
 ///
 /// ── `<T>` وليس `Object`: قارئ العمود دالة تستقبل صف نوعها، وإمحاء النوع يرمي
 ///    `is not a subtype` عند أول خلية تُبنى في الملف.
 /// ── `<T>`, not `Object`: a column's reader takes its own row type, and erasing it throws
 ///    "is not a subtype" on the first cell the document builds.
-/// ── السطور تُوزَّع على الصفحات مع تكرار رأس الجدول في كل صفحة: جدول واحد طويل
-///    يتقطع بلا عنوان يجعل الصفحة الثانية من المطبوع مجهولة الأعمدة لمن يمسك الورقة.
-/// ── Rows are spread over the pages with the table head repeated on each: one endless table
-///    sliced bare leaves the second page of a printout with unknown columns for whoever holds
-///    the paper.
-
-/// كتل الجدول الملقاة على صفحات المستند — رأس + دفعة صفوف لكل صفحة
-/// The table blocks laid over the document's pages — a head plus a row batch per page.
-List<pw.Widget> _reportPdfBlocks<T>(
-  List<ReportColumn<T>> columns,
-  List<T> rows, [
-    Map<String, String>? totals,
-    Map<String, String>? opening,
-  ]
-) {
+///
+/// ── الأعمدة تُعكس لأن `pw.Table` يرسم أبناءه يساراً→يمين دائماً، فيقع أول عمود
+///    منطقياً (النوع/السند) أقصى اليمين كما على الشاشة.
+/// ── Columns are reversed because `pw.Table` always draws children left→right: the first
+///    logical column lands at the far right, exactly where the screen puts it.
+/// عامة لا خاصة: الاختبار يقرأ بنية الجدول من هنا، وشبكة بلا اختبار هي ما جعل
+/// عطل «الرأس في كل صفحة» يعيش دورات كاملة بلا كاشف
+/// Public on purpose: the test reads this table's structure through this function, and an
+/// untested grid is why the repeated-head defect survived whole rounds undetected.
+pw.Table buildStoreReportGrid<T>({
+  required List<ReportColumn<T>> columns,
+  required List<T> rows,
+  required double width,
+  Map<String, String>? totals,
+  Map<String, String>? opening,
+}) {
   final ordered = columns.reversed.toList(growable: false);
-  final widths = {
-    for (int i = 0; i < ordered.length; i++)
-      i: pw.FlexColumnWidth(ordered[i].weight),
-  };
 
-  // تقديري محافظ: إن تجاوزت الكتلة صفحة امتدّت `pw.Table` نفسها فلا يفقد صف
-  // A conservative estimate: should a block overrun a page, pw.Table spans on its own,
-  // so no row is ever lost.
-  const perPage = 30;
-
-  // سطر الافتتاح يُحسب مرة: الكلمة في أول عمود لا رقم له، وهكذا في الشاشة والمطبوع
-  // The opening line is resolved once: the word in the first column with no figure, the same
-  // rule the screen follows.
-  pw.TableRow? openingRow() {
-    if (opening == null) return null;
-
-    final texts = <String>[];
-    var labelled = false;
-
-    for (final column in ordered) {
-      final figure = (opening[column.id] ?? '').trim();
-
-      if (figure.isEmpty && !labelled) {
-        labelled = true;
-        texts.add('رصيد سابق');
-      } else {
-        texts.add(figure);
-      }
-    }
-
-    return pw.TableRow(
-      children: [
-        for (int i = 0; i < ordered.length; i++)
-          pw.Container(
-            color: ReportPdfColors.border,
-            padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-            child: pw.Text(
-              pdfArabic(texts[i]),
-              textDirection: kPdfShapedTextDirection,
-              textAlign: ordered[i].numeric
-                  ? pw.TextAlign.left
-                  : pw.TextAlign.right,
-              style: pw.TextStyle(
-                fontSize: 7.5,
-                fontWeight: pw.FontWeight.bold,
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-
-  List<pw.Widget> headAndRows() {
-    final blocks = <pw.Widget>[];
-    final first = openingRow();
-
-    if (rows.isEmpty) {
-      blocks.add(
-        pw.Table(
-          border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
-          columnWidths: widths,
-          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-          children: [_pdfHeadRow(ordered), if (first != null) first],
+  return pdfReportGrid(
+    columns: [
+      for (final column in ordered)
+        PdfGridColumn(
+          label: column.label,
+          numeric: column.numeric,
+          weight: column.weight,
         ),
-      );
-
-      return blocks;
-    }
-
-    for (int start = 0; start < rows.length; start += perPage) {
-      final end = start + perPage > rows.length ? rows.length : start + perPage;
-
-      blocks.add(
-        pw.Table(
-          border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
-          columnWidths: widths,
-          defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-          children: [
-            _pdfHeadRow(ordered),
-            // الافتتاح يلتصق بالرأس في أول كتلة فقط: هو نقطة بداية الجدول لا رأس كل صفحة
-            // The opening sticks to the head of the first block only: it opens the table, not
-            // every page.
-            if (start == 0 && first != null) first,
-            for (int index = start; index < end; index++)
-              pw.TableRow(
-                children: [
-                  for (final column in ordered)
-                    pw.Padding(
-                      padding: const pw.EdgeInsets.symmetric(
-                        horizontal: 2,
-                        vertical: 2,
-                      ),
-                      child: pw.Text(
-                        pdfArabic(column.read(rows[index], index)),
-                        textDirection: kPdfShapedTextDirection,
-                        textAlign: column.numeric
-                            ? pw.TextAlign.left
-                            : pw.TextAlign.right,
-                        style: const pw.TextStyle(fontSize: 7),
-                      ),
-                    ),
-                ],
-              ),
-          ],
-        ),
-      );
-    }
-
-    return blocks;
-  }
-
-  final blocks = headAndRows();
-
-  // الملخص مكوّن مستقل بعد الجدول، فلا سطر مجاميع داخله يكرره
-  // The summary is its own component after the table, so no totals row repeats it inside.
-  if (totals != null) {
-    blocks.add(
-      pw.Table(
-        border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
-        columnWidths: widths,
-        defaultVerticalAlignment: pw.TableCellVerticalAlignment.middle,
-        children: [
-          pw.TableRow(
-            children: [
-              for (final column in ordered)
-                pw.Container(
-                  color: ReportPdfColors.headerBg,
-                  padding: const pw.EdgeInsets.symmetric(
-                    horizontal: 2,
-                    vertical: 3,
-                  ),
-                  child: pw.Text(
-                    pdfArabic(totals[column.id] ?? ''),
-                    textDirection: kPdfShapedTextDirection,
-                    textAlign: column.numeric
-                        ? pw.TextAlign.left
-                        : pw.TextAlign.right,
-                    style: pw.TextStyle(
-                      fontSize: 7.5,
-                      fontWeight: pw.FontWeight.bold,
-                    ),
-                  ),
-                ),
-            ],
-          ),
+    ],
+    // السطور نصاً جاهزاً: نفس ما يقرأه العمود على الشاشة بلا صيغة ثانية
+    // Rows as display text: the very string the column reads on screen, no second format.
+    rows: [
+      for (int index = 0; index < rows.length; index++)
+        [
+          for (final column in ordered) column.read(rows[index], index),
         ],
-      ),
-    );
+    ],
+    opening: opening == null ? null : _bandCells(ordered, opening, 'رصيد سابق'),
+    totals: totals == null ? null : _bandCells(ordered, totals, 'الإجمالي'),
+    width: width,
+  );
+}
+
+/// بناء شبكة من أعمدة منطقية (أولها أقصى اليمين) — العكس الذي يطلبه `pw.Table` داخلي
+/// Builds a grid from LOGICAL columns (the first sits at the far right); the reversal
+/// `pw.Table` needs stays internal, so a caption can never land over another column's values.
+///
+/// ── كان كشف الجرد ينعكس رؤوسه وحده فتُقرأ قيمته تحت عنوان عمود آخر؛ الترتيب المنطقي
+///    واحد للعناوين والقيم يستحيل معه هذا الانزياح.
+/// ── The stocktake sheet used to reverse only its headers, printing each figure under another
+///    column's caption; one logical order for captions and values makes that shift impossible.
+pw.Widget _pdfGridFromLogical({
+  required List<PdfGridColumn> columns,
+  required List<List<String>> rows,
+  required double width,
+}) {
+  return pdfReportGrid(
+    columns: columns.reversed.toList(growable: false),
+    rows: [
+      for (final row in rows) row.reversed.toList(growable: false),
+    ],
+    width: width,
+  );
+}
+
+/// قيم شريط (الافتتاح أو المجاميع) بترتيب الأعمدة المعروض — أول خانة بلا رقم تحمل الاسم
+/// A band's figures in display order — the first column without a figure carries the label.
+///
+/// ── قاعدة الشاشة نفسها: الكلمة لا تُضاف عموداً زائداً، والرقم يبقى في عموده
+/// ── The screen's own rule: the word never adds a column, and the figure stays in its own.
+List<String> _bandCells<T>(
+  List<ReportColumn<T>> ordered,
+  Map<String, String> figures,
+  String label,
+) {
+  final cells = <String>[];
+  var labelled = false;
+
+  for (final column in ordered) {
+    final figure = (figures[column.id] ?? '').trim();
+
+    if (figure.isEmpty && !labelled) {
+      labelled = true;
+      cells.add(label);
+    } else {
+      cells.add(figure);
+    }
   }
 
-  return blocks;
+  return cells;
 }
 
 /// عنوان قسم في المطبوع — يحمل اسم وحدة القسم (الصنف الفرعي / الرئيسي / المجموعة الفرعية)
@@ -828,56 +780,52 @@ List<pw.Widget> _reportPdfBlocks<T>(
 /// ── Without it the sections merge into one continuous table on paper: the reader cannot tell
 ///    where a branch ended and another began — the one difference between these four reports.
 pw.Widget _pdfSectionHeading(String label, String count) {
+  const palette = PdfGridPalette();
+
   return pw.Container(
-    color: ReportPdfColors.headerBg,
-    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+    // نفس شريط الشاشة: أساسي فاتر وعنوان بلون السمة وعدد باهت — بلا ذهبي ثقيل
+    // The screen's own band: a pale primary ground, a themed caption and a muted count.
+    color: palette.sectionBand,
+    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2.5),
     child: pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
         pw.Text(
           pdfArabic(label),
           textDirection: kPdfShapedTextDirection,
-          style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+          style: pw.TextStyle(
+            fontSize: 8.5,
+            fontWeight: pw.FontWeight.bold,
+            color: palette.headText,
+          ),
         ),
         pw.Text(
           pdfArabic(count),
           textDirection: kPdfShapedTextDirection,
-          style: const pw.TextStyle(fontSize: 8),
+          style: pw.TextStyle(fontSize: 7.5, color: palette.muted),
         ),
       ],
     ),
   );
 }
 
-/// إحصاء القسم في المطبوع — سطر واحد رقيق يُغلق ذيل جدول القسم
-/// A section's statistics in the printout — one thin line closing that section's table foot.
+/// إحصاء القسم في المطبوع — سطر واحد رقيق يُغلق ذيل جدول القسم، بخانات الشاشة نفسها
+/// A section's statistics in the printout — one thin line closing that section's table foot,
+/// drawn with the screen's own fields.
 ///
 /// ── نفس حقول الشاشة ومعرّفاتها: حقل أخفاه المستخدم لا يظهر في الورق
 /// ── The screen's own fields under the same ids: a field the user hid never reaches paper.
 ///
-/// ── أربعة أرقام لا ستة: إحصاء القسم يجيب «من أين بدأ وأين انتهى وكم تحرّك»، ولا يعيد
+/// ── أربعة أرقام لا تسعة: إحصاء القسم يجيب «من أين بدأ وأين انتهى وكم تحرّك»، ولا يعيد
 ///    إحصاء التقرير كاملاً في ذيل كل فرع.
-/// ── Four figures, not six: a section answers "where it began, where it ended, how much
+/// ── Four figures, not nine: a section answers "where it began, where it ended, how much
 ///    moved", and does not repeat the report summary under every branch.
-pw.Widget _pdfSectionStats(
-  String title,
-  ReportStats stats,
-  List<String>? statIds,
-) {
-  final line = sectionStatsLine(stats, statIds);
-
-  if (line.isEmpty) return pw.SizedBox.shrink();
-
-  return pw.Container(
-    width: double.infinity,
-    color: ReportPdfColors.rowStripe,
-    padding: const pw.EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-    child: pw.Text(
-      // العنوان قبل الأرقام كما على الشاشة: الكلمتان نفسهما في الموضع نفسه
-      // The caption precedes the figures exactly as on screen: the same words in the same place.
-      pdfArabic('$title: $line'),
-      textDirection: kPdfShapedTextDirection,
-      style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
+pw.Widget _pdfSectionStats(ReportStats stats, List<String>? statIds) {
+  return pdfStatsStrip(
+    title: '',
+    compact: true,
+    fields: _statBoxes(
+      ReportStatFields.visible(ReportStatFields.section(stats), statIds),
     ),
   );
 }
@@ -904,30 +852,6 @@ String sectionStatsLine(ReportStats stats, List<String>? statIds) {
   ];
 
   return parts.join(' · ');
-}
-
-/// صف رأس الجدول في الـ PDF — يُستخدم في كل صفحة على حدة
-/// The PDF table head row, used on each page separately.
-pw.TableRow _pdfHeadRow<T>(List<ReportColumn<T>> ordered) {
-  return pw.TableRow(
-    children: [
-      for (final column in ordered)
-        pw.Container(
-          color: ReportPdfColors.headerBg,
-          padding: const pw.EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-          child: pw.Text(
-            pdfArabic(column.label),
-            textDirection: kPdfShapedTextDirection,
-            textAlign: column.numeric
-                ? pw.TextAlign.center
-                : pw.TextAlign.right,
-            // `pw.FontWeight.bold` ليس ثابتاً في هذه النسخة من الحزمة
-            // `pw.FontWeight.bold` is not a compile-time constant in this pdf version.
-            style: pw.TextStyle(fontSize: 7.5, fontWeight: pw.FontWeight.bold),
-          ),
-        ),
-    ],
-  );
 }
 
 /// مولّد XLSX لتقرير المخازن — ورقة السطور وورقة المعطيات والمجاميع
@@ -1127,6 +1051,10 @@ Future<Uint8List> buildStoreOrderListPdf({
   final totalNet = orders.fold<double>(0, (sum, order) => sum + order.net);
   final totalLines = orders.fold<int>(0, (sum, order) => sum + order.lines);
 
+  // العرض المتاح بعد هامشي الورقة — مقياس الخانات جميعاً
+  // The width left after the margins — the measure of every cell.
+  final width = _reportContentWidth;
+
   doc.addPage(
     pw.MultiPage(
       // سقف الصفحات الصريح: سقف الحزمة الافتراضي (20 صفحة للعنصر الواحد) كان يُسقط
@@ -1134,8 +1062,8 @@ Future<Uint8List> buildStoreOrderListPdf({
       // Explicit page ceiling: the package default (20 pages per single widget) aborted
       // large store reports, so nothing was printed or exported at all.
       maxPages: kReportPdfMaxPages,
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20),
+      pageFormat: PdfPageFormat.a4,
+      margin: _reportPageMargin,
       textDirection: pw.TextDirection.rtl,
       header: (context) => buildReportPdfHeader(
         letterhead: letterhead,
@@ -1157,38 +1085,25 @@ Future<Uint8List> buildStoreOrderListPdf({
       ),
       footer: (context) => buildReportPdfFooter(context),
       build: (context) => [
-        pw.TableHelper.fromTextArray(
-          border: pw.TableBorder.all(
-            color: ReportPdfColors.border,
-            width: 0.4,
-          ),
-          headerDecoration: const pw.BoxDecoration(
-            color: ReportPdfColors.headerBg,
-          ),
-          headerStyle: pw.TextStyle(
-            fontSize: 8,
-            fontWeight: pw.FontWeight.bold,
-          ),
-          cellStyle: const pw.TextStyle(fontSize: 7.5),
-          // ── اتجاه صريح: النص مُشكَّل مسبقاً بـ`pdfArabic`، ووراثة rtl تعكسه ثانية
-          // ── Explicit direction: the text is pre-shaped by `pdfArabic`; inheriting rtl re-reverses it.
-          headerDirection: kPdfShapedTextDirection,
-          tableDirection: kPdfShapedTextDirection,
-          cellAlignment: pw.Alignment.topRight,
-          headers: [
-            'المستند',
-            'التاريخ',
-            'المخزن',
-            kind.hasParty ? 'الطرف' : 'إلى مخزن',
-            'السطور',
-            'الإجمالي',
-            'الخصم',
-            'الصافي',
-          ]
-              .reversed
-              .map((header) => pdfArabic(header))
-              .toList(growable: false),
-          data: [
+        // القائمة تُطبع بشبكة التقارير نفسها: رأس واحد لا يتكرر، وخانة بسطر واحد
+        // The list prints with the reports' own grid: one head that never repeats,
+        // and one line per cell.
+        _pdfGridFromLogical(
+          width: width,
+          columns: [
+            const PdfGridColumn(label: 'المستند', weight: 1.1),
+            const PdfGridColumn(label: 'التاريخ', weight: 1),
+            const PdfGridColumn(label: 'المخزن', weight: 1.5),
+            PdfGridColumn(
+              label: kind.hasParty ? 'الطرف' : 'إلى مخزن',
+              weight: 1.6,
+            ),
+            const PdfGridColumn(label: 'السطور', numeric: true, weight: 0.7),
+            const PdfGridColumn(label: 'الإجمالي', numeric: true, weight: 1.1),
+            const PdfGridColumn(label: 'الخصم', numeric: true, weight: 1),
+            const PdfGridColumn(label: 'الصافي', numeric: true, weight: 1.1),
+          ],
+          rows: [
             for (final order in orders)
               [
                 order.reference,
@@ -1199,7 +1114,7 @@ Future<Uint8List> buildStoreOrderListPdf({
                 StoreFormat.money(order.total),
                 StoreFormat.money(order.discount),
                 StoreFormat.money(order.net),
-              ].reversed.map((cell) => pdfArabic(cell)).toList(growable: false),
+              ],
           ],
         ),
         pw.SizedBox(height: 8),
@@ -1239,6 +1154,10 @@ Future<Uint8List> buildStockSheetPdf({
   // The notes column appears only when someone wrote a note; otherwise it is wasted width.
   final hasNotes = notes.values.any((note) => note.trim().isNotEmpty);
 
+  // العرض المتاح بعد هامشي الورقة — مقياس الخانات جميعاً
+  // The width left after the margins — the measure of every cell.
+  final width = _reportContentWidth;
+
   doc.addPage(
     pw.MultiPage(
       // سقف الصفحات الصريح: سقف الحزمة الافتراضي (20 صفحة للعنصر الواحد) كان يُسقط
@@ -1246,8 +1165,8 @@ Future<Uint8List> buildStockSheetPdf({
       // Explicit page ceiling: the package default (20 pages per single widget) aborted
       // large store reports, so nothing was printed or exported at all.
       maxPages: kReportPdfMaxPages,
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20),
+      pageFormat: PdfPageFormat.a4,
+      margin: _reportPageMargin,
       textDirection: pw.TextDirection.rtl,
       header: (context) => buildReportPdfHeader(
         letterhead: letterhead,
@@ -1272,39 +1191,33 @@ Future<Uint8List> buildStockSheetPdf({
       ),
       footer: (context) => buildReportPdfFooter(context),
       build: (context) => [
-        pw.TableHelper.fromTextArray(
-          border: pw.TableBorder.all(color: ReportPdfColors.border, width: 0.4),
-          headerDecoration: const pw.BoxDecoration(
-            color: ReportPdfColors.headerBg,
-          ),
-          headerStyle: pw.TextStyle(fontSize: 8.5, fontWeight: pw.FontWeight.bold),
-          cellStyle: const pw.TextStyle(fontSize: 8),
-          headerDirection: kPdfShapedTextDirection,
-          tableDirection: kPdfShapedTextDirection,
-          cellAlignment: pw.Alignment.topRight,
-          headers: [
-            if (hasNotes) 'ملاحظة السطر',
-            'الفرق',
-            'قيمة الفرق',
-            'الفعلي',
-            'رصيد النظام',
-            'الوحدة',
-            'الصنف',
-            'الكود',
-            'المخزن',
-          ].reversed.map((header) => pdfArabic(header)).toList(growable: false),
-          data: [
+        // شبكة واحدة: رأس لا يتكرر، وخانة بسطر واحد، وعناوين لا تنزلق عن قيمها
+        // One grid: a head that never repeats, one line per cell, captions over their values.
+        _pdfGridFromLogical(
+          width: width,
+          columns: [
+            const PdfGridColumn(label: 'المخزن', weight: 1.2),
+            const PdfGridColumn(label: 'الكود', weight: 0.9),
+            const PdfGridColumn(label: 'الصنف', weight: 2),
+            const PdfGridColumn(label: 'الوحدة', weight: 0.6),
+            const PdfGridColumn(label: 'رصيد النظام', numeric: true, weight: 1),
+            const PdfGridColumn(label: 'الفعلي', numeric: true, weight: 1),
+            const PdfGridColumn(label: 'قيمة الفرق', numeric: true, weight: 1),
+            const PdfGridColumn(label: 'الفرق', numeric: true, weight: 0.9),
+            if (hasNotes) const PdfGridColumn(label: 'ملاحظة السطر', weight: 1.6),
+          ],
+          rows: [
             for (final row in rows)
               [
-                if (hasNotes) pdfArabic(notes[row.key] ?? '—'),
+                row.storeName ?? '—',
+                row.partNo ?? '—',
+                row.itemName ?? '—',
+                row.uomCode ?? '—',
+                StoreFormat.qty(row.systemQty),
+                StoreFormat.qty(countedOf(row)),
                 StoreFormat.money(varianceOf(row) * row.cost),
                 StoreFormat.qty(varianceOf(row)),
-                StoreFormat.qty(countedOf(row)),
-                StoreFormat.qty(row.systemQty),
-                pdfArabic(row.uomCode ?? '—'),
-                pdfArabic(row.itemName ?? '—'),
-                row.partNo ?? '—',
-                pdfArabic(row.storeName ?? '—'),
+                if (hasNotes) notes[row.key] ?? '—',
               ],
           ],
         ),
@@ -1351,11 +1264,10 @@ Future<Uint8List> buildItemStatementPdf({
   required String itemName,
   required String branchLabel,
   required String rangeText,
-  required List<StockMovementRow> rows,
-  required double qtyIn,
-  required double qtyOut,
-  required double netQty,
-  required double totalValue,
+  /// الكشف نفسه — نفس مصدر جدول الشاشة وشريطها، فلا يتفارق الورق عنها لفظاً ولا رقماً
+  /// The statement itself — the screen's own source for both its table and its strip, so
+  /// paper cannot drift from it in wording or in figures.
+  required MovementStatement statement,
   List<String>? columnIds,
   List<String>? statIds,
   bool branchOnly = false,
@@ -1365,6 +1277,11 @@ Future<Uint8List> buildItemStatementPdf({
   final doc = pw.Document(theme: theme);
   final logo = await loadPdfLetterheadLogo(height: 46);
   final columns = _movementColumns(columnIds);
+  final rows = statement.rows;
+
+  // العرض المتاح بعد هامشي الورقة — مقياس الخانات جميعاً
+  // The width left after the margins — the measure of every cell.
+  final width = _reportContentWidth;
 
   // نفس عنوان الشاشة بالضبط: لا يطبع الـ PDF «كشف حركة صنف» بينما تعرض الشاشة «صنف فرعي»
   // The screen's exact title: the PDF must not print "an item statement" while the screen
@@ -1383,8 +1300,8 @@ Future<Uint8List> buildItemStatementPdf({
       // Explicit page ceiling: the package default (20 pages per single widget) aborted
       // large store reports, so nothing was printed or exported at all.
       maxPages: kReportPdfMaxPages,
-      pageFormat: PdfPageFormat.a4.landscape,
-      margin: const pw.EdgeInsets.all(20),
+      pageFormat: PdfPageFormat.a4,
+      margin: _reportPageMargin,
       textDirection: pw.TextDirection.rtl,
       header: (context) => buildReportPdfHeader(
         letterhead: letterhead,
@@ -1396,24 +1313,18 @@ Future<Uint8List> buildItemStatementPdf({
       ),
       footer: (context) => buildReportPdfFooter(context),
       build: (context) => [
-        // 3) جدول الكشف — كامل السطور موزّعة على الصفحات برأس مكرر وسطر تجميع
-        // 3) the statement table — every row across the pages with a repeated head and totals.
-        ..._reportPdfBlocks<StockMovementRow>(
-          columns,
-          rows,
-          ReportTotals.movement(rows),
+        // 3) جدول الكشف — `pw.Table` واحدة تقسمها MultiPage على الصفحات برأس واحد
+        // 3) the statement table — one `pw.Table` that MultiPage splits across pages, head once.
+        buildStoreReportGrid<StockMovementRow>(
+          columns: columns,
+          rows: rows,
+          totals: ReportTotals.movement(rows),
+          width: width,
         ),
         pw.SizedBox(height: 10),
         // 4) ملخص الكشف بعد الجدول — بالحقول التي أبقاها المستخدم فقط
         // 4) the statement summary, after the table, with only the fields the user kept.
-        _statementSummaryStrip(
-          rows.length,
-          qtyIn,
-          qtyOut,
-          netQty,
-          totalValue,
-          statIds,
-        ),
+        _statementSummaryStrip(statement, statIds),
         pw.SizedBox(height: 12),
         // 5) التذييل الرسمي — كشف مخزني: أمين المخزن
         // 5) the official footer — a stores statement: the storekeeper's slot.
@@ -1425,32 +1336,25 @@ Future<Uint8List> buildItemStatementPdf({
   return doc.save();
 }
 
-/// سطر ملخص الكشف في المطبوع — بنفس معرّفات حقول الشاشة
-/// The statement's printed summary line — under the same ids the screen's fields use.
+/// شريط ملخص الكشف في المطبوع — خانات الشاشة نفسها وبأسمائها
+/// The statement's printed summary — the screen's own chips under the screen's own names.
+///
+/// ── كان السطر يعيد صياغة الحقول («صادر» حيث تقرأ الشاشة «المنصرف»): اللفظ حين يفترق
+///    يُشكّك في الرقم نفسه، وهذا أخطر من أي سطر ملتوٍ.
+/// ── The line used to re-word the fields («صادر» where the screen reads «المنصرف»); a
+///    different word makes the reader doubt the figure itself — worse than a crooked row.
 pw.Widget _statementSummaryStrip(
-  int count,
-  double qtyIn,
-  double qtyOut,
-  double netQty,
-  double totalValue,
+  MovementStatement statement,
   List<String>? statIds,
 ) {
-  bool on(String id) => statIds == null || statIds.contains(id);
-
-  final parts = <String>[
-    if (on('rows')) 'عدد السطور $count',
-    if (on('in')) 'وارد ${StoreFormat.qty(qtyIn)}',
-    if (on('out')) 'صادر ${StoreFormat.qty(qtyOut)}',
-    if (on('net')) 'الصافي ${StoreFormat.qty(netQty)}',
-    if (on('value')) 'القيمة ${StoreFormat.money(totalValue)}',
-  ];
-
-  if (parts.isEmpty) return pw.SizedBox.shrink();
-
-  return pw.Text(
-    pdfArabic(parts.join(' · ')),
-    textDirection: kPdfShapedTextDirection,
-    style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold),
+  return pdfStatsStrip(
+    title: 'إحصاءات الكشف',
+    fields: _statBoxes(
+      ReportStatFields.visible(
+        ReportStatFields.statement(statement),
+        statIds,
+      ),
+    ),
   );
 }
 

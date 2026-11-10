@@ -33,13 +33,18 @@ import '../widgets/store_ui.dart';
 /// ── The sheet opens automatically on entry: an unbounded, store-less report scans the whole
 ///    view and returns thousands of rows nobody reads. Auto-opening makes selection a step.
 ///
-/// ── القالب الرسمي واحد للحالتين: ترويسة التطبيق، شريط المعطيات، جدول كسول بأعمدة قابلة
-///    للإخفاء، ثم تذييل التوقيعات — وهو نفسه ما يُطبع ويُصدَّر.
-/// ── One official template for both kinds: the app letterhead, a parameters band, a lazy
-///    table whose columns can be hidden, then the signature footer — and it is the same thing
-///    that gets printed and exported.
+/// ── `initialFilter` هو طريق «كشف حركة» من شاشات الأصناف: النقر على كشف حركة صنف يفتح
+///    قالب التقرير نفسه بمعطياته الجاهزة مباشرة — قالب واحد يُعرض ويُطبع ويُصدَّر
+///    من باب واحد، لا نسختين بموازين مختلفة تختلان مع الوقت.
+/// ── `initialFilter` is how the items screens' "movement statement" arrives: tapping it opens
+///    the very report template with its parameters and runs at once — one template rendered,
+///    printed and exported from one door, not two diverging copies.
 class StoreReportsScreen extends ConsumerStatefulWidget {
-  const StoreReportsScreen({super.key});
+  const StoreReportsScreen({super.key, this.initialFilter});
+
+  /// معطيات جاهزة تُنفَّذ فور فتح الشاشة — تستخدمها شاشات الأصناف لكشف الحركة
+  /// Parameters to run immediately on open — used by the items screens for statements.
+  final StoreReportFilter? initialFilter;
 
   @override
   ConsumerState<StoreReportsScreen> createState() => _StoreReportsScreenState();
@@ -70,8 +75,20 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
   void initState() {
     super.initState();
 
-    // الفتح التلقائي عند الدخول فقط — والزر يفتحها دائماً بعدها
-    // Auto-open on entry only; afterwards the button is what opens it.
+    // ── معطيات جاهزة: يُنفَّذ التقرير مباشرة بلا نافذة انتظار — جاء المستخدم من
+    //    «كشف حركة صنف» وقد حدد سؤاله بالفعل، وإعادة سؤاله إهانة للسياق.
+    //    بلا معطيات: الفتح التلقائي للنافذة كما كان، والزر يفتحها دائماً بعدها.
+    // ── With preset parameters the report runs at once: the user arrived from an item's
+    //    "movement statement" having already asked the question — asking it again insults the
+    //    context. Without them, the auto-open sheet behaves exactly as before.
+    if (widget.initialFilter != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) ref.read(storeReportProvider.notifier).run(widget.initialFilter!);
+      });
+
+      return;
+    }
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _openFilter());
   }
 
@@ -83,10 +100,22 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
     final canExport = auth.can(Perm.storesReportsExport);
     final hasRows = state.movementRows.isNotEmpty || state.summaryRows.isNotEmpty;
 
+    // ── الكشف القادم بمعطيات جاهزة يعرض نفسه باسمه: «كشف حركة صنف رئيسي» لا
+    //    «تقارير المخازن» العام — العنوان الذي يفتح عليه المستخدم هو ما يتوقع قراءته.
+    // ── A preset statement names itself in the app bar: "main item movement statement", not
+    //    the generic "Stores reports" — the title the user tapped is the title they expect.
+    final presetScope = widget.initialFilter?.scope;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('تقارير المخازن'),
+        title: Text(
+          presetScope == StoreReportScope.item
+              ? 'كشف حركة صنف رئيسي'
+              : presetScope == StoreReportScope.branch
+                  ? 'كشف حركة صنف فرعي'
+                  : 'تقارير المخازن',
+        ),
         actions: [
           IconButton(
             tooltip: 'معطيات التقرير',
@@ -650,9 +679,9 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
         reference: ref.read(storeReferenceProvider).value,
         movementRows: state.movementRows,
         summaryRows: state.summaryRows,
-        totalIn: state.totalIn,
-        totalOut: state.totalOut,
-        totalValue: state.totalValue,
+        // إحصاء الخادم نفسه الذي يقرأه شريط الشاشة: لا رقم يُصاغ بيد ثانية للورق
+        // The very server statistics the screen strip reads — no figure re-worded for paper.
+        stats: state.stats,
         columnIds: _columnIds(state.filter!),
         // حقول الإحصاءات التي يهتم بها المستخدم — يخفيها في المطبوع كما أخفاها في الشاشة
         // The statistic fields the user cares about — hidden in print as they are on screen.

@@ -76,16 +76,19 @@ class CuttingModelSpecs {
   /// than the model's identity (type and shape), which is shown on the model line instead.
   List<(String, String)> get textChips {
     final chips = <(String, String)>[
+      if (comCabakType != null) ('نوع الكم', comCabakType!),
       if (neckType != null) ('نوع الرقبة', neckType!),
-      if (tipperType != null) ('نوع الكم', tipperType!),
-      if (comCabakType != null) ('نوع الكباك', comCabakType!),
       if (pocketOrWithout != null) ('الجيوب', pocketOrWithout!),
       if (gabzorType != null) ('نوع الجبزور', gabzorType!),
+      if (mobilePocket != null) ('جيب الصدر ', mobilePocket!),
       if (buttonType != null) ('نوع الأزرار', buttonType!),
-      if (buttonNo != null) ('عدد الأزرار', buttonNo!),
-      if (mobilePocket != null) ('جيب الجوال', mobilePocket!),
-      if (penPocket != null) ('جيب القلم', penPocket!),
-      if (hegaziType != null) ('نوع الحجازي', hegaziType!),
+      if (buttonNo != null) ('رقم الأزرار', buttonNo!),    
+      if (shapeGabzorNo != null && shapeGabzorNo==1) ('جبزور يد', '✔️'),
+      if (tipperType != null) (' فئة الخياط', tipperType!),      
+      
+        
+      // if (penPocket != null) ('جيب القلم', penPocket!),  // لايوجد حاليا 
+      // if (hegaziType != null) ('نوع الحجازي', hegaziType!),
     ];
     return chips;
   }
@@ -93,11 +96,10 @@ class CuttingModelSpecs {
   /// الأكواد الرقمية كما هي / the numeric codes, as they are
   List<(String, int)> get numericCodes {
     final codes = <(String, int)>[
-      if (neckShapeNo != null) ('نموذج الرقبة', neckShapeNo!),
-      if (shapeGabzorNo != null) ('نموذج الجبزور', shapeGabzorNo!),
-      if (shapeComCabakNo != null) ('نموذج الكباك', shapeComCabakNo!),
-      if (shapePocketUpNo != null) ('نموذج الجيب العلوي', shapePocketUpNo!),
-      if (shapePocketDownNo != null) ('نموذج الجيب السفلي', shapePocketDownNo!),
+      // if (neckShapeNo != null) ('نموذج الرقبة', neckShapeNo!),      
+      // if (shapeComCabakNo != null) ('نموذج الكباك', shapeComCabakNo!),
+      // if (shapePocketUpNo != null) ('نموذج الجيب العلوي', shapePocketUpNo!),
+      // if (shapePocketDownNo != null) ('نموذج الجيب السفلي', shapePocketDownNo!),
     ];
     return codes;
   }
