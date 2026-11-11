@@ -6827,3 +6827,103 @@ then إعادة الحالة ابتدائية. ولا تستدعي أي منها
 - `kyApp_API/tests/` لا يحتوي أي assertion على السلسلة القديمة ⇒ **لا انحدار**.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-11 12:00 · **Backend فقط** · **لا DDL ولا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## [2026-11-11 14:00] تذييل التقارير الرسمي: نسبة الطبع «بواسطة [اسم المستخدم]»
+
+### السياق والمطلب
+طلب المستخدم إظهار اسم المستخدم الذي يطبع التقرير داخل تذييل **جميع** التقارير، بجانب
+حقل تاريخ الإصدار أسفل التذييل، في قالب الطباعة والتصدير لكل التقارير. التذييل الرسمي
+موحّد في موضعين فقط يُستهلكان من كل التقارير: `ReportSignatureFooter` على الشاشة،
+و`pdfSignatures()` في مولّدات PDF.
+
+### القرار المعماري
+بدلًا من تمرير اسم المستخدم عبر كل شاشة وكل مولّد PDF (دوال نقية بلا `context`/Riverpod)،
+أُقِرّ حامل مركزي ساكن واحد `ReportPrintIdentity` يقرأه الموضعان، فيورّثه أي تقرير جديد
+تلقائياً ويبقى النص المطبوع مطابقاً للمعروض. الكاتب الوحيد هو `AuthNotifier` عند كل انتقال
+حالة دخول، فلا تتسرب هوية مستخدم إلى جلسة تالية على جهاز مشترك. بلا جلسة لا تظهر «بواسطة».
+
+### ما نُفِّذ
+
+| الملف | التغيير |
+|---|---|
+| `lib/core/utils/report_print_identity.dart` | **جديد**: واجهة ساكنة `set/clear/printedBy`؛ تطبّع الاسم وترجّعه null عند الفراغ/المسافات. |
+| `lib/features/auth/.../auth_notifier.dart` | كتابة الهوية بعد الدخول العادي/البصمة واستعادة الجلسة، ومسحها عند الخروج العادي/الإجباري والجلسة الفارغة. |
+| `lib/core/widgets/report_signature_footer.dart` | سطر الإصدار أصبح «توقيت الإصدار: …    بواسطة: …» عند وجود هوية. |
+| `lib/core/utils/report_pdf_page.dart` | `pdfSignatures()` يضيف سطر الإصدار الموحّد عبر `pdfIssueLine()` أسفل الإشعار. |
+| `.../account_statement_pdf_builder.dart` | إزالة `rightNote` المكرّر للتوقيت من الرأس + حذف `_nowStamp` غير المستخدم. |
+| `.../account_statement_detail_pdf_builder.dart` | نفس الإزالة والحذف. |
+| `test/core/report_signature_footer_printed_by_test.dart` | **جديد**: 3 حالات (نسبة الطابع، حذفها بلا جلسة، تطبيع الاسم الفارغ). |
+
+### التحقق
+- `flutter analyze` على الملفات الستة المعدّلة/المضافة: **No issues found!**.
+- `flutter test` على `report_a4_sheet_test` + `report_pdf_fonts_test` + `order_view_screen_test` + الاختبار الجديد: **كلها ناجحة**.
+- لا DDL ولا DML ولا أي SQL (العمل Flutter/Dart فقط). لم يُطلب commit.
+
+> ملاحظة: تعذّر تشغيل `test/session_expiry_fix_test.dart` بسبب خطأ تصريف **سابق غير متعلق**
+> بهذه المهمة في `lib/features/tailoring/presentation/widgets/model_fabrics_table.dart:173`
+> (`List<Widget>` مقابل `List<TailoringCell>`) ضمن عمل التفصيل الجاري في شجرة العمل.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 14:00 · **Flutter/Dart فقط** · **لا DDL ولا DML** · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-11-11 18:46 — التفصيل: نوع الفاتورة · ملاحظة المستعجل · سطر الطباعة · رابط كشف الحساب · أعمدة القماش
+
+### الخادم — `TailoringController`
+
+- `detailSql`: الربط بـ `MULTI_CLOTHS m` صار **دائماً** (كان مشروطاً باكتشاف عمود العرض)، وأُضيفت
+  `v.FIXED_FLEXED, m.HABNA_DUABL, m.ENTRY_NO`. الأعمدة الثلاثة تُقرأ من الجدول لا من الواجهة لأن
+  `HABNA_DUABL` و`ENTRY_NO` ليسا في `CUTTING_SALES_BILL_VIEW`.
+- القراءة التكميلية لـ `SALES_BILL` صارت استعلاماً خاماً يضيف
+  `TO_CHAR(PRINT_DATE,'DD/MM/YYYY HH24:MI') AS PRINT_DATE_TXT` (أوراكل يعيد التاريخ كائن خاماً).
+- ترويسة الفاتورة أُضيف لها: `bill_kind` (BILLS_KINDS)، `urgent_note` (GIVING_IN)،
+  `printed_at`، `printed_by`. وصفوف القطع أُضيف لها: `fix_type`، `habna_duabl`، `embroidery_no`.
+- لا تغيير على الحمولات المالية ولا على الصلاحيات.
+
+### العميل
+
+- نماذج: `CuttingBillHeader` (+billKind/+urgentNote/+printedAt/+printedBy) و
+  `CuttingPieceItem` (+fixType/+embroideryNo/+habnaDuabl وgetter `hasDoubleHabna`).
+- `bill_header_card`: شارة النوع بجانب التاريخ؛ خلايا البيان/ملاحظة المستعجل في `rows: 1`؛
+  سطر التوقيع ثلاثي الأجزاء داخل FittedBox. (أثناء التنفيذ عدّل صاحب الواجهة البطاقة: الرقم
+  اليدوي إلى الشبكة، «عدد الثياب» بدل «الموديلات/القطع»، وخريطة أسماء للنوع — حُفظت كما هي.)
+- `bill_customer_card`: `onStatementTap` اختياري؛ معهُ يظهر الاسم كرابط (أيقونة كشف + لون
+  أساسي + تسطير) وبلاهُ يبقى نصاً عاديًا.
+- `model_fabrics_table`: الصف الثاني يُبنى ديناميكياً (خلايا + أوزان من دالة واحدة تُرجع سجلاً)
+  فلا ينفصل الطولان عن بعضهما ولا يظهر حقل فارغ.
+- `cutting_bill_view_screen`: يراقب `a.can(Perm.customersStatement)` ويمرر النداء، ويفتح
+  `CustomerStatementScreen` بهوية العميل من ترويسة الفاتورة.
+
+### التحقق
+
+Pest 12/190 · Flutter 72 · analyze lib نظيف · pint PASS · قياس حيّ على 10940/2026 (أعلاه).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 18:46 · **لا commit** (لم يُطلب).
+
+
+---
+
+## 2026-11-11 18:52 — التفصيل: DISTINCT يُنهي تكرار سجل الحركة
+
+### التشخيص
+
+- شكوى المستخدم: كل حركة تظهر مرتين في «سجل حركة القماش» بكلتا الشاشتين (الاستعراض والمتابعة)
+  ⇒ مصدر مشترك = نقطة الخادم `movements()`.
+- قياس: `COUNT(*)=18` مقابل `COUNT(DISTINCT TR_INV_D_ID)=9` لـ OHDID واحد، والصفوف المكرّرة
+  متطابقة في كل الأعمدة المعروضة. فاحص التكرار: `ORDSTATE` لا يكرر ORDSID، و`DEPTS` لا يكرر
+  DEPTID ⇒ التضاعف من الجدول نفسه (إدراج قديم مزدوج)، لا من JOIN.
+
+### الإصلاح
+
+- `TailoringController::movements`: `SELECT` → `SELECT DISTINCT`؛ `ORDER BY ct.DDATE, ...`
+  → `ORDER BY DDATE_ISO, ct.TR_INV_D_ID` (اشتراط أوراكل أن تكون مفاتيح الترتيب ضمن الإسقاط
+  عند استخدام DISTINCT؛ DDATE_ISO بصيغة YYYY-MM-DD فيحفظ الترتيب الزمني الصحيح).
+
+### التحقق
+
+Pest `Tailoring` 12/169 · pint PASS · قياس ما بعد الإصلاح: 9 صفوف/9 معرّفات.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 18:52 · **لا commit** (لم يُطلب).

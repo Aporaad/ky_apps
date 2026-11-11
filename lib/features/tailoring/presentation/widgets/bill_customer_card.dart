@@ -18,11 +18,17 @@ import 'tailoring_section_card.dart';
 class BillCustomerCard extends StatelessWidget {
   final CuttingBillHeader header;
 
-  const BillCustomerCard({super.key, required this.header});
+  /// فتح كشف حساب العميل عند النقر على اسمه — `null` لمن لا يملك الصلاحية
+  /// Opens the customer's statement when the name is tapped; `null` without the grant, so the
+  /// name simply stays plain text.
+  final VoidCallback? onStatementTap;
+
+  const BillCustomerCard({super.key, required this.header, this.onStatementTap});
 
   @override
   Widget build(BuildContext context) {
     final name = header.custName.isEmpty ? 'عميل غير مسمّى' : header.custName;
+    final tappable = onStatementTap != null;
 
     return TailoringSectionCard(
       title: 'بيانات العميل',
@@ -33,15 +39,46 @@ class BillCustomerCard extends StatelessWidget {
       titleTrailing: FittedBox(
         fit: BoxFit.scaleDown,
         alignment: AlignmentDirectional.centerStart,
-        child: Text(
-          name,
-          maxLines: 1,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w800,
-            color: AppColors.textPrimary,
-          ),
-        ),
+        child: tappable
+            // اختصار انتقال: النقر على الاسم يفتح كشف حساب العميل
+            // A navigation shortcut: tapping the name opens the customer's statement.
+            ? InkWell(
+                onTap: onStatementTap,
+                borderRadius: BorderRadius.circular(4),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.receipt_long_rounded,
+                        size: 13,
+                        color: AppColors.primary,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        name,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primary,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+            : Text(
+                name,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                ),
+              ),
       ),
       child: TailoringCellGrid(
         // سطر واحد دائم مهما ضاق العرض أو كبر الخط

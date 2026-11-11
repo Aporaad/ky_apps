@@ -20,6 +20,18 @@ class CuttingPieceItem {
   /// The numeric cloth width (58 / 45 / 38) — read from MULTI_CLOTHS, not from CLOTH_TYPE.
   final String? clothWidth;
 
+  /// نوع التجهيز (`FIXED_FLEXED`) — نص القاعدة كما هو، مثل «1-ثابت» و«2-مرن»
+  /// The preparation type (FIXED_FLEXED) — the stored text as-is, e.g. "1-fixed", "2-flexed".
+  final String? fixType;
+
+  /// رقم التطريز (`ENTRY_NO` من MULTI_CLOTHS) — العمود غير معبأ في القاعدة غالباً
+  /// The embroidery number (MULTI_CLOTHS.ENTRY_NO) — the column is unused in the database.
+  final int? embroideryNo;
+
+  /// خبنة دبل (`HABNA_DUABL`): 1 نعم، 0 لا — والواجهة تُخفي العمود عند 0
+  /// Double habna (HABNA_DUABL): 1 yes, 0 no — the UI hides the column when it is 0.
+  final int? habnaDuabl;
+
   final int? sanfNo;
   final int? sanfDno;
 
@@ -62,6 +74,9 @@ class CuttingPieceItem {
     required this.seqNo1,
     this.ohdId,
     this.clothWidth,
+    this.fixType,
+    this.embroideryNo,
+    this.habnaDuabl,
     this.sanfNo,
     this.sanfDno,
     this.clothName,
@@ -94,6 +109,9 @@ class CuttingPieceItem {
       seqNo1: tailoringInt(json, 'seq_no1') ?? 0,
       ohdId: tailoringInt(json, 'ohdid'),
       clothWidth: tailoringPlainText(json, 'cloth_width'),
+      fixType: tailoringText(json, 'fix_type'),
+      embroideryNo: tailoringInt(json, 'embroidery_no'),
+      habnaDuabl: tailoringInt(json, 'habna_duabl'),
       sanfNo: tailoringInt(json, 'sanf_no'),
       sanfDno: tailoringInt(json, 'sanf_dno'),
       clothName: tailoringText(json, 'cloth_name'),
@@ -121,6 +139,10 @@ class CuttingPieceItem {
       price: tailoringDouble(json, 'price'),
     );
   }
+
+  /// هل تحمل القطعة «خبنة دبل»؟ 1 فقط تعني نعم — صفر أو غياب يُخفيان العمود
+  /// Does this piece carry a double habna? Only 1 means yes; 0 or absent hides the column.
+  bool get hasDoubleHabna => (habnaDuabl ?? 0) == 1;
 
   /// مرحلة القطعة الحالية مقروءة من أعلام الإنجاز الثلاثة
   /// The piece's current stage, read from its three completion flags.

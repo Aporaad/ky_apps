@@ -6,6 +6,7 @@ import '../../../../core/storage/secure_storage_service.dart';
 import '../../../../core/utils/biometric_service.dart';
 import '../../../../core/utils/device_id_helper.dart';
 import '../../../../core/utils/permission_check.dart';
+import '../../../../core/utils/report_print_identity.dart';
 import '../../../../core/utils/session_clock.dart';
 import '../../data/models/permission_snapshot_model.dart';
 import '../../data/models/user_model.dart';
@@ -312,6 +313,11 @@ class AuthNotifier extends Notifier<AuthState> {
       final cachedUser = await _repository.getCachedUser();
       final snapshot = await _repository.restorePermissions();
 
+      // هوية الطابع تُستعاد مع الجلسة: تذييل التقارير يحتاج الاسم حتى قبل أي طلب شبكة
+      // The printing identity comes back with the session: report footers need the name even
+      // before any network request has been made.
+      ReportPrintIdentity.set(cachedUser?.displayName);
+
       // تدرّج آمن: موعد بوقت الجهاز إن وُجد، وإلا نصّ الخادم كما كان (تنصيب قديم أو تركة بلا تحويل)
       // Safe gradation: a device-clock deadline when stored, otherwise the raw server text as before
       final localDeadline = _resolveDeadline(
@@ -350,6 +356,10 @@ class AuthNotifier extends Notifier<AuthState> {
         unawaited(ref.read(permissionsNotifierProvider.notifier).refresh());
       }
     } else {
+      // لا جلسة — لا هوية طابع: التذييل يطبع سطره بلا «بواسطة» بدل اسمٍ من جلسة سابقة
+      // No session, no printing identity: the footer omits «بواسطة» rather than crediting a
+      // previous one.
+      ReportPrintIdentity.clear();
       state = state.copyWith(
         isAuthenticated: false,
         isLoading: false,
@@ -415,6 +425,9 @@ class AuthNotifier extends Notifier<AuthState> {
         canonical: response.user!.username,
         typed: username,
       );
+      // من طبع بعد هذه اللحظة يُنسب إليه — الاسم العائد من الخادم لا ما كُتب في الحقل
+      // Whoever prints from now on is credited with the server's name, not the field input.
+      ReportPrintIdentity.set(response.user!.displayName);
       state = state.copyWith(
         isAuthenticated: true,
         isLoading: false,
@@ -484,6 +497,9 @@ class AuthNotifier extends Notifier<AuthState> {
         canonical: response.user!.username,
         typed: '',
       );
+      // الدخول بالبصمة يثبّت هوية الطابع كالدخول العادي تمامًا
+      // Biometric sign-in fixes the printing identity exactly like a password login.
+      ReportPrintIdentity.set(response.user!.displayName);
       state = state.copyWith(
         isAuthenticated: true,
         isLoading: false,
@@ -539,6 +555,9 @@ class AuthNotifier extends Notifier<AuthState> {
     state = state.copyWith(isLoading: true);
     await _repository.logout();
     await refreshBiometricStatus();
+    // خرج المستخدم فلا يُنسب إليه أي مستند يُطبع بعدها على هذا الجهاز
+    // The user is gone: no later document on this device may be credited to them.
+    ReportPrintIdentity.clear();
     state = AuthState(
       selectedUserType: state.selectedUserType,
       biometricCapability: state.biometricCapability,
@@ -561,6 +580,9 @@ class AuthNotifier extends Notifier<AuthState> {
   /// never costs the user their fingerprint sign-in.
   void forceLogout({String? reason, bool silent = false}) {
     unawaited(_storage.clearAll());
+    // نفس قاعدة الخروج العادي: لا هوية طابع بلا جلسة سارية
+    // Same rule as a normal logout: no printing identity without a live session.
+    ReportPrintIdentity.clear();
 
     state = AuthState(
       selectedUserType: state.selectedUserType,

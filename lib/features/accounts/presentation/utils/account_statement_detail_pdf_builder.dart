@@ -97,10 +97,12 @@ pw.Widget _metaSection(
         ],
       ),
       pw.SizedBox(height: 2),
+      // توقيت الإصدار صار في التذييل الرسمي الموحد مع «بواسطة» — الرأس يحمل الفترة فقط
+      // The issue timestamp now lives in the unified official footer with «بواسطة»; the header
+      // carries only the period range.
       pdfDateRangeRow(
         fromDate: fromDate,
         toDate: toDate,
-        rightNote: 'توقيت الإصدار: ${_nowStamp()}',
       ),
     ],
   );
@@ -248,10 +250,4 @@ pw.Widget _totalsRow(String label, String value, {bool highlight = false}) {
       ),
     ],
   );
-}
-
-String _nowStamp() {
-  final now = DateTime.now();
-  return '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
-      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 }

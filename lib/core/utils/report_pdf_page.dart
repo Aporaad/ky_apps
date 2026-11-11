@@ -4,6 +4,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'report_letterhead_info.dart';
 import 'report_pdf_arabic.dart';
 import 'report_pdf_letterhead.dart';
+import 'report_print_identity.dart';
 
 /// وحدة الترويسة والتذييل الموحّدة لكل تقارير PDF — تُستهلك من كل مولّدات PDF
 /// (كشف حساب مالي، ميزان مراجعة، كشف عميل، كشف عامل) لضمان توحيد الشكل
@@ -243,8 +244,39 @@ pw.Widget pdfSignatures({String keeper = 'توقيع أمين الصندوق'}) 
           textAlign: pw.TextAlign.center,
         ),
       ),
+      // سطر الإصدار: الوقت + نسبة الطبع للمستخدم الحالي — نفس نص الشاشة حرفياً
+      // Issue line: the timestamp plus the printing user's credit — byte-for-byte the screen's text.
+      pw.SizedBox(height: 4),
+      pw.Center(
+        child: pw.Text(
+          pdfArabic(pdfIssueLine()),
+          style: const pw.TextStyle(
+              fontSize: 7, color: ReportPdfColors.subtleText),
+          textDirection: kPdfShapedTextDirection,
+          textAlign: pw.TextAlign.center,
+        ),
+      ),
     ],
   );
+}
+
+/// سطر «توقيت الإصدار …  بواسطة …» الموحد — صيغته هي ما يرسمه
+/// `ReportSignatureFooter` على الشاشة، فتبقى المطبوعة والشاشة وجهين لمستند واحد.
+/// The canonical «توقيت الإصدار … بواسطة …» line — exactly the wording
+/// `ReportSignatureFooter` paints on screen, so print and screen stay two faces of one document.
+///
+/// بلا جلسة (اسم فارغ) يُطبع التوقيت وحده: لا نسبة لطابع مجهول على مستند رسمي.
+/// With no session (blank name) only the timestamp prints — an official document never credits
+/// an unknown printer.
+String pdfIssueLine([DateTime? at]) {
+  final now = at ?? DateTime.now();
+  final stamp =
+      '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+  final printedBy = ReportPrintIdentity.printedBy;
+  return printedBy == null
+      ? 'توقيت الإصدار: $stamp'
+      : 'توقيت الإصدار: $stamp    بواسطة: $printedBy';
 }
 
 pw.Widget _signatureSlot(String label) {

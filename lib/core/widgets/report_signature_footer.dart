@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../utils/report_print_identity.dart';
 
 /// تذييل التوقيعات الرسمي الموحّد لكل كشوفات التقارير — ثلاثة خانات توقيع
 /// (المحاسب / أمين المخزن أو الصندوق / المدير) + سطر إشعار المراجعة خلال 15 يوماً.
@@ -49,6 +50,13 @@ class ReportSignatureFooter extends StatelessWidget {
         '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
         '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 
+    // سطر الإصدار الرسمي: الوقت + نِسبة الطبع للمستخدم الحالي عند الحاجة.
+    // Canonical issue line: the timestamp plus, when a session exists, the printing user.
+    final printedBy = ReportPrintIdentity.printedBy;
+    final issueLine = printedBy == null
+        ? 'توقيت الإصدار: $timestamp'
+        : 'توقيت الإصدار: $timestamp    بواسطة: $printedBy';
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -72,7 +80,7 @@ class ReportSignatureFooter extends StatelessWidget {
           ),
         ),
         Text(
-                'توقيت الإصدار: $timestamp',
+                issueLine,
                 style: const TextStyle(
                   fontSize: 7,
                   color: Colors.black54,

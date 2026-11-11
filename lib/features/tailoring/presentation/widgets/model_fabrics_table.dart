@@ -107,6 +107,9 @@ class _FabricCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tone = selected ? AppColors.primary : AppColors.accentLight;
+    // خلايا الصف الثاني وأوزانها تُحسب مرة واحدة هنا، فلا يقرأ البناء أوزاناً قديمة
+    // The second-row cells and weights are computed once here, so the build never reads stale ones.
+    final (secondWeights, secondCells) = _secondRow();
     final values = <String?>[
       piece.ohdId?.toString() ?? '${piece.seqNo1}',
       piece.clothName,
@@ -166,30 +169,8 @@ class _FabricCard extends StatelessWidget {
               Padding(
                 padding: EdgeInsets.zero,
                 child: TailoringCellRow(
-                  weights: const [2.4, 2.4, 1.6],
-                  cells: [
-                    TailoringCell(
-                      compact: true,
-                      label: 'القصّاص',
-                      value: piece.cutterName,
-                      icon: Icons.content_cut_rounded,
-                    ),
-                    TailoringCell(
-                      compact: true,
-                      label: 'الخيّاط',
-                      // «غير مسند» لا «—»: غير المسند حالة إنتاجية لا معلومة ناقصة
-                      // "Unassigned" is a production state, not a missing value.
-                      value: piece.hasTailor ? piece.tailorName : 'غير مسند',
-                      icon: Icons.design_services_rounded,
-                      valueColor: piece.hasTailor ? null : AppColors.textSecondary,
-                    ),
-                    TailoringCell(
-                      compact: true,
-                      label: 'المرحلة',
-                      value: piece.stage.label,
-                      valueColor: _stageColor(piece.stage),
-                    ),
-                  ],
+                  weights: secondWeights,
+                  cells: secondCells,
                 ),
               ),
             ],
@@ -205,4 +186,95 @@ class _FabricCard extends StatelessWidget {
     CuttingPieceStage.cut => AppColors.warning,
     CuttingPieceStage.waiting => AppColors.textSecondary,
   };
+
+  /// خلايا الصف الثاني وأوزانها معاً — تُبنى ديناميكياً لأن الحقل الفارغ لا يظهر إطلاقاً،
+  /// فعدد الأعمدة يتغيّر من قطعة لأخرى ويُدوَّر معه التوزيع. الإرجاع كسجل واحد لأن
+  /// الأوزان والخلايا يجب أن يَبقَيا بنفس الطول دائماً.
+  /// The second-row cells and weights together — built dynamically because an empty field never
+  /// shows, so the column count varies per piece and the spread follows it. They are returned as
+  /// one record because the weights and the cells must always share the same length.
+  (List<double>, List<TailoringCell>) _secondRow() {
+    final cells = <TailoringCell>[];
+    final weights = <double>[];
+
+    void add(double weight, TailoringCell cell) {
+      weights.add(weight);
+      cells.add(cell);
+    }
+
+    // نوع التجهيز: نص القاعدة كما هو (`FIXED_FLEXED`) — لا يظهر إن غاب
+    // Preparation type: the stored FIXED_FLEXED text — hidden when absent.
+    if ((piece.fixType ?? '').trim().isNotEmpty) {
+      add(
+        1.7,
+        TailoringCell(
+          compact: true,
+          label: 'نوع التجهيز',
+          value: piece.fixType,
+          icon: Icons.category_rounded,
+        ),
+      );
+    }
+
+    // رقم التطريز (`ENTRY_NO`) — لا يظهر إن غاب
+    // The embroidery number (ENTRY_NO) — hidden when absent.
+    if (piece.embroideryNo != null) {
+      add(
+        1.2,
+        TailoringCell(
+          compact: true,
+          label: 'رقم التطريز',
+          value: '${piece.embroideryNo}',
+          numeric: true,
+        ),
+      );
+    }
+
+    // خبنة دبل: علامة صح عند 1، والعمود يختفي كلياً عند 0 أو الغياب
+    // Double habna: a check when 1, and the whole column disappears at 0 or when absent.
+    if (piece.hasDoubleHabna) {
+      add(
+        1.0,
+        TailoringCell(
+          compact: true,
+          label: 'خبنة دبل',
+          value: '✓',
+          valueColor: AppColors.success,
+        ),
+      );
+    }
+
+    piece.cutterName != null?add(
+      1.9,
+      TailoringCell(
+        compact: true,
+        label: 'القصّاص',
+        value: piece.cutterName,
+        icon: Icons.content_cut_rounded,
+      ),
+    ):null;
+    piece.hasTailor?add(
+      1.9,
+      TailoringCell(
+        compact: true,
+        label: 'الخيّاط',
+        // «غير مسند» لا «—»: غير المسند حالة إنتاجية لا معلومة ناقصة
+        // "Unassigned" is a production state, not a missing value.
+        value: piece.hasTailor ? piece.tailorName : 'غير مسند',
+        icon: Icons.design_services_rounded,
+        valueColor: piece.hasTailor ? null : AppColors.textSecondary,
+      ),
+    ):Null;
+    add(
+      1.3,
+      TailoringCell(
+        compact: true,
+        label: 'المرحلة',
+        value: piece.stage.label,
+        valueColor: _stageColor(piece.stage),
+      ),
+    );
+
+    return (weights, cells);
+  }
 }

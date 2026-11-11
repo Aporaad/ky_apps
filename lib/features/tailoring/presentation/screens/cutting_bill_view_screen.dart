@@ -11,6 +11,7 @@ import '../../../../core/widgets/report_zoom_view.dart';
 import '../../../../core/widgets/permission_gate.dart';
 import '../../../app_config/presentation/providers/app_config_notifier.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
+import '../../../customers/presentation/screens/customer_statement_screen.dart';
 import '../../data/models/cutting_bill_detail_model.dart';
 import '../../data/models/cutting_bill_summary_model.dart';
 import '../../data/repositories/tailoring_repository.dart';
@@ -267,8 +268,16 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
 
     // 1 · بيانات الفاتورة والطلب
     final headerCard = BillHeaderCard(header: detail.header);
-    // 2 · بيانات العميل
-    final customerCard = BillCustomerCard(header: detail.header);
+    // 2 · بيانات العميل — النقر على الاسم يفتح كشف حسابه لمن يملك الصلاحية
+    // Customer data — tapping the name opens his statement, granted users only.
+    final customerCard = BillCustomerCard(
+      header: detail.header,
+      onStatementTap: ref.watch(
+        authNotifierProvider.select((a) => a.can(Perm.customersStatement)),
+      )
+          ? () => _openCustomerStatement(detail.header)
+          : null,
+    );
     // 3 · تفاصيل الدفع — الصلاحية تُغلّف البطاقة، والخادم يحجبها أصلاً
     // The gate wraps the card and the server blocks it anyway — both layers.
     final paymentCard = PermissionGate(
@@ -410,6 +419,30 @@ class _CuttingBillViewScreenState extends ConsumerState<CuttingBillViewScreen> {
       letterhead: _letterhead(),
       detail: detail,
       printedBy: _printedBy(),
+    );
+  }
+
+  /// فتح كشف حساب العميل من اسم الفاتورة — الشاشة موجودة أصلاً وتقرأ من `/customers/{no}/statement`
+  /// Open the customer's statement from the bill's name — the screen already exists and reads
+  /// `/customers/{no}/statement`; only the identity is handed to it.
+  void _openCustomerStatement(CuttingBillHeader header) {
+    final custNo = header.custNo;
+
+    // بلا رقم عميل لا يوجد كشف حساب: لا تُفتح شاشة فارغة ولا يُختلق رقم
+    // Without a customer number there is no statement: no blank screen, no invented number.
+    if (custNo == null || custNo <= 0) {
+      _showMessage('لا رقم عميل لهذه الفاتورة، فلا كشف حساب');
+      return;
+    }
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => CustomerStatementScreen(
+          custNo: custNo,
+          custName: header.custName.isEmpty ? null : header.custName,
+          accNo: header.accNo,
+        ),
+      ),
     );
   }
 

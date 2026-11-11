@@ -91,10 +91,12 @@ pw.Widget _metaSection(
         ],
       ),
       pw.SizedBox(height: 2),
+      // توقيت الإصدار انتقل إلى التذييل الرسمي الموحد (pdfSignatures) حيث يُطبع مع «بواسطة»
+      // The issue timestamp moved into the unified official footer (pdfSignatures), printed
+      // alongside «بواسطة»; the header now carries only the period range.
       pdfDateRangeRow(
         fromDate: statement.fromDate,
         toDate: statement.toDate,
-        rightNote: 'توقيت الإصدار: ${_nowStamp()}',
       ),
     ],
   );
@@ -272,10 +274,4 @@ pw.Widget _totalsRow(String label, String value, {bool highlight = false}) {
       ),
     ],
   );
-}
-
-String _nowStamp() {
-  final now = DateTime.now();
-  return '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
-      '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
 }

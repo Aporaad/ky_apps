@@ -138,7 +138,7 @@ class _FabricCard extends StatelessWidget {
                       dense: true,
                       icon: Icons.content_cut_rounded,
                     ),
-                    MeasurementField(
+                    piece.hasTailor?MeasurementField(
                       label: 'الخيّاط',
                       // «غير مسند» لا «—»: غير المسند حالة إنتاجية لا معلومة ناقصة
                       // "Unassigned" is a production state, not a missing value.
@@ -148,7 +148,9 @@ class _FabricCard extends StatelessWidget {
                       valueColor: piece.hasTailor
                           ? null
                           : AppColors.textSecondary,
-                    ),
+                    ):const SizedBox.shrink(),
+                    
+                    
                     _StageCell(piece: piece),
                   ],
                   const [2.4, 2.4, 1.6],

@@ -15,6 +15,7 @@ import 'package:ky_apps/features/tailoring/data/models/tailoring_reference_model
 import 'package:ky_apps/features/tailoring/data/repositories/tailoring_repository.dart';
 import 'package:ky_apps/features/tailoring/presentation/providers/tailoring_providers.dart';
 import 'package:ky_apps/features/tailoring/presentation/screens/cutting_bill_view_screen.dart';
+import 'package:ky_apps/features/tailoring/presentation/widgets/bill_customer_card.dart';
 
 /// Notifier stub: `build()` returns the pre-set state so no secure-storage or
 /// Dio call is made — same pattern as the other screen tests.
@@ -302,12 +303,12 @@ void main() {
       // The bill fields: exactly two rows — never three, never one.
       final billRowTops = {
         for (final label in [
+          'الرقم اليدوي',
           'مرجع الفاتورة',
           'تاريخ التسليم',
           'الاستحقاق',
           'الحالة',
-          'الموديلات',
-          'القطع',
+          'عدد الثياب',
         ])
           topOf(label),
       };
@@ -517,15 +518,180 @@ void main() {
       // No horizontal overflow: any RenderFlex overflow is reported as an exception.
       expect(tester.takeException(), isNull);
     });
+
+    // ── الخصائص الجديدة: نوع الفاتورة · ملاحظة المستعجل · سطر الطباعة ──────────
+    // The new features: bill kind, the urgent note and the print line.
+
+    testWidgets('bill kind, urgent note and the print line render with their values',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(
+          detail: _detail(
+            details: 'مرجع خزانه 14849',
+            billKind: 3,
+            urgentNote: 'التطريز يوم الخميس',
+            createdBy: 'AHMED',
+            printedAt: '23/05/2026 10:25',
+            printedBy: 'HOSAM',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      double topOf(String label) =>
+          tester.getTopLeft(find.textContaining(label).first).dy;
+
+      // نوع الفاتورة في شريط الهوية بجانب التاريخ، باسمه من خريطة الأكواد (3 ⇒ ملغية)
+      // The bill kind sits beside the date, named through the code map (3 means ملغية).
+      expect(find.textContaining('فاتورة ملغية'), findsOneWidget);
+      expect(topOf('فاتورة ملغية'), closeTo(topOf('11/03/2026'), 1.5));
+
+      // ملاحظة المستعجل في نفس سطر البيان، لا سطر جديد تحتها
+      // The urgent note shares the note's row instead of starting a new one.
+      expect(find.text('البيان'), findsOneWidget);
+      expect(find.text('مرجع خزانه 14849'), findsOneWidget);
+      expect(find.text('ملاحظة المستعجل'), findsOneWidget);
+      expect(find.text('التطريز يوم الخميس'), findsOneWidget);
+      expect(topOf('ملاحظة المستعجل'), closeTo(topOf('البيان'), 1.5));
+
+      // وسطر الطباعة يلحق «أنشأها» في السطر نفسه
+      // And the print text joins the creator line on the same row.
+      expect(find.textContaining('أنشأها: AHMED'), findsOneWidget);
+      expect(
+        find.textContaining('تم الطباعه في :23/05/2026 10:25'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('من قبل :HOSAM'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('the new fields stay hidden when they carry no value',
+        (tester) async {
+      await _pumpScreen(tester, _FakeRepo(detail: _detail()));
+      await tester.pumpAndSettle();
+
+      // لا قيمة ⇒ لا خانة: لا ملاحظة بيان ولا سطر طباعة
+      // No value means no cell: no note row and no print text.
+      expect(find.text('ملاحظة المستعجل'), findsNothing);
+      expect(find.text('البيان'), findsNothing);
+      expect(find.textContaining('تم الطباعه'), findsNothing);
+    });
+
+    testWidgets('the fabric card adds preparation, embroidery and habna on row two',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(
+          detail: _detail(
+            fixType: '1-ثابت',
+            habnaDuabl: 1,
+            embroideryNo: 90017,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      double topOf(String label) =>
+          tester.getTopLeft(find.textContaining(label).first).dy;
+
+      expect(find.text('نوع التجهيز'), findsOneWidget);
+      expect(find.text('1-ثابت'), findsOneWidget);
+      expect(find.text('رقم التطريز'), findsOneWidget);
+      expect(find.text('90017'), findsOneWidget);
+      // خبنة دبل = 1 ⇒ علامة صح
+      // A habna of 1 renders a check mark.
+      expect(find.text('خبنة دبل'), findsOneWidget);
+      expect(find.text('✓'), findsOneWidget);
+
+      // كلها في سطر المرحلة نفسه: لا صف ثالث في البطاقة
+      // القصّاص والخيّاط خانيتان شرطيتان عند صاحب الواجهة، فالمرحلة هي الثابتة.
+      // All of them share the stage row: the card never grows a third row. The cutter and tailor
+      // cells are conditional in the current design, so the stage is the stable reference.
+      expect(topOf('نوع التجهيز'), closeTo(topOf('المرحلة'), 1.5));
+      expect(topOf('خبنة دبل'), closeTo(topOf('المرحلة'), 1.5));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a zero habna hides the whole column, and empty fabrics fields too',
+        (tester) async {
+      await _pumpScreen(
+        tester,
+        _FakeRepo(detail: _detail(habnaDuabl: 0)),
+      );
+      await tester.pumpAndSettle();
+
+      // صفر ⇒ العمود كله مختفٍ، والحقول الفارغة لا تظهر
+      // Zero hides the entire column, and blank fabric fields never appear.
+      expect(find.text('خبنة دبل'), findsNothing);
+      expect(find.text('نوع التجهيز'), findsNothing);
+      expect(find.text('رقم التطريز'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    // ── اختبار مباشر لاختصار الاسم: البطاقة وحدها بلا شاشة ولا شبكة ────────────
+    // A direct test of the name shortcut: the card alone, with no screen and no table.
+    group('BillCustomerCard statement shortcut', () {
+      Future<void> wrapCard(WidgetTester tester, Widget card) async {
+        await tester.pumpWidget(
+          MaterialApp(
+            locale: const Locale('ar'),
+            home: Scaffold(body: SingleChildScrollView(child: card)),
+          ),
+        );
+        await tester.pumpAndSettle();
+      }
+
+      final header = _detail().header;
+
+      testWidgets('the name is plain text when no callback is given',
+          (tester) async {
+        await wrapCard(tester, BillCustomerCard(header: header));
+
+        expect(
+          find.ancestor(
+            of: find.text('محمد الأهدل'),
+            matching: find.byType(InkWell),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('tapping the name fires the statement callback once',
+          (tester) async {
+        var taps = 0;
+        await wrapCard(
+          tester,
+          BillCustomerCard(header: header, onStatementTap: () => taps++),
+        );
+
+        await tester.tap(find.text('محمد الأهدل'));
+        expect(taps, 1);
+      });
+    });
   });
 }
 
 /// فاتورة كاملة: موديلان (2 + 1 قطع) مع تسميات مقاسات حقيقية
 /// A whole bill: two models (2 + 1 pieces) with real measurement labels.
+///
+/// الحقول الجديدة اختيارية بقيم افتراضية null، فما كان يُبنى قبلًا يبقى كما هو بالضبط
+/// ولا تتغيّر أي اختبار سابق.
+/// The new fields are opt-in and default to null, so every previously built bill is identical and
+/// no earlier assertion shifts.
 CuttingBillDetail _detail({
   bool withPayment = true,
   bool models = true,
   bool withBeneficiary = true,
+  String? details,
+  int? billKind,
+  String? urgentNote,
+  String? createdBy,
+  String? printedAt,
+  String? printedBy,
+  String? fixType,
+  int? habnaDuabl,
+  int? embroideryNo,
 }) {
   return CuttingBillDetail.fromJson(<String, dynamic>{
     'header': {
@@ -543,6 +709,14 @@ CuttingBillDetail _detail({
       'handing_done': '0',
       'models_count': models ? '2' : '0',
       'pieces_count': models ? '3' : '0',
+      // الخصائص الجديدة: تظهر فقط حين تُمرَّر قيمتها
+      // The new features: they appear only when a value is passed in.
+      'details': details,
+      'bill_kind': billKind,
+      'urgent_note': urgentNote,
+      'created_by': createdBy,
+      'printed_at': printedAt,
+      'printed_by': printedBy,
     },
     'payment': withPayment
         ? {
@@ -564,7 +738,17 @@ CuttingBillDetail _detail({
               'measurements': {'L1': '58', 'L2': '42'},
               'neck_type': 'كلاسيك',
               'pieces': [
-                {'seq_no1': '5001', 'ohdid': '262133', 'cloth_name': 'صوف', 'cutting_done': '1'},
+                {
+                  'seq_no1': '5001',
+                  'ohdid': '262133',
+                  'cloth_name': 'صوف',
+                  'cutting_done': '1',
+                  // أعمدة الصف الثاني الجديدة — اختيارية مثل بقية الحقول
+                  // The new second-row columns — optional like every other field.
+                  'fix_type': fixType,
+                  'habna_duabl': habnaDuabl,
+                  'embroidery_no': embroideryNo,
+                },
                 {'seq_no1': '5002', 'ohdid': '262134', 'cloth_name': 'قطن', 'cutting_done': '1'},
               ],
             },

@@ -44,6 +44,19 @@ class CuttingBillHeader {
   final String? createdBy;
   final String? lastUpdatedBy;
 
+  /// نوع الفاتورة (`BILLS_KINDS`) — كود رقمي بلا قاموس أسماء في القاعدة، فيُعرض كما هو
+  /// The bill kind (BILLS_KINDS) — a numeric code with no name dictionary, shown as stored.
+  final int? billKind;
+
+  /// ملاحظة المستعجل (`GIVING_IN`) — لا تُعرض إلا على الفاتورة المستعجلة
+  /// The urgent note (GIVING_IN) — shown only on an urgent bill.
+  final String? urgentNote;
+
+  /// تاريخ ووقت طباعة الفاتورة ومن طبعها — تظهر فقط إن طُبعت فعلاً
+  /// When the bill was printed and by whom — present only if it actually was printed.
+  final String? printedAt;
+  final String? printedBy;
+
   const CuttingBillHeader({
     required this.billNo,
     required this.year,
@@ -72,6 +85,10 @@ class CuttingBillHeader {
     this.piecesCount = 0,
     this.createdBy,
     this.lastUpdatedBy,
+    this.billKind,
+    this.urgentNote,
+    this.printedAt,
+    this.printedBy,
   });
 
   factory CuttingBillHeader.fromJson(Map<String, dynamic> json) {
@@ -103,6 +120,10 @@ class CuttingBillHeader {
       piecesCount: tailoringInt(json, 'pieces_count') ?? 0,
       createdBy: tailoringText(json, 'created_by'),
       lastUpdatedBy: tailoringText(json, 'last_updated_by'),
+      billKind: tailoringInt(json, 'bill_kind'),
+      urgentNote: tailoringText(json, 'urgent_note'),
+      printedAt: tailoringPlainText(json, 'printed_at'),
+      printedBy: tailoringPlainText(json, 'printed_by'),
     );
   }
 

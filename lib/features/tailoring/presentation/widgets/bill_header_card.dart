@@ -25,6 +25,56 @@ class BillHeaderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // خلايا السطر النصي: البيان ثم ملاحظة المستعجل — كلٌّ يظهر إن كانت له قيمة فقط،
+    // والملاحظة لا تُعرض إلا على فاتورة مستعجلة.
+    // The text-line cells: the note then the urgent note — each shows only with a value, and the
+    // note appears only on an urgent bill.
+    String billKindName ;
+    switch(header.billKind){
+     case 1:
+      billKindName=' عادية';
+      break;
+     case 2:      
+      billKindName=' موقفة';
+      break;
+    case 3:
+      billKindName= 'ملغية';
+      break;
+    case 4:
+      billKindName=' معلقة';
+      break;
+    default:
+    billKindName='';
+    }
+    final noteTiles = <Widget>[
+      if ((header.details ?? '').trim().isNotEmpty)
+        TailoringInfoTile(
+          label: 'البيان',
+          value: header.details,
+          icon: Icons.notes_rounded,
+        ),
+      if (header.urgent && (header.urgentNote ?? '').trim().isNotEmpty)
+        TailoringInfoTile(
+          label: 'ملاحظة المستعجل',
+          value: header.urgentNote,
+          icon: Icons.local_fire_department_rounded,
+          valueColor: AppColors.error,
+        ),
+    ];
+
+    // سطر التوقيع: الإنشاء والتعديل والطباعة في سطر واحد بلا سطر جديد
+    // The footer line: creation, update and printing together on one single line.
+    final printedSegment = (header.printedAt ?? '').trim().isNotEmpty ||
+            (header.printedBy ?? '').trim().isNotEmpty
+        ? 'تم الطباعه في :${_orDash(header.printedAt)}  من قبل :${_orDash(header.printedBy)}'
+        : null;
+
+    final footerLine = tailoringJoin([
+      if (header.createdBy != null) 'أنشأها: ${header.createdBy}',
+      if (header.lastUpdatedBy != null) 'آخر تعديل: ${header.lastUpdatedBy}',
+      if (printedSegment != null) printedSegment,
+    ]);
+
     return TailoringSectionCard(
       title: 'بيانات الفاتورة والطلب',
       icon: Icons.description_rounded,
@@ -34,13 +84,20 @@ class BillHeaderCard extends StatelessWidget {
           // ── شريط الهوية ─────────────────────────────────────────────────────
           // The identity strip.
           Wrap(
-            spacing: 6,
-            runSpacing: 3,
+            spacing: 3,
+            runSpacing: 1,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               _identity(header.referenceLabel, color: AppColors.primary, bold: true),
-              _identity('يدوي ${header.manualLabel}', color: AppColors.textPrimary),
+             // _identity('يدوي ${header.manualLabel}', color: AppColors.textPrimary),
               _identity(header.date ?? '—', color: AppColors.textPrimary),
+              // نوع الفاتورة بجانب التاريخ — ولا يظهر إن لم تكن له قيمة
+              // The bill kind sits beside the date, and never shows when it has no value.
+              if (header.billKind != null)
+                _identity(
+                  'فاتورة ${billKindName}',
+                  color: AppColors.info,
+                ),
               if (header.urgent)
                 _identity('مستعجل', color: AppColors.error, bold: true),
             ],
@@ -52,6 +109,11 @@ class BillHeaderCard extends StatelessWidget {
           TailoringInfoGrid(
             rows: 2,
             children: [
+              TailoringInfoTile(
+                label: 'الرقم اليدوي',
+                value: header.manualLabel,
+                icon: Icons.link_rounded,
+              ),
               TailoringInfoTile(
                 label: 'مرجع الفاتورة',
                 value: header.refNo,
@@ -67,12 +129,12 @@ class BillHeaderCard extends StatelessWidget {
                 value: header.givingDate,
                 icon: Icons.schedule_rounded,
               ),
-              if (currencyLabel != null)
-                TailoringInfoTile(
-                  label: 'العملة',
-                  value: currencyLabel,
-                  icon: Icons.payments_rounded,
-                ),
+              // if (currencyLabel != null)
+              //   TailoringInfoTile(
+              //     label: 'العملة',
+              //     value: currencyLabel,
+              //     icon: Icons.payments_rounded,
+              //   ),
               TailoringInfoTile(
                 label: 'الحالة',
                 value:
@@ -83,55 +145,62 @@ class BillHeaderCard extends StatelessWidget {
                     ? AppColors.success
                     : AppColors.warning,
               ),
+              // TailoringInfoTile(
+              //   label: 'الموديلات',
+              //   value: '${header.modelsCount}',
+              //   icon: Icons.checkroom_rounded,
+              // ),
               TailoringInfoTile(
-                label: 'الموديلات',
-                value: '${header.modelsCount}',
-                icon: Icons.checkroom_rounded,
-              ),
-              TailoringInfoTile(
-                label: 'القطع',
+                label: 'عدد الثياب',
                 value: '${header.piecesCount}',
                 icon: Icons.layers_rounded,
               ),
             ],
           ),
 
-          // ── البيان: خانة تمتد على عرض الصف ───────────────────────────────────
-          // The note: a cell spanning the full row.
-          if (header.details != null && header.details!.trim().isNotEmpty) ...[
+          // ── البيان وملاحظة المستعجل: سطر واحد جنباً إلى جنب ────────────────────
+          // The note and the urgent note share one row, side by side.
+          // الحقل لا يظهر إلا إن كان له قيمة، والملاحظة لا تُعرض إلا على فاتورة مستعجلة.
+          // A field shows only when it carries a value, and the note only on an urgent bill.
+          if (noteTiles.isNotEmpty) ...[
             const SizedBox(height: 4),
             TailoringInfoGrid(
-              minCellWidth: 4000,
-              children: [
-                TailoringInfoTile(
-                  label: 'البيان',
-                  value: header.details,
-                  icon: Icons.notes_rounded,
-                ),
-              ],
+              // صفّ واحد دائم: البيان ثم ملاحظة المستعجل في نفس السطر بلا سطر جديد
+              // Always one row: the note and the urgent note on the same line.
+              rows: 1,
+              minCellWidth: 150,
+              children: noteTiles,
             ),
           ],
 
-          if (header.createdBy != null || header.lastUpdatedBy != null) ...[
+          if (footerLine.isNotEmpty) ...[
             const SizedBox(height: 3),
-            Text(
-              tailoringJoin([
-                if (header.createdBy != null) 'أنشأها: ${header.createdBy}',
-                if (header.lastUpdatedBy != null)
-                  'آخر تعديل: ${header.lastUpdatedBy}',
-              ]),
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w500,
-                color: AppColors.textSecondary,
+            // لا قصّ ولا سطر جديد: النص يتقلّص ليبقى كاملاً في سطر واحد
+            // No clipping and no new line: the text shrinks so it stays whole on one line.
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                footerLine,
+                maxLines: 1,
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w500,
+                  color: AppColors.textSecondary,
+                ),
               ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ],
       ),
     );
+  }
+
+  /// شرطة عند غياب القيمة — الحقل الفارغ لا يظهر أصلاً، وهذا احتياط للنص المركّب
+  /// A dash when the value is missing: empty fields never render, this guards the joined line.
+  static String _orDash(String? value) {
+    final text = (value ?? '').trim();
+    return text.isEmpty ? '—' : text;
   }
 
   /// شارة هوية صغيرة — نصّ بخط ثقيل لأنها تحمل رقم الفاتورة وتاريخها
