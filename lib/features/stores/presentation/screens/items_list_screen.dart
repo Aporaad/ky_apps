@@ -48,6 +48,20 @@ class _ItemsListScreenState extends ConsumerState<ItemsListScreen>
   void initState() {
     super.initState();
     _tabs.addListener(() => setState(() {}));
+
+    // المزودان (`itemsListProvider` و`subItemsListProvider`) غير `autoDispose`،
+    // فكان آخر بحث وتصفية يبقيان في الذاكرة بعد كل رجوع إلى اللوحة ثم
+    // دخولٍ جديد. التصفير يسبق الإقلاع الذي يفرِض التصفية الافتراضية —
+    // فيبدأ كل فتح بالقائمة النشطة الأولى كما فعل المستخدم أول مرة.
+    // Both `itemsListProvider` and `subItemsListProvider` are non-autoDispose,
+    // so the last search and filter set survived every trip back to the
+    // dashboard and a fresh open. Wiping before the bootstrap step means the
+    // default filter re-imposes on each entry like the user's very first visit.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(itemsListProvider.notifier).resetTransient();
+      ref.read(subItemsListProvider.notifier).resetTransient();
+    });
   }
 
   @override

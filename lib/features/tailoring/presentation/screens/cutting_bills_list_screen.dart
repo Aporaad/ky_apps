@@ -60,16 +60,23 @@ class _CuttingBillsListScreenState extends ConsumerState<CuttingBillsListScreen>
 
     // المزود يعيش خارج الشاشة، فالتحميل الأول يُطلب صراحة عند كل فتح كي لا تُعرض قائمة
     // قديمة بحث سابق ما زال مطبّقاً عليها.
-    // The provider outlives the screen, so the first load is requested on each open so a
-    // previous search is never silently still applied.
+    //
+    // لم يعد الأمر مجرد جلب: الحالة نفسها تُصفَّر أولاً. كان `_searchCtrl.text = state.query`
+    // هو ما يُبقي «خالد» مكتوباً في الحقل بعد كل خروج ورجوع، لأن المزود
+    // غير `autoDispose` يبقي نص آخر بحث في الذاكرة طوال الجلسة.
+    // The provider outlives the screen, so a first load runs on every open.
+    //
+    // But that alone was no longer enough: `_searchCtrl.text = state.query` is what
+    // kept "خالد" printed in the field after every exit and return, because a
+    // non-autoDispose provider held the last search text for the whole session.
+    // Wiping the state first is what actually fixes the sticky search.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final notifier = ref.read(cuttingBillsListProvider.notifier);
-      _searchCtrl.text = ref.read(cuttingBillsListProvider).query;
-      if (ref.read(cuttingBillsListProvider).items.isEmpty) {
-        notifier.load();
-      } else {
-        notifier.refresh();
-      }
+      notifier.resetTransient();
+      // الحقل يبدأ فارغاً دائماً بعد التصفير — لا نسخة من بحثٍ سابق.
+      // The field always starts empty after the wipe — no ghost of a past search.
+      _searchCtrl.clear();
+      notifier.load();
     });
   }
 

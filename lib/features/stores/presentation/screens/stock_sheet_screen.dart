@@ -35,7 +35,17 @@ class _StockSheetScreenState extends ConsumerState<StockSheetScreen> {
   void initState() {
     super.initState();
 
-    Future.microtask(() => ref.read(stockSheetProvider.notifier).load());
+    // كشف الجرد يحمل إدخالاً بشرياً مؤقتاً (كميات وملاحظات) لا يُحفظ
+    // ولا يُرسل — مغادرة الشاشة تعني إعادة العدّ من الصفر، وهذا نص
+    // الوعاء في `StockSheetState`. التصفير هنا يطبّق ذلك حرفياً.
+    // The stock sheet carries temporary human input — counted quantities and
+    // notes — that is never saved or sent, and leaving it means starting the
+    // count again (exactly what `StockSheetState` promises at the top). The
+    // wipe here makes that contract literal rather than implied.
+    Future.microtask(() {
+      ref.read(stockSheetProvider.notifier).resetTransient();
+      ref.read(stockSheetProvider.notifier).load();
+    });
   }
 
   @override

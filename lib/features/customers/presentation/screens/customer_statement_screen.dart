@@ -197,7 +197,20 @@ class _CustomerStatementScreenState
   @override
   void initState() {
     super.initState();
+    // المزود غير `autoDispose`: كشف عميلٍ سابق بقي في `state`، فظهرت صفوفه
+    // لحظة تحت اسم هذا العميل قبل وصول الطلب الجديد. التصفير ثم الجلب يمنع
+    // أي خلط بين كشفين على نفس الشاشة.
+    // The provider is not autoDispose: a previous customer's statement stayed in
+    // `state`, so its rows flashed under this customer's name until the new reply
+    // landed. Reset then load keeps two statements from ever mixing.
+    //
+    // الاثنان في microtask واحد: تعديل المزود أثناء بناء الشجرة ممنوع،
+    // والترتيب يبقى تصفيرٌ ثم جلبٌ بمعطيات هذه الشاشة.
+    // Both run in one microtask: mutating a provider mid-build is forbidden, and
+    // the order stays wipe-then-load with this screen's own arguments.
     Future.microtask(() {
+      if (!mounted) return;
+      ref.read(customerStatementProvider.notifier).resetTransient();
       _loadData();
     });
   }

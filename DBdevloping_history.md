@@ -2576,3 +2576,28 @@ SELECT * FROM ACCOUNTS.ITEM_MOVEMENT_D WHERE I_DATE >= TO_DATE(:from,'YYYY-MM-DD
 ومواضع النص)، لا على القاعدة.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-10 07:05 · **DDL:** لا · **DML:** لا · **لا استعلام**.
+
+---
+
+## 2026-11-11 12:00 — أثر توحيد ترتيب الكشوفات المالية (قراءة فقط) · Qoder
+
+**لا تغيير في المخطّط:** لا DDL، لا DML، لا sequences. العمل كله داخل `ORDER BY`
+في أربعة استعلامات `SELECT` على `ACCOUNTS.ENTRY_SUB es JOIN ACCOUNTS.ENTRY_MAIN em`.
+
+**الاستعلام المعتمد (بعد التعديل):**
+```sql
+SELECT es.ENTRY_NO, ... , es.ENTRY_MNT
+  FROM ACCOUNTS.ENTRY_SUB es
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO
+ WHERE es.ACC_NO = :acc_no
+ ORDER BY em.ENTRY_DATE, es.SEQ;
+```
+
+**التقرير:** «تسلسل الحركة» فُسِّر بـ `ENTRY_SUB.SEQ` (بطلب صريح من المستخدم)،
+لذا حُذف المفتاح الوسيط `es.ENTRY_NO` من `ORDER BY` في الأربعة:
+`MyStatementController::financialStatement`، `AccountController::getAccountStatement`
+(يخدم الشجرة المحاسبية أيضاً)، `WorkerController::fetchStatement`،
+`CustomerController::statement`.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 12:00 · **DDL:** لا · **DML:** لا · **لا استعلام يدوي على القاعدة**.

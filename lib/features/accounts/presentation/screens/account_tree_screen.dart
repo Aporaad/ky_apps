@@ -50,6 +50,22 @@ class _AccountTreeScreenState extends ConsumerState<AccountTreeScreen> {
   List<AccountTreeRow> _searchRows = const [];
 
   @override
+  void initState() {
+    super.initState();
+
+    // المزود غير `autoDispose`: بحث الفترة والفرز من زيارة سابقة بقيا في الذاكرة،
+    // فرُسمت شجرة مُصفّاة خلف حقل بحث فارغ. التصفير مع الجلب يعيد كل فتح إلى
+    // أول زيارة حقيقية للشجرة.
+    // The provider is not autoDispose, so a previous visit's search, period and sort
+    // survived in memory and a filtered tree rendered behind an empty field. Wiping
+    // with a refetch makes every open a real first visit.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(accountTreeProvider.notifier).resetTransient(reload: true);
+    });
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _searchCtrl.dispose();

@@ -56,6 +56,21 @@ class _MyWorkStatementScreenState extends ConsumerState<MyWorkStatementScreen> {
         );
   }
 
+  @override
+  void initState() {
+    super.initState();
+    // المزود غير `autoDispose`: كشف العمل السابق بقي في الذاكرة بعد الإغلاق،
+    // فظهرت أرقام اجتماعٍ سابق تحت عنوان هذه الجلسة. التصفير ثم الجلب يجعل كل
+    // فتح يبدأ من الصفر بلا وميض بيانات قديمة.
+    // The provider is not autoDispose, so the previous work report lingered after
+    // close and its figures appeared under this session's title. Reset then load
+    // so every open starts clean with no stale flash.
+    Future.microtask(() {
+      ref.read(myWorkReportProvider.notifier).resetTransient();
+      _loadData();
+    });
+  }
+
   Future<void> _selectDate(bool isFrom) async {
     final initial =
         isFrom ? (_fromDate ?? DateTime.now()) : (_toDate ?? DateTime.now());

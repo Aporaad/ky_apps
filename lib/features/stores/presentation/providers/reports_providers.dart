@@ -188,6 +188,22 @@ class BalancesNotifier extends Notifier<BalancesState> {
 
     return load(keepPage: true);
   }
+
+  /// تفريغ البحث والمعطيات عند مغادرة شاشة الأرصدة أو نهاية الجلسة.
+  /// Clears the search and every parameter when the balances screen exits.
+  ///
+  /// الأرصدة صفحة تُحمَّل تلقائياً عند `build()`؛ تبديل التبويب يبقيها mounted
+  /// داخل `IndexedStack` فلا يُعاد `build()` — الجلب ضروري لعرض الصفحة الأولى
+  /// كاملة بدل آخر مجموعة فلاتر.
+  /// Balances auto-load on `build()`, but a tab switch keeps the screen mounted
+  /// inside the `IndexedStack` so `build()` never reruns — refetching here is
+  /// what replaces the last filter set with the first page again.
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = const BalancesState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
 }
 
 final balancesProvider = NotifierProvider<BalancesNotifier, BalancesState>(
@@ -411,6 +427,22 @@ class StoreReportNotifier extends Notifier<StoreReportState> {
         'to': filter?.toText ?? '',
       },
     );
+  }
+
+  /// تفريغ معطيات التقرير والنتائج عند مغادرة الشاشة.
+  /// Clears the parameters and the rows when the report screen exits.
+  ///
+  /// لا `reload`: تقرير بلا معطيات لا يُنفَّذ، والمعطيات نفسها هي القرار
+  /// الذي على المستخدم اتخاذه من النافذة المنبثقة عند العودة.
+  /// No `reload` — a report without parameters cannot run, and the parameters
+  /// themselves are the decision the user must re-take in the sheet on return.
+  void resetTransient({bool reload = false}) {
+    // `reload` مقصود به اتساق التوقيع مع بقية المزودات؛ تقرير بلا معطيات
+    // لا معنى له أصلاً فلا يُعاد جلبه.
+    // `reload` is kept only to align the signature with every other notifier;
+    // an unparameterised report has nothing to refetch.
+    _cancelToken?.cancel('screen-exited');
+    state = const StoreReportState();
   }
 }
 

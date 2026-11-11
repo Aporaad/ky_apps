@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/state/session_view_state.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../auth/presentation/providers/auth_notifier.dart';
@@ -106,7 +107,46 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
     );
     if (!visible.any((section) => section.id == id)) return;
 
-    setState(() => _currentSectionId = id);
+    // التفريغ يحدث داخل `_switchSection`: البطاقة قد ترسل المستخدم من «الرئيسية»
+    // إلى «المخازن» — الحالة القديمة (لو وُجدت) يجب أن تُمسح بنفس القاعدة.
+    // The cleanup happens inside `_switchSection`: a tile may send the user
+    // from home to stores — the outgoing state (if any) must go through the
+    // same rule as a drawer or bottom-bar tap.
+    _switchSection(id);
+  }
+
+  /// يبدّل القسم النشط ويُنظّف حالة البحث/الفلاتر للقسم الذي غادره المستخدم.
+  /// Switches the active section and wipes the search/filter state of the one
+  /// the user just left.
+  ///
+  /// السبب الجذري الذي يعالجه هذا النداء: `IndexedStack` يبقي كل قسم mounted
+  /// طوال الجلسة، فلا `dispose` ولا `initState` جديد عند التبديل — وكانت حالة
+  /// البحث ومعطيات التقارير تعيش في `ProviderScope` الجذري وتُملأ من جديد في
+  /// حقول المستخدم عند كل رجوع. التفريغ هنا يُعيد كل مزود إلى حالته الابتدائية
+  /// ويجلب القائمة كاملة كي لا تظهر نتائج البحث السابقة خلف حقل بحث فارغ.
+  /// This is what fixes the sticky-search bug: the portal's `IndexedStack`
+  /// keeps every section mounted for the whole session, so a tab switch fires
+  /// neither `dispose` nor `initState`, and the last search text lived in the
+  /// root `ProviderScope` waiting to refill the field on the next visit.
+  /// Clearing here returns each notifier to its initial state and refetches
+  /// the unfiltered list, so no filtered rows ever sit behind a blank field.
+  ///
+  /// لا يعمل أي شيء إذا كان القسم الجديد هو الحالي — الضغط المتكرر على نفس
+  /// التبويب لا يجب أن يُعيد جلب الشبكة.
+  /// A no-op when the id matches the current section — tapping the same tab
+  /// twice must not re-hammer the network.
+  void _switchSection(String newId) {
+    final previousId = _currentSectionId;
+    if (previousId == newId) return;
+
+    setState(() => _currentSectionId = newId);
+
+    // القسم القديم لا يزال mounted داخل `IndexedStack` — الجلب ضروري عند
+    // التبديل، على عكس نهاية الجلسة التي تمرّر `reload: false`.
+    // The outgoing section stays mounted inside the `IndexedStack`, so
+    // refetching is required here — unlike session end, which passes
+    // `reload: false` because nothing is coming back to look at the state.
+    resetSectionViewState(ref, previousId, reload: true);
   }
 
   /// مؤشر الشريط السفلي: القسم الحالي إن كان في الشريط، وإلا آخر اختيار منه، وإلا الأول
@@ -224,9 +264,14 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
       onIndexChanged: (index) {
         // التخزين بالمعرّف لا بالفهرس: الفهرس ملك هذه القائمة المصفّاة لا السجل الكامل
         // Store the id, not the index — an index belongs to this filtered list, not the registry.
-        setState(() {
-          _currentSectionId = visible[index].id;
-        });
+        //
+        // التحويل إلى `_switchSection` يُمرّر التبديل عبر نفس مسار التفريغ الذي
+        // يمر به فتح بطاقة من الرئيسية أو اختيار من الشريط السفلي — ثلاثة
+        // مداخل للقسم الحالي وسبيل تنظيف واحد، لا ثلاثة قابلةٍ للنسيان.
+        // Routing through `_switchSection` puts every entry — drawer, bottom
+        // bar, and home tile — on the same cleanup path. Three doors, one
+        // wipe; not three places that a future tab could forget.
+        _switchSection(visible[index].id);
       },
       isCollapsed: isMobile ? false : _isCollapsed,
       isDrawerMode: isMobile,
@@ -345,10 +390,17 @@ class _EmployeeMainLayoutState extends ConsumerState<EmployeeMainLayout> {
                   visible[currentIndex].id,
                 ),
                 onDestinationSelected: (idx) {
-                  setState(() {
-                    _lastBarSectionId = barSections[idx].id;
-                    _currentSectionId = barSections[idx].id;
-                  });
+                  // نفس القاعدة كما في القائمة الجانبية — الشريط يغيّر
+                  // القسم الحالي عبر `_switchSection` الوحيدة التي تنظّف
+                  // حالة القسم المُغادَر؛ وتذكر آخر اختيار منه يبقى محلياً
+                  // لهذا الشريط.
+                  // Same rule as the drawer: the bar changes the current
+                  // section through `_switchSection`, the one place that
+                  // wipes the outgoing section's state. Remembering the
+                  // last bar pick stays local to this bar.
+                  final newId = barSections[idx].id;
+                  setState(() => _lastBarSectionId = newId);
+                  _switchSection(newId);
                 },
                 sections: barSections,
               ),

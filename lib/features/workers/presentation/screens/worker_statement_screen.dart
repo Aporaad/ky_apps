@@ -48,7 +48,23 @@ class _WorkerStatementScreenState extends ConsumerState<WorkerStatementScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => _loadData());
+    // المزود غير `autoDispose`: كشف العامل السابق بقي في `state` حتى بعد
+    // إغلاق الشاشة، فظهرت نتائج عاملٍ آخر لحظة قبل وصول الطلب الجديد.
+    // `resetTransient` لا `reload` — التحميل يتبع بمعطيات هذه الشاشة.
+    // The provider is not autoDispose: the previous worker's statement sat in
+    // `state` after the screen closed, so another worker's rows flashed before
+    // the new request landed. Reset without reload — `_loadData` follows with
+    // this screen's own arguments.
+    //
+    // النداء مؤجَّل إلى microtask: تعديل مزود أثناء بناء الشجرة يُطلق
+    // شرط Riverpod «modify a provider while the widget tree is building».
+    // Deferred to a microtask: mutating a provider mid-build trips Riverpod's
+    // "modify a provider while the widget tree is building" assertion.
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(workerStatementProvider.notifier).resetTransient();
+      _loadData();
+    });
   }
 
   void _loadData() {

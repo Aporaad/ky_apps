@@ -102,8 +102,27 @@ class _MeasurementModelPickerSheetState
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+
       final state = ref.read(customerModelsProvider(widget.custNo));
-      _searchCtrl.text = state.query;
+
+      // المزود عائلي على رقم العميل وغير `autoDispose`: كان الحقل يمتلئ من
+      // `state.query` فتعود كتابة الجلسة السابقة (ونطاقها المؤرّف) إلى حقل يجب
+      // أن يبدأ فارغاً. عند وجود أوساخ فقط: تصفير ثم جلب واحد نظيف.
+      // The provider is a non-autoDispose family over the customer, so refilling the
+      // field from `state.query` wrote back the previous visit's text and dated range.
+      // Only when something is actually dirty: wipe, then one clean fetch.
+      final isDirty =
+          state.query.isNotEmpty ||
+          state.fromDate != null ||
+          state.toDate != null;
+
+      if (isDirty) {
+        _notifier.resetTransient();
+        _searchCtrl.clear();
+        _notifier.load();
+
+        return;
+      }
 
       // المزوّد العائلي يبدأ تحميله بنفسه عند أول بناء، والإعادة فوق تحميل جارٍ طلبان لنفس
       // القائمة: الثاني يُلغي الأول في الظل ويضاعف الضغط على أوراكل.

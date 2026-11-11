@@ -528,6 +528,23 @@ class _AccountPickerBottomSheetState extends ConsumerState<_AccountPickerBottomS
   Timer? _debounce;
 
   @override
+  void initState() {
+    super.initState();
+
+    // المزود غير `autoDispose` ومشترك مع لوحة الحسابات: آخر بحث في الورقة كان يبقى
+    // مُطبَّقاً خلف حقل فارغ في كل فتح. التصفير مع الجلب يُعيد الورقة نظيفة.
+    // The provider is not autoDispose and is shared with the accounts dashboard, so the
+    // last search stayed applied behind an empty field on every open. Wipe and refetch.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (ref.read(chartAccountsProvider).search.isEmpty) return;
+
+      ref.read(chartAccountsProvider.notifier).resetTransient(reload: true);
+      _searchCtrl.clear();
+    });
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _searchCtrl.dispose();

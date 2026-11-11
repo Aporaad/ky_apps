@@ -14,11 +14,30 @@ import 'job_history_screen.dart';
 ///
 /// افتراضيًا تعرض مهام الرسائل الثلاث فقط؛ ومفتاح «كل المهام» يوسّع النطاق إلى USER_SCHEDULER_JOBS.
 /// By default only the three messaging jobs; the "all jobs" switch widens to USER_SCHEDULER_JOBS.
-class JobsListScreen extends ConsumerWidget {
+class JobsListScreen extends ConsumerStatefulWidget {
   const JobsListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<JobsListScreen> createState() => _JobsListScreenState();
+}
+
+class _JobsListScreenState extends ConsumerState<JobsListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // المزود غير `autoDispose`: مفتاح «كل المهام» وحالته بقيا من آخر فتح،
+    // فرأى المستخدم نطاقاً غير الذي اختاره أول مرة. `reload: true` يعيد الجلب
+    // على النطاق الافتراضي (مهام الرسائل فقط).
+    // The provider is not autoDispose: the "all jobs" switch survived the last
+    // open, so the list came back in a scope the user never picked this time.
+    // `reload: true` refetches the default scope (messaging jobs only).
+    Future.microtask(
+      () => ref.read(jobsProvider.notifier).resetTransient(reload: true),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(jobsProvider);
     final notifier = ref.read(jobsProvider.notifier);
 

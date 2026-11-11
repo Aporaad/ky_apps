@@ -37,6 +37,11 @@ class _SeededItemsList extends ItemsListNotifier {
 
   @override
   Future<void> applyDefaults(StoreReference reference) async {}
+
+  /// الحالة مزروعة، فتفريغ الشاشة عند الفتح يجب أن يمرّ بلا أثر هنا
+  /// The state is seeded, so the screen's open-time wipe must stay a no-op.
+  @override
+  void resetTransient({bool reload = false}) {}
 }
 
 /// تبويب الفروع لا يُحمّل شيئاً هنا: الاختبار يخصّ تخطيط الرئيسية
@@ -50,6 +55,11 @@ class _SeededSubItems extends SubItemsListNotifier {
 
   @override
   Future<void> applyDefaults(StoreReference reference) async {}
+
+  /// نفس السبب كما في القائمة الرئيسية: لا تفريغ لحالة مزروعة
+  /// Same reason as the main list: a seeded state is never wiped here.
+  @override
+  void resetTransient({bool reload = false}) {}
 }
 
 void main() {

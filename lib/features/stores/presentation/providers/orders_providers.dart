@@ -180,6 +180,21 @@ class OrdersListNotifier extends Notifier<OrdersListState> {
     return load();
   }
 
+  /// تفريغ البحث والتصفية عند مغادرة القسم أو نهاية الجلسة.
+  /// Clears the search and the filter panel when leaving or ending a session.
+  ///
+  /// `kind` يبقى: الشاشة تُفتح لنوعٍ واحد بمعاملٍ ثابت، والتبديل بين الأنواع
+  /// يستدعي `bind` الذي يعيد الضبط بنفسه.
+  /// `kind` survives — the screen is opened per kind, and switching kinds
+  /// already calls `bind`, which resets the state on its own.
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    _cancelToken?.cancel('screen-exited');
+    final kind = state.kind;
+    state = OrdersListState(kind: kind, isLoading: true);
+    if (reload) Future.microtask(load);
+  }
+
   Future<void> applyFilters({
     int? storeNo,
     DateTime? from,

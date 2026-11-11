@@ -40,6 +40,22 @@ class _MessageLogScreenState extends ConsumerState<MessageLogScreen> {
       _isWhatsapp ? Perm.whatsappCreate : Perm.smsCreate;
 
   @override
+  void initState() {
+    super.initState();
+    // المزود عائلة على القناة وغير `autoDispose`: نص البحث وحالة التبويب
+    // المختارة (مرسلة / فاشلة / معلّقة) بقيا من آخر فتح فظهرت قائمة مُصفّاة
+    // تحت حقل فارغ. `reload: true` يعيد جلب الصفحة الأولى.
+    // The provider is a non-autoDispose family over the channel: both the search
+    // text and the chosen status tab (sent / failed / pending) survived the last
+    // open, leaving a filtered list under an empty field. `reload: true` refetches
+    // page one.
+    Future.microtask(
+      () => ref.read(messagesProvider(widget.channel).notifier)
+          .resetTransient(reload: true),
+    );
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _searchCtrl.dispose();

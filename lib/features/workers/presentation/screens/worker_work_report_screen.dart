@@ -60,7 +60,19 @@ class _WorkerWorkReportScreenState extends ConsumerState<WorkerWorkReportScreen>
     // يبحث عن تاريخ آخر سجل عمل للقصاص/الخياط ويعتمده (من = إلى = ذلك اليوم).
     _fromDate = null;
     _toDate = null;
-    Future.microtask(_loadData);
+    // المزود غير `autoDispose`: كشف العمل السابق بقي معروضاً لحظة قبل وصول
+    // الطلب الجديد. التصفير يمنع ظهور أرقام عاملٍ آخر على ترويسة هذا العامل.
+    // The provider is not autoDispose: the previous work report stayed on screen
+    // until the new reply arrived. Wiping first keeps another worker's figures
+    // from appearing under this worker's letterhead.
+    //
+    // التصفير مؤجَّل: لا يُعدَّل مزود أثناء بناء الشجرة.
+    // The wipe is deferred — a provider is never mutated while the tree builds.
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(workerWorkReportProvider.notifier).resetTransient();
+      _loadData();
+    });
   }
 
   @override

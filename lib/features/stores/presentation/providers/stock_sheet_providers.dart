@@ -222,6 +222,24 @@ class StockSheetNotifier extends Notifier<StockSheetState> {
     return load();
   }
 
+  /// تفريغ كل شيء في الكشف: البحث والمخازن والمجموعة وتاريخ الجرد والكميات
+  /// المضافة والملاحظات.
+  /// Clears everything the sheet held: search, stores, group, count date, and
+  /// both counted quantities and notes.
+  ///
+  /// الكمية الفعلية والملاحظة إدخالان بشريان مؤقتان لا يُحفظان ولا يُرسلان،
+  /// والخروج من الشاشة يعني إعادة العدّ من الصفر — هذا نصّ الوعاء في أعلاه.
+  /// The counted quantity and the note are temporary human input — never
+  /// saved, never sent — so leaving the sheet means starting the count again,
+  /// exactly as the class documentation promises.
+  void resetTransient({bool reload = false}) {
+    _cancelToken?.cancel('screen-exited');
+    state = StockSheetState(date: DateTime.now());
+    if (reload) {
+      Future.microtask(() => load(storeNos: const [], clearGroup: true));
+    }
+  }
+
   /// تسجيل كمية فعلية لسطر واحد
   /// Record a counted quantity for one line.
   void setCounted(StockSheetRow row, double value) {

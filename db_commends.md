@@ -3655,3 +3655,25 @@ EdgeInsets.fromLTRB(16, 20, 16, 16)` في `store_export.dart` (4 مولّدات)
 `account_group_statement_pdf_builder.dart` و`worker_group_work_report_pdf_builder.dart`.
 
 **المنفِّذ:** Qoder · **الوقت:** 2026-11-10 07:05 · **DDL:** لا · **DML:** لا · **لا استعلام**.
+
+---
+
+## 2026-11-11 12:00 — ORDER BY الموحّد للكشوفات المالية (قراءة فقط) · Qoder
+
+**نموذج AI:** Qoder. لا DDL/DML — تعديل نص `ORDER BY` داخل كود Laravel فقط.
+يُسجَّل هنا لأنه يغيّر سلوك استعلامات القراءة على `ACCOUNTS.ENTRY_SUB`.
+
+```sql
+-- الصيغة الجديدة المطبَّقة على كشف العميل / كشف حسابي / كشف الحساب المالي
+-- (بما فيه من شجرة الحسابات) / كشف جاري العاملين:
+SELECT es.ENTRY_NO, ... FROM ACCOUNTS.ENTRY_SUB es
+  JOIN ACCOUNTS.ENTRY_MAIN em ON em.ENTRY_NO = es.ENTRY_NO
+  JOIN ACCOUNTS.ENTRY_TYPE et ON et.ENTRY_TYPE_NO = em.ENTRY_TYPE_NO
+ WHERE es.ACC_NO = :acc_no
+ ORDER BY em.ENTRY_DATE, es.SEQ;
+
+-- الصيغة القديمة: ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ
+-- أُلغي المفتاح الوسيط es.ENTRY_NO بطلب المستخدم: «تاريخ ثم تسلسل الحركة».
+```
+
+**المنفِّذ:** Qoder · **الوقت:** 2026-11-11 12:00 · **DDL:** لا · **DML:** لا · **SELECT للقراءة فقط**.

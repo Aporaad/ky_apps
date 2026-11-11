@@ -90,6 +90,13 @@ class WorkerGroupWorkReportNotifier extends Notifier<WorkerGroupWorkReportState>
       );
     }
   }
+
+  /// تفريغ كشف عمل المجموعة عند مغادرة الشاشة.
+  /// Clears the group work report when its screen exits.
+  void resetTransient() {
+    _cancelToken?.cancel('screen-exited');
+    state = const WorkerGroupWorkReportState();
+  }
 }
 
 final workerGroupWorkReportProvider =

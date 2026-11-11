@@ -41,8 +41,17 @@ class _MyFinancialStatementScreenState
   @override
   void initState() {
     super.initState();
-    // لا حاجة لـ _loadStatement هنا — الـ Notifier يبدأ التحميل تلقائياً في build()
-    // No manual load needed — the Notifier starts loading via Future.microtask in build().
+    // المزود غير `autoDispose` و`build()` لا يُعاد، فكشف آخر مستخدم على نفس
+    // الجهاز كان يُرسم قبل وصول رد الطلب الجديد. التصفير ثم الجلب يضمن أن ما
+    // يُعرض يخص من سجّل دخوله الآن.
+    // The provider is not autoDispose and `build()` never re-runs, so the last
+    // user's statement on this device was drawn before the fresh reply landed.
+    // Reset then load so what is displayed belongs to whoever signed in now.
+    Future.microtask(() {
+      final notifier = ref.read(myFinancialStatementProvider.notifier);
+      notifier.resetTransient();
+      notifier.load();
+    });
   }
 
   Future<void> _pickDate({required bool isFrom}) async {

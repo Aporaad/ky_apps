@@ -50,7 +50,18 @@ class _WorkerGroupWorkReportScreenState
     final now = DateTime.now();
     _fromDate = now.subtract(const Duration(days: 6));
     _toDate = now;
-    Future.microtask(_loadData);
+    // كشف المجموعة السابق (قصاصين مقابل خياطين) ونطاقه الزمني كانا يبقيان
+    // في المزود غير `autoDispose`، فظهر تقرير مجموعة أخرى لحظة عند كل فتح.
+    // The last group's report (cutters vs tailors) and its date range stayed in
+    // the non-autoDispose provider, so another group's numbers flashed on open.
+    //
+    // التصفير مؤجَّل إلى microtask فلا لمس للمزود أثناء بناء الشجرة.
+    // Deferred: a provider is never mutated while the widget tree is building.
+    Future.microtask(() {
+      if (!mounted) return;
+      ref.read(workerGroupWorkReportProvider.notifier).resetTransient();
+      _loadData();
+    });
   }
 
   String _groupLabel() {

@@ -34,7 +34,16 @@ class _StockBalancesScreenState extends ConsumerState<StockBalancesScreen> {
   void initState() {
     super.initState();
 
-    Future.microtask(() => ref.read(balancesProvider.notifier).load());
+    // المزود غير `autoDispose` يعيش في `ProviderScope` الجذري، فتكرار فتح
+    // هذه الشاشة من لوحة المخازن كان يعيد عرض آخر بحثٍ+Fلاتر قبل أي جلب.
+    // التصفير هنا يترك للمستخدم زيارةً جديدةً فعلية لا نسخةً من السابقة.
+    // The provider is not autoDispose — reopening this screen from the stores
+    // dashboard used to show the last search and filters before any fetch.
+    // Wiping here makes every entry a real first visit, not a replay.
+    Future.microtask(() {
+      ref.read(balancesProvider.notifier).resetTransient();
+      ref.read(balancesProvider.notifier).load();
+    });
   }
 
   @override

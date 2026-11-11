@@ -38,10 +38,15 @@ class _AdminUsersScreenState extends ConsumerState<AdminUsersScreen> {
   @override
   void initState() {
     super.initState();
-    // القائمة تُحمَّل من `build()` المزود؛ هنا فقط تُسرق القيمة الجارية لو رُجع للشاشة
-    // The notifier loads in its own build(); this only re-syncs the field when returning here.
-    final current = ref.read(adminUsersProvider).search;
-    if (current.isNotEmpty) _searchCtrl.text = current;
+    // المزود غير `autoDispose`: بحث التصفية والفرز السابقان بقيان في `state`
+    // حتى بعد مغادرة الشاشة، فكانت القائمة تعود مُصفّرة على معطيات قديمة بجانب
+    // حقل بحث فارغ. `reload: true` يعيد الجلب من الأول بنفس الوقت.
+    // The provider is not autoDispose: the previous search/sort stayed in `state`
+    // after the screen closed, so the list came back filtered on stale criteria
+    // beside an empty field. `reload: true` refetches page one at the same time.
+    Future.microtask(
+      () => ref.read(adminUsersProvider.notifier).resetTransient(reload: true),
+    );
   }
 
   @override

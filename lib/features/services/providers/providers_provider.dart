@@ -104,6 +104,22 @@ class ProvidersListNotifier extends Notifier<ProvidersState> {
     if (res.success) await load();
     return res;
   }
+
+  /// تفريغ البحث عند مغادرة قسم الخدمات أو نهاية الجلسة.
+  /// Clears the search when the services tab exits or the session ends.
+  ///
+  /// `reload` — الشاشة تبقى mounted داخل `IndexedStack`، فلا يُعاد
+  ///    `initState`؛ الجلب يعيد القائمة كاملة بدل آخر بحث.
+  /// `reload` — the screen stays mounted inside the `IndexedStack`, so
+  ///    `initState` never reruns; refetching swaps the last search's rows for
+  ///    the full list.
+  void resetTransient({bool reload = false}) {
+    _debounce?.cancel();
+    _cancelToken?.cancel('screen-exited');
+    _searchVersion++;
+    state = const ProvidersState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
 }
 
 final providersListProvider = NotifierProvider<ProvidersListNotifier, ProvidersState>(

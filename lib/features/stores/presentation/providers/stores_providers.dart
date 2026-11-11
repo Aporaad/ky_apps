@@ -129,6 +129,23 @@ class StoresListNotifier extends Notifier<StoresListState> {
     return load();
   }
 
+  /// تفريغ نص البحث عند مغادرة قسم المخازن أو نهاية الجلسة.
+  /// Clears the search text when the stores section closes or the session ends.
+  ///
+  /// `reload` — عند التبديل بين الأقسام تبقى الشاشة mounted داخل `IndexedStack`،
+  ///    فلا يُعاد `initState` ولا `build()`؛ يجب جلب القائمة غير المُفلترة
+  ///    حتى لا تبقى نتائج البحث خلف حقل فارغ.
+  /// `reload` — on a tab switch the screen stays mounted inside the
+  ///    `IndexedStack`, so neither `initState` nor `build()` reruns; the
+  ///    unfiltered list must be refetched or filtered rows sit behind a blank
+  ///    search field.
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = const StoresListState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
+
   Future<StoreResult> save({
     int? storeNo,
     required Map<String, dynamic> payload,

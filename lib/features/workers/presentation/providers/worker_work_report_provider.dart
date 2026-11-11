@@ -95,6 +95,19 @@ class WorkerWorkReportNotifier extends Notifier<WorkerWorkReportState> {
       );
     }
   }
+
+  /// تفريغ كشف العمل عند مغادرة الشاشة.
+  /// Clears the work report when its screen exits.
+  ///
+  /// النطاق الزمني والمعرف العامل لا يُخزَّنان هنا: الشاشة تطلب `loadReport`
+  /// بمعطياتها عند كل دخول، فلا يبقى شيء لإخفائه سوي نتيجة العرض.
+  /// Neither the date range nor the worker id lives here — the screen calls
+  /// `loadReport` with its own parameters on every entry, so only the rendered
+  /// result needs wiping.
+  void resetTransient() {
+    _cancelToken?.cancel('screen-exited');
+    state = const WorkerWorkReportState();
+  }
 }
 
 final workerWorkReportProvider =

@@ -91,6 +91,19 @@ class JobsNotifier extends Notifier<JobsState> {
     if (result.success) await load();
     return result;
   }
+
+  /// إعادة «كل المهام» إلى false وتصفير القائمة عند مغادرة القسم.
+  /// Restores the "show all jobs" toggle to off and wipes the list on exit.
+  ///
+  /// `reload` — تبديل التبويب لا يفك شاشة الخدمات من `IndexedStack`،
+  ///    فلا `initState` جديد؛ إعادة الجلب تعيد الوضع الافتراضي الظاهر.
+  /// `reload` — tab switches never detach the services screen from the
+  ///    `IndexedStack`, so `initState` won't rerun; refetching redraws the
+  ///    default view the user first saw.
+  void resetTransient({bool reload = false}) {
+    state = const JobsState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
 }
 
 final jobsProvider = NotifierProvider<JobsNotifier, JobsState>(JobsNotifier.new);

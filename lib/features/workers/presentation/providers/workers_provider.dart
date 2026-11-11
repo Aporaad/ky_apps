@@ -149,6 +149,19 @@ class WorkersListNotifier extends Notifier<WorkersListState> {
     final updated = state.workers.where((w) => w.id != workerId).toList();
     state = state.copyWith(workers: updated);
   }
+
+  /// تفريغ البحث عند مغادرة قسم العاملين أو نهاية الجلسة.
+  /// Clears the search when the workers tab exits or the session ends.
+  ///
+  /// `reload` — التبديل داخل `IndexedStack` يبقي الشاشة mounted فلا يُعاد
+  ///    `initState`؛ الجلب يعيد القائمة كاملة بدل آخر بحث.
+  /// `reload` — the portal keeps the screen mounted inside the `IndexedStack`
+  ///    across tab switches, so `initState` never reruns; refetching swaps the
+  ///    filtered list back for the full registry.
+  void resetTransient({bool reload = false}) {
+    state = WorkersListState(isLoading: true, type: workerType);
+    if (reload) Future.microtask(loadWorkers);
+  }
 }
 
 final workersListProvider =
@@ -237,6 +250,12 @@ class WorkerStatementNotifier extends Notifier<WorkerStatementState> {
         error: 'فشل تحميل كشف الحساب: ${e.toString()}',
       );
     }
+  }
+
+  /// تفريغ كشف الحساب عند مغادرة الشاشة.
+  /// Clears the statement when its screen exits.
+  void resetTransient() {
+    state = const WorkerStatementState();
   }
 }
 

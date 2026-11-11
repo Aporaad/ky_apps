@@ -3314,3 +3314,79 @@ thrown: Invalid argument: 52 — ثانيا اين خقل اختيار العم�
   الجاري من عمل آخر، لا علاقة له بهذه الجولة).
 
 **النموذج:** Qoder · **الوقت:** 2026-11-10 07:05 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+# 2026-11-11 09:20 — حل مشكلة البحث والمعطيات العالقة (Sticky Search / Filters)
+
+**السبب الجذري:** كل مزودات القوائم والتقارير `NotifierProvider` بلا `autoDispose`، فتعيش
+حالتها (نص البحث، الفلاتر، معطيات التقرير، الترقيم) في `ProviderScope` الجذر طوال الجلسة؛
+والأقسام داخل `IndexedStack` تبقى mounted فلا `dispose` ولا `initState` عند التبديل.
+**Root cause:** every list/report provider is a non-autoDispose `NotifierProvider` living in
+the root scope, and the portal's `IndexedStack` keeps sections mounted across tab switches.
+
+- [x] **ملف مركزي جديد** `lib/core/state/session_view_state.dart`: خريطة معرّف القسم ←
+  مصفّراته (`ViewStateReset`)، مع `resetSectionViewState` (تبديل قسم) و
+  `resetSessionViewState` (نهاية الجلسة) و`knownResetSectionIds` لاختبار الحراسة.
+- [x] **`resetTransient({bool reload})` على 27 نوتيف라이어** في 20 ملف مزود: يلغي الطلب
+  الجاري ويؤرّش نسخة الطلب ويعيد الحالة ابتدائية؛ `reload: true` عند التبديل (الشاشة
+  لا تزال mounted) و`reload: false` عند الخروج (لا شيء سيُرى ⇒ لا هدر شبكة).
+- [x] **الأقسام المسجّلة (8):** home (كشوف شخصية) · customers · accounts · stores ·
+  tailoring · workers · management · services. وsales/settings بلا حالة مشتركة عمدًا.
+- [x] **الربط في الهيكل:** `_switchSection` وحيدة في `employee_main_layout.dart` يمرّ منها
+  الدرج والشريط السفلي وبطاقات الرئيسية (ثلاثة مداخل، مسار تنظيف واحد)، تُصفّر القسم
+  **المغادر** لا الداخل.
+- [x] **الربط عند نهاية الجلسة:** مستمع `KyApp` لـ `isAuthenticated` ينادي
+  `resetSessionViewState(ref)` قبل `go('/login')` — يغطي الخروج العادي ومهلة الخمول
+  وإنهاء المدير، وهو نفس درس التوجيه المركزي.
+- [x] **الشاشات المدفوعة:** تصفير في `initState` لكل شاشة تشارك مزوداً مع شاشة أخرى
+  (store_reports, cutting_bills_list, all_customers, measurements_customers, stock_balances,
+  stock_sheet, orders_list, items_list, stores_list, workers_list, admin users, active
+  sessions, user activity, support inquiries, providers, jobs, message log, worker
+  statement/work report/group report, customer statement, كشفيّ حسابي الشخصي).
+- [x] **ورقتا اختيار كانتا تعيدان الملء من الحالة القديمة:** `measurement_model_picker_sheet`
+  (تصفير مشروط بالأوساخ قبل الجلب) و`_AccountPickerBottomSheet` في كشف الحساب.
+- [x] **عطب حقيقي كُشف أثناء التحقق:** استدعاء `resetTransient` مباشرة داخل `initState`
+  يُطلق شرط Riverpod «تعديل مزود أثناء بناء الشجرة» — أُجِّل في خمس شاشات
+  (store_reports, worker_statement, worker_work_report, worker_group_work_report,
+  customer_statement) إلى `addPostFrameCallback` / `Future.microtask`.
+- [x] **اختبارات جديدة (31):** `test/support/quiet_network.dart` (شبكة صامتة بلا منصة)،
+  `test/core/session_view_state_test.dart` (7: الحراسة + التبديل + نهاية الجلسة)،
+  `test/core/session_view_state_notifiers_test.dart` (21: لكل مزود — بعد `search('خالد')`
+  ثم `resetTransient()` تعود الحالة ابتدائية)، `test/core/section_switch_layout_test.dart`
+  (2: تبديل تبويبة فعلي عبر الدرج)، `test/core/logout_view_state_test.dart` (1: الخروج
+  عبر مستمع `KyApp` يُنظّف كل الأقسام).
+- [x] **إصلاح ثلاثة اختبارات قائمة:** الحالة المزروعة في `orders_list_screen_test` و
+  `items_split_test` و`items_sort_statement_test` جعلت `resetTransient` فيها no-op
+  (نفس منطق `load`/`bind`/`applyDefaults` المُعطّلة عندها أصلاً).
+- [x] **لم يُمسّ:** `ky_last_username` ولا أي مفتاح تخزين آمن (اختبار يثبّت ذلك)، ولا
+  تحويلات التوجيه المركزية في `KyApp`.
+- [x] **التحقق:** `flutter analyze` = **No issues found!** · الحزمة كاملة **693 ناجحة /
+  10 متخطّية / 12 فاشلة** — والاثنا عشر هي فشل `measurement_view_screen_test.dart`
+  **الموجود أصلاً في HEAD `dd432a3`** (تحقّق بمقارنة `git worktree` نظيف: نفس أسماء
+  الاثني عشر، عطب `specs.comCabakType!` من عمل سابق لا علاقة له بهذه الجولة) ⇒ **صفر
+  انحدار جديد**.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 09:20 · **لا DDL** · **لا DML** · **لا commit** (لم يُطلب).
+
+---
+
+## [2026-11-11 12:00] ترتيب الكشوفات المالية: التاريخ أولاً ثم `es.SEQ` · Qoder
+
+**المطلوب:** توحيد ترتيب السجلات في جميع كشوف الحسابات المالية على: التاريخ أولاً ثم
+تسلسل الحركة ثانياً.
+**التقارير المتأثرة (طُبِّق عليها التعديل):** كشف حسابي المالي، كشف حساب مالي،
+كشف حساب مالي من شجرة الحسابات، كشف حساب جاري العاملين (موظف/قصاص/خياط)،
+وكشف حساب عميل.
+**تقارير تُركت عمداً كما هي:** كشف حساب تحليلي مفصل (أسطر مجمّعة لكل حساب)،
+كشف حساب مجموعة حسابات جزئية (ميزان مراجعة بترتيب `ACC_NO`)،
+وكشف عمل القصاص/الخياط (تاريخ ثم موديل — خارج نطاق الحركات المالية).
+
+- [x] `MyStatementController::financialStatement` — `ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ` → `ORDER BY em.ENTRY_DATE, es.SEQ`.
+- [x] `AccountController::getAccountStatement` — نفس التغيير (يخدم الشجرة أيضاً).
+- [x] `WorkerController::fetchStatement` — نفس التغيير + تحديث الـ docblock.
+- [x] `CustomerController::statement` — نفس التغيير.
+- [x] `php -l` نظيف على الملفات الأربعة.
+- [x] لا اختبارات Pest كانت تعتمد السلسلة القديمة (تم التحقق).
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 12:00 · **Backend Laravel فقط** · **لا DDL ولا DML** · **لا commit** (لم يُطلب).

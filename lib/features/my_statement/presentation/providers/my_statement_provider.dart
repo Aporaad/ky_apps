@@ -94,6 +94,21 @@ class MyFinancialStatementNotifier extends Notifier<MyFinancialStatementState> {
       );
     }
   }
+
+  /// تفريغ النطاق الزمني والنتيجة عند مغادرة شاشة الكشف.
+  /// Clears the date range and the payload when the statement screen exits.
+  ///
+  /// الكشف شخصية: لو بقي النطاق المختار في الذاكرة لتداوله مستخدمون
+  /// آخرون على نفس الجهاز، ولرأى المستخدم نفسه تواريخ آخر مرة بلا سبب.
+  /// A personal statement: leaving the chosen dates in memory would leak them
+  /// to whoever signs in next on the same device, and show them back to this
+  /// user with no context.
+  void resetTransient() {
+    state = const MyFinancialStatementState(
+      fromDate: null,
+      toDate: null,
+    );
+  }
 }
 
 final myFinancialStatementProvider =
@@ -147,6 +162,12 @@ class MyWorkReportNotifier extends Notifier<MyWorkReportState> {
         error: 'خطأ في جلب كشف العمل: $e',
       );
     }
+  }
+
+  /// تفريغ كشف العمل عند مغادرة الشاشة.
+  /// Clears the work report when its screen exits.
+  void resetTransient() {
+    state = const MyWorkReportState();
   }
 }
 

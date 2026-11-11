@@ -22,6 +22,26 @@ class _AllCustomersScreenState extends ConsumerState<AllCustomersScreen> {
   Timer? _debounce;
 
   @override
+  void initState() {
+    super.initState();
+
+    // الشاشة تُدفع من لوحة العملاء فتُبنى من جديد في كل زيارة، لكن
+    // `customersListProvider` يعيش خارجها في `ProviderScope` الجذري —
+    // كان نص البحث السابق يبقى مطبّقاً على القائمة المعروضة رغم أن الحقل
+    // فارغ، وهذا هو جوهر الشكوى. التصفير هنا يسبق أول بناء كي لا يومض
+    // المستخدم بنتائج قديمة قبل أن تُستبدل بالجديدة.
+    // The screen is pushed from the customers dashboard and rebuilds on every
+    // visit, but `customersListProvider` outlives it in the root `ProviderScope`
+    // — the last query stayed applied to the visible list even though the field
+    // was empty, which is exactly the complaint. Wiping here runs before the
+    // first build so no stale rows flash before the fresh page arrives.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(customersListProvider.notifier).resetTransient(reload: true);
+    });
+  }
+
+  @override
   void dispose() {
     _debounce?.cancel();
     _searchCtrl.dispose();

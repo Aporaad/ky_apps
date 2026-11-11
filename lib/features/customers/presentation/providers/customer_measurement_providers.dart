@@ -161,6 +161,22 @@ class MeasurementCustomersNotifier extends Notifier<MeasurementCustomersState> {
     await _fetch(page: 1);
   }
 
+  /// تفريغ البحث عند مغادرة القسم أو نهاية الجلسة — بلا شبكة عند التصفير.
+  /// Clears the search on section exit or session end; network stays quiet.
+  ///
+  /// `reload` — نفس سبب `CustomersListNotifier.resetTransient`: الشاشة تبقى
+  ///    mounted داخل `IndexedStack` فلا يُعاد `initState`، والجلب ضروري كي
+  ///    تختفي السطور المُفلترة مع نص البحث.
+  /// `reload` — same reason as `CustomersListNotifier.resetTransient`: the screen
+  ///    remains mounted inside the `IndexedStack`, so `initState` never reruns on
+  ///    a tab switch and a refetch is needed to drop the filtered rows.
+  void resetTransient({bool reload = false}) {
+    _debounceTimer?.cancel();
+    _cancelToken?.cancel('screen-exited');
+    state = const MeasurementCustomersState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
+
   /// تحميل الصفحة التالية وإلحاقها
   /// Load the next page and append it.
   Future<void> loadMore() async {
@@ -378,6 +394,20 @@ class CustomerModelsNotifier extends Notifier<CustomerModelsState> {
       isLoading: true,
     );
     await _fetch(page: 1);
+  }
+
+  /// تفريغ البحث والنطاق الزمني عند مغادرة شاشة العميل.
+  /// Clears the search and date range when the customer screen closes.
+  ///
+  /// مزود عائلة (`family`) مقيّد برقم العميل — لا يُستدعى هذا من تبديل قسم، بل
+  /// من `dispose` الشاشة نفسها عند الرجوع إلى قائمة العملاء.
+  /// This is a `family` provider keyed by customer number — the reset is fired
+  /// by the screen's own `dispose` when returning to the customer list, not by
+  /// a portal tab switch.
+  void resetTransient() {
+    _debounceTimer?.cancel();
+    _cancelToken?.cancel('screen-exited');
+    state = const CustomerModelsState(isLoading: true);
   }
 
   Future<void> loadMore() async {

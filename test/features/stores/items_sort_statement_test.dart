@@ -52,6 +52,11 @@ class _SeededMain extends ItemsListNotifier {
     state = state.copyWith(dir: state.dir == 'asc' ? 'desc' : 'asc');
     applied.add(('__toggle__', state.dir));
   }
+
+  /// الحالة مزروعة عمداً، فتفريغ الشاشة عند الفتح يبقى بلا أثر هنا
+  /// The state is seeded on purpose, so the screen's open-time wipe is a no-op.
+  @override
+  void resetTransient({bool reload = false}) {}
 }
 
 class _SeededSub extends SubItemsListNotifier {
@@ -68,6 +73,11 @@ class _SeededSub extends SubItemsListNotifier {
 
   @override
   Future<void> applyDefaults(StoreReference reference) async {}
+
+  /// الحالة مزروعة كما في القائمة الرئيسية
+  /// Seeded state, same as the main list.
+  @override
+  void resetTransient({bool reload = false}) {}
 }
 
 /// تقرير خامل: الاختبار يحرس المعطيات الماررة للتنقل لا شبكة التقرير نفسها،

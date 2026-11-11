@@ -137,6 +137,22 @@ class MessagesNotifier extends Notifier<MessagesState> {
     if (result.success) load();
     return result;
   }
+
+  /// تفريغ البحث وتبويب الحالة عند مغادرة شاشة الرسائل أو نهاية الجلسة.
+  /// Clears the search and the status tab when the message log exits.
+  ///
+  /// `reload` — المزود عائلي لكل قناة (`sms` / `whatsapp`) داخل نفس الشاشة
+  ///    المتروكة mounted في `IndexedStack`؛ الجلب يعيد الطابور كاملاً.
+  /// `reload` — this is a family per channel (`sms` / `whatsapp`) that lives
+  ///    inside a screen kept mounted by the `IndexedStack`; refetching brings
+  ///    back the whole queue without a stale filter.
+  void resetTransient({bool reload = false}) {
+    _debounce?.cancel();
+    _cancelToken?.cancel('screen-exited');
+    _searchVersion++;
+    state = const MessagesState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
 }
 
 final messagesProvider = NotifierProvider.family<MessagesNotifier, MessagesState, MessageChannel>(

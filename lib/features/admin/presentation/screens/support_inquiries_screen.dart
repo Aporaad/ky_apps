@@ -33,7 +33,16 @@ class _SupportInquiriesScreenState extends ConsumerState<SupportInquiriesScreen>
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(supportInquiriesProvider.notifier).load());
+    // المزود غير `autoDispose`، فبحث الجلسة السابقة كان يعود مع الشاشة الجديدة.
+    // `reload: true` يجلب الصفحة الأولى ويمحو آخر بحث ونطاق زمني في آنٍ واحد.
+    // The provider is not autoDispose, so the previous visit's search came back
+    // with the new screen. `reload: true` fetches page one and wipes the leftover
+    // search and window in one step.
+    Future.microtask(
+      () => ref
+          .read(supportInquiriesProvider.notifier)
+          .resetTransient(reload: true),
+    );
   }
 
   @override

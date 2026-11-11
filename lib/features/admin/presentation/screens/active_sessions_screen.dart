@@ -39,7 +39,13 @@ class _ActiveSessionsScreenState extends ConsumerState<ActiveSessionsScreen> {
     _ticker = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() => _now = DateTime.now());
     });
-    Future.microtask(() => ref.read(activeSessionsProvider.notifier).load());
+    // المزود غير `autoDispose`، فبحث الشاشة الأخير كان يُعاد مع كل فتح.
+    // `reload: true` يجلب القائمة من الأول ويمحو البحث المتروك.
+    // The provider is not autoDispose, so its last search returned with every
+    // open. `reload: true` refetches the list and drops the leftover search.
+    Future.microtask(
+      () => ref.read(activeSessionsProvider.notifier).resetTransient(reload: true),
+    );
   }
 
   @override

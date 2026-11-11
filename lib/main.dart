@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'core/state/session_view_state.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/restart_widget.dart';
 import 'features/app_config/presentation/providers/app_config_notifier.dart';
@@ -41,7 +42,21 @@ class KyApp extends ConsumerWidget {
     ref.listen(
       authNotifierProvider.select((s) => s.isAuthenticated),
       (previous, next) {
-        if (previous == true && !next) appRouter.go('/login');
+        if (previous == true && !next) {
+          // تفريغ حالة البحث/الفلاتر لكل الأقسام قبل الانتقال إلى /login —
+          // ثلاث مخارج للجلسة (إنهاء المدير، مهلة الخمول، الخروج العادي)
+          // تسقط كلُّها من «مُصادق» إلى لا مُصادق، فمسارٌ واحدٌ للتنظيف
+          // يعني أنه لا مخرجٍ يُنسى. `reload: false` داخل الدالة: لن يعود
+          // المستخدم إلى أي قسم، فإعادة جلب قائمةٍ لن تُرى هدرٌ للشبكة.
+          // Wipe every section's transient search/filter state before routing
+          // away. All three session endings (admin termination, idle timeout,
+          // normal logout) fall from signed-in to signed-out, and one cleanup
+          // path means none is ever missed — the same lesson as routing.
+          // The helper passes `reload: false`: no section is coming back into
+          // view, so refetching would only burn bandwidth.
+          resetSessionViewState(ref);
+          appRouter.go('/login');
+        }
       },
     );
 

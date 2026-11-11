@@ -154,6 +154,21 @@ class CuttingBillsListNotifier extends Notifier<CuttingBillsListState> {
     await _fetch(page: 1);
   }
 
+  /// تفريغ البحث والنطاق الزمني عند مغادرة قسم التفصيل أو نهاية الجلسة.
+  /// Clears the search and the date range when the tailoring section exits.
+  ///
+  /// `reload` — الشاشة في `IndexedStack` لا تفك عند التبديل، فلا يُعاد
+  ///    `initState`؛ الجلب هنا يعيد القائمة كاملة بدل نتائج آخر بحث.
+  /// `reload` — the portal keeps the screen mounted across tab switches, so
+  ///    `initState` never reruns; a refetch here is what swaps the last search
+  ///    results back for the full list.
+  void resetTransient({bool reload = false}) {
+    _debounceTimer?.cancel();
+    _cancelToken?.cancel('screen-exited');
+    state = const CuttingBillsListState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
+
   /// تطبيق نطاق زمني (أحدهما قد يكون `null`) ثم إعادة التحميل
   /// Apply a date range (either end may be `null`), then reload.
   Future<void> setRange(DateTime? from, DateTime? to) async {

@@ -99,6 +99,13 @@ class _SeededOrders extends OrdersListNotifier {
   @override
   Future<void> load({bool keepPage = false}) async {}
 
+  /// الحالة مزروعة عمداً، فتفريغ الشاشة عند الفتح يجب أن يمرّ بلا أثر هنا.
+  /// الواقعي يجلب قائمة جديدة بعد التصفير، وهذا البديل لا يملك شبكة أصلاً.
+  /// The state is seeded on purpose, so the screen's open-time wipe must be a no-op.
+  /// The real notifier refetches after wiping; this stub has no network at all.
+  @override
+  void resetTransient({bool reload = false}) {}
+
   /// الشاشة تنادي `bind` عند الفتح؛ نتركها بلا تحميل لأن الحالة مزروعة
   /// The screen calls `bind` on open; leave it alone because the state is already seeded.
   @override

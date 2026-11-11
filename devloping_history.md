@@ -6681,3 +6681,149 @@ page 1..6: all text y from 812.51 down to 23.0
 اختبارات قياسات العميل بسبب تعديلات جارية على `measurement_specs_panel.dart` من عمل آخر.
 
 **النموذج:** Qoder · **الوقت:** 2026-11-10 07:05 · **Flutter فقط** · **لا commit** (لم يُطلب).
+
+---
+
+# 2026-11-11 09:20 — محو البحث والمعطيات العالقة عبر الجلسة (Sticky Search / Filters)
+
+## المشكلة والسبب الجذري
+
+يكتب المستخدم «خالد» في أي قائمة بحث، فيخرج إلى اللوحة ثم يعود: النص لا يزال في الحقل
+والقائمة لا تزال مُفلترة عليه. والسبب طبقتان معاً:
+
+1. **المزودات بلا `autoDispose`:** كل `NotifierProvider` للقوائم والتقارير يعيش في
+   `ProviderScope` الجذر طوال التطبيق، فحالته (نص البحث، الفلاتر، معطيات التقرير،
+   الترقيم) لا تموت بموت الشاشة؛ والشاشات التي تملأ حقولها من الحالة (`_searchCtrl.text =
+   state.query`) تعيد عرض النص القديم حرفياً.
+2. **`IndexedStack` في `EmployeeMainLayout`:** يبقي أقسام البوابة كلها mounted، فالتبديل لا
+   يطلق `dispose` ولا `initState` — أي أن حتى الحل الصحيح نظرياً (تصفير عند الخروج) لم يكن
+   ليُنفَّذ أبداً لأقسام البوابة.
+
+## ما أُضيف
+
+### 1) سجل مركزي — `lib/core/state/session_view_state.dart` (ملف جديد)
+
+خريطة ثابتة من **معرّف قسم البوابة** إلى قائمة مصفّراته، بحينين منفصلين:
+
+| الدالة | متى | `reload` | لماذا |
+|---|---|---|---|
+| `resetSectionViewState(ref, id)` | عند مغادرة قسم | `true` | الشاشة المغادرة لا تزال داخل `IndexedStack`، فلا جلب يعني قائمة مُفلترة خلف حقل فارغ |
+| `resetSessionViewState(ref)` | عند سقوط الجلسة | `false` | لا قسم سيعود إلى العرض، فأي جلب هدر شبكة |
+
+الأقسام المسجّلة ثمانية: `home` (كشفيّ الحساب الشخصي لأن اختصاراته تُدفع من الرئيسية)،
+`customers`، `accounts`، `stores`، `tailoring`، `workers`، `management`، `services`. أما
+`sales` و`settings` فبلا حالة بحث مشتركة، والنداء عليهما no-op مقصود. والمرجع مُصدَّر عبر
+`knownResetSectionIds` لاختبار يحرس ألا يتخم السجل عن `portal_sections.dart`.
+
+المزودات العائلية تُصفَّر لكل قيمها (`WorkerType.values` و`MessageChannel.values`) لأن
+ترك قائمة القصّاصين وسِمةً والموظفين نظيفة يبدو عطباً لا قراراً.
+
+### 2) `resetTransient({bool reload = false})` على 27 نوتيف라이어
+
+في 20 ملف مزود، بنفس العقد في كل مكان: إلغاء `CancelToken` الجاري،then تحريك عدّاد
+نسخة الطلب (`_searchVersion` / `_requestVersion`) لمنع ردٍّ قديم من طمس الحالة الجديدة،
+then إعادة الحالة ابتدائية. ولا تستدعي أي منها `load()` إلا عند `reload: true`.
+
+قاعدة التصميم: **الحالة التي يرى المستخدم أنها «إدخاله» تُمسح، والقرار الذي تتخذه
+الشاشة نفسها يبقى.** لذلك `ordersListProvider` يُمسح بحثه وفلاتره لكنه **يبقى على
+`kind`** (توريد/صرف/تحويل) لأنه مِلْك الشاشة لا فلتر المستخدم — والاختبار يحرس ذلك.
+
+### 3) الربط بالهيكل وبالتوجيه
+
+- `employee_main_layout.dart`: `_switchSection(newId)` هي المسار الوحيد لتغيير القسم؛
+  يمرّ منها الدرج (`onIndexChanged`) والشريط السفلي (`onDestinationSelected`) وبطاقات
+  الرئيسية (`_openSection`) — ثلاثة مداخل وسبيل تنظيف واحد، لا ثلاثة قابلة للنسيان.
+  تُصفَّر القسم **المغادر** (المعرّف السابق) قبل رسم الجديد، والضغط على نفس التبويب no-op.
+- `main.dart`: مستمع `KyApp` على `authNotifierProvider.select((s) => s.isAuthenticated)`
+  ينادي `resetSessionViewState(ref)` قبل `appRouter.go('/login')`. التوجيه مركزي أصلاً
+  لأن الجلسة تنتهي ثلاثة أوجه (خروج عادي، مهلة خمول، إنهاء المدير)، فمسار تنظيف واحد
+  يعني أن لا مخرج يُنسى — وهو نفس درس بقاء بوابة ميتة مرسومة بعد انتهاء الجلسة.
+
+### 4) الشاشات المدفوعة (pushed) — تصفير في `initState`
+
+الشاشة المدفوعة تُبنى جديدة لكن مزودها لا يُعاد بناؤه، فكل شاشة تشارك مزوداً مع
+أخرى أو تُفتح مراراً تُصفّره عند دخولها: `store_reports_screen`، `cutting_bills_list_screen`،
+`all_customers_screen`، `measurements_customers_screen`، `stock_balances_screen`،
+`stock_sheet_screen`، `orders_list_screen`، `items_list_screen`، `stores_list_screen`،
+`workers_list_screen`، أربع شاشات الإدارة (المستخدمون، الجلسات، النشاط، الاستفسارات)،
+`providers_list_screen`، `message_log_screen`، `account_tree_screen`، شاشات كشف العامل
+وكشف عمله وكشف مجموعة العمل، `customer_statement_screen`، والشاشتان الشخصيتان.
+
+وهنا أُصلح **عطب حقيقي كُشف بالاختبار**: نداء `resetTransient` مباشرة داخل `initState`
+يُطلق شرط Riverpod «Tried to modify a provider while the widget tree was building» لأن
+`initState` يعمل أثناء البناء. أُجِّل في خمس شاشات إلى `addPostFrameCallback` أو
+`Future.microtask`، وبقي الترتيب: تصفيرٌ ثم جلبٌ بمعطيات الشاشة.
+
+كذلك ورقتا اختيار كانتا تمتلئان من الحالة القديمة: `measurement_model_picker_sheet`
+(كانت `_searchCtrl.text = state.query` تعيد كتابة نص الجلسة السابقة) صارت تصفّر
+**عند وجود أوساخ فقط** ثم تجلب مرة واحدة، و`_AccountPickerBottomSheet` في كشف الحساب
+مثله. و`JobsListScreen` حُوّل من `ConsumerWidget` إلى `ConsumerStatefulWidget` لأجل ذلك.
+
+### 5) ما لم يُمس
+
+`resetTransient` لا تقترب من التخزين الآمن إطلاقاً: `ky_last_username` قرار جهاز لا حالة
+واجهة، وبقاؤه بعد الخروج ميزة موصوفة في `AGENTS.md` — و اختبار يثبت ذلك.
+
+## الاختبارات
+
+- `test/support/quiet_network.dart`: محوّل شبكة صامت يعيد مغلف نجاح فارغاً لكل طلب
+  ويسجّل مساراته، مع بديل مصادقة بلا حارس جلسة وبلا تخزين آمن — فالاختبار يقيس
+  «هل جُلب شيء؟» بلا منصة ولا شبكة حقيقية.
+- `test/core/session_view_state_test.dart` (7): لا معرّف شبح في السجل؛ كل قسم ذي حالة
+  مسجّل؛ مغادرة التفصيل تمسح بحثه **وتُعيد الجلب**؛ قسم بلا حالة no-op بلا أي طلب؛
+  نهاية الجلسة تمسح كل الأقسام؛ التصفير بلا `reload` لا يطلق أي طلب؛ اسم المستخدم
+  المحفوظ لا يمسّه التفريغ.
+- `test/core/session_view_state_notifiers_test.dart` (21): لكل مزود — بعد `search('خالد')`
+  ثم `resetTransient()` تعود الحالة ابتدائية، مع حرّاص نوع الأمر في `ordersListProvider`
+  وبقاء `storeReportProvider` بلا معطيات لأن تقريراً بلا معطيات لا يُنفَّذ.
+- `test/core/section_switch_layout_test.dart` (2): تبديل فعلي عبر الدرج داخل البوابة كاملة،
+  فتفصيل مغادر يُصفَّر ويجلب، والبقاء على نفس التبويب لا يمسح ولا يجلب.
+- `test/core/logout_view_state_test.dart` (1): التطبيق كله `KyApp`، ثم سقوط الجلسة، فيُمسح
+  بحث كل قسم عبر المستمع المركزي نفسه.
+- ثلاثة اختبارات قائمة احتاجت تحديثاً لأنها **تزرع الحالة عمداً**: `orders_list_screen_test`،
+  `items_split_test`، `items_sort_statement_test` — أُضيفت override لـ `resetTransient` بلا
+  عمل، وهي نفس الطريقة التي تُعطّل بها `load`/`bind`/`applyDefaults` هناك أصلاً.
+
+## التحقق
+
+`flutter analyze` = **No issues found!** · الحزمة كاملة **693 ناجحة / 10 متخطّية / 12
+فاشلة**. والاثنا عشر كلها في `measurement_view_screen_test.dart`، وثبت بالقياس لا
+بالظن أنها **فاشلة أصلاً في HEAD `dd432a3`**: شجرة نظيفة عبر `git worktree` لنفس الملفات
+أعطت أسماء الاختبارات الاثني عشر نفسها (عطب `specs.comCabakType!` في
+`measurement_specs_panel.dart` من عمل سابق) ⇒ **صفر انحدار جديد** بهذه الجولة.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 09:20 · **Flutter فقط** · **لا DDL ولا DML** · **لا commit** (لم يُطلب).
+
+---
+
+# 2026-11-11 12:00 — الكشوفات المالية: ترتيب موحّد (تاريخ ثم `SEQ`)
+
+## الأمر كما ورد
+
+> "هناك تعديل بسيط اريدك ان تقوم به في جميع تقارير الكشوفات الماليه ...
+> والتعديل هوا طريقه ترتيب السجلات والحركات الماليه، اريد ان يتم الترتيب على حسب
+> التاريخ اولا ثم على حسب تسلسل الحركه ثانيا"
+
+## القرار التصميمي
+
+«تسلسل الحركة» = العمود `ENTRY_SUB.SEQ` (كما أكده المستخدم عند السؤال). لذلك حُذف
+`es.ENTRY_NO` من الوسيط الثاني في `ORDER BY` وأصبح الترتيب: `em.ENTRY_DATE, es.SEQ`.
+التقارير المجمّعة (تحليلي مفصل + ميزان مجموعة جزئية) أبقيت بترتيب `ACC_NO`؛
+وكشف عمل القصاص/الخياط أبقي بترتيب (تاريخ، موديل) لأنه ليس حركات مالية.
+
+## ما نُفِّذ
+
+| الملف | السطر | قبل | بعد |
+|---|---|---|---|
+| `MyStatementController.php` | 97 | `ORDER BY em.ENTRY_DATE, es.ENTRY_NO, es.SEQ` | `ORDER BY em.ENTRY_DATE, es.SEQ` |
+| `AccountController.php` | 705 (`getAccountStatement` — يخدم الشجرة) | نفس السابق | `ORDER BY em.ENTRY_DATE, es.SEQ` |
+| `WorkerController.php` | 452 (docblock) + 515 (`fetchStatement`) | نفس السابق | `ORDER BY em.ENTRY_DATE, es.SEQ` |
+| `CustomerController.php` | 345 (`statement`) | نفس السابق | `ORDER BY em.ENTRY_DATE, es.SEQ` |
+
+## التحقق
+
+- `php -l` على الملفات الأربعة: **لا أخطاء**.
+- `grep` عن `ORDER BY em.ENTRY_DATE[^;]*` في `kyApp_API/`: كل المطابقات الجديدة بالصيغة الموحّدة.
+- `kyApp_API/tests/` لا يحتوي أي assertion على السلسلة القديمة ⇒ **لا انحدار**.
+
+**النموذج:** Qoder · **الوقت:** 2026-11-11 12:00 · **Backend فقط** · **لا DDL ولا DML** · **لا commit** (لم يُطلب).

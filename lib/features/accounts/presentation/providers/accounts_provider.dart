@@ -442,6 +442,26 @@ class AccountTreeNotifier extends StateNotifier<AccountTreeState> {
     );
   }
 
+  /// تفريغ البحث والنافذة الزمنية عند مغادرة قسم الحسابات.
+  /// Clears the search and the date window when the accounts section is exited.
+  ///
+  /// يعيد الحالة إلى ما كانت عليه عند أول دخول: شجرة بلا فلاتر، ونتائج بحث فارغة.
+  /// `IndexedStack` يبقي الشاشة mounted فلا يُعاد `initState`؛ الجلب ضروري هنا
+  /// كي تظهر الشجرة كاملة بدل آخر حالة فلترة.
+  /// Returns the tree to its first-entry shape — no filters, no search results.
+  /// The `IndexedStack` keeps the screen mounted so `initState` never reruns;
+  /// refetching here is what makes the full tree replace the last filtered view.
+  void resetTransient({bool reload = false}) {
+    clearSearch();
+    state = state.copyWith(
+      fromDate: null,
+      toDate: null,
+    );
+    if (reload) {
+      Future.microtask(() => loadTree(fromDate: null, toDate: null));
+    }
+  }
+
   void _cancelAllChildren() {
     for (final token in _childrenTokens.values) {
       token.cancel('superseded');
@@ -503,6 +523,20 @@ class ChartAccountsNotifier extends StateNotifier<ChartAccountsState> {
 
   ChartAccountsNotifier(this._repo) : super(const ChartAccountsState()) {
     loadAccounts();
+  }
+
+  /// تفريغ نص البحث عند مغادرة قسم الحسابات أو نهاية الجلسة.
+  /// Clears the search text when the accounts section closes or the session ends.
+  ///
+  /// يعيد المزود إلى حالته الابتدائية ثم يجلب القائمة الكاملة إذا طُلب؛ بلا
+  /// `reload` تُترك الحالة فارغة حتى يعيد المستخدم فتح القسم من جديد.
+  /// Rebuilds to the initial state and, when asked, refetches the unfiltered
+  /// list. Without `reload`, the state stays blank until the user reopens the
+  /// section (which happens on a fresh `build()` after the portal re-mounts).
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    state = const ChartAccountsState();
+    if (reload) loadAccounts();
   }
 
   Future<void> loadAccounts({String? search, int page = 1}) async {

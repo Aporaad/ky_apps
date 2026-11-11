@@ -24,6 +24,23 @@ class _StoresListScreenState extends ConsumerState<StoresListScreen>
   final TextEditingController _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+
+    // المزود `NotifierProvider` غير `autoDispose`: آخر نص بحث بقي في
+    // `state.search` بعد كل رجوع إلى اللوحة ثم فتح الشاشة من جديد، فتُعرض
+    // قائمة مُفلترة خلف حقل فارغ — نفس شكوى البحث العالق التي تعمّ التطبيق.
+    // The provider is not autoDispose, so the last search text lived in
+    // `state.search` across every dashboard trip and a filtered list kept
+    // showing behind a freshly empty field. Wiping here is the same fix as
+    // every other sticky-search complaint.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(storesListProvider.notifier).resetTransient(reload: true);
+    });
+  }
+
+  @override
   void dispose() {
     _tabs.dispose();
     _searchController.dispose();

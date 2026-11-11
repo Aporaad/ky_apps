@@ -49,25 +49,21 @@ class _MeasurementsCustomersScreenState
     super.initState();
     _scrollCtrl.addListener(_onScroll);
 
-    // المزوّد يعيش بعد الشاشة، فيُعاد ضبط الحقل على آخر بحث ثم يُطلب تحديث صريح: قائمة
-    // قديمة بنتيجة بحث سابق توحي بأن البحث لم يعمل.
-    // The provider outlives the screen, so the field is re-synced to the last query and an
-    // explicit refresh runs: a stale list under an old query looks like a broken search.
+    // المزوّد يعيش بعد الشاشة، فيُصفَّر ثم يُطلب تحميل نظيف: قائمة قديمة
+    // بنتيجة بحث سابق — حتى مع إعادة ضبط الحقل — توحي بأن البحث لم يعمل.
+    // التصفير يسبق الملء، فلا تعود `_searchCtrl.text = state.query
+    // تنسخ «خالد» من الجلسة السابقة إلى حقلٍ يُفترض أن يبدأ فارغاً.
+    // The provider outlives the screen, so it is wiped before a fresh load.
+    // Resyncing the field alone was never enough: `_searchCtrl.text = state.query
+    // just copied "خالد" from the previous session into a field that should
+    // have started empty, and the stale filtered list underneath made the
+    // search look broken.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      final state = ref.read(measurementCustomersProvider);
-      _searchCtrl.text = state.query;
-
-      // تحميل جارٍ من المزوّد نفسه ⇒ لا طلب ثانٍ: الضعف يُلغي الأول صمتاً ويضاعف العبء
-      // A load the provider already scheduled means no second one: the pair cancels the first
-      // silently and doubles the work.
-      if (state.isLoading) return;
-
-      if (state.items.isEmpty) {
-        ref.read(measurementCustomersProvider.notifier).load();
-      } else {
-        ref.read(measurementCustomersProvider.notifier).refresh();
-      }
+      final notifier = ref.read(measurementCustomersProvider.notifier);
+      notifier.resetTransient();
+      _searchCtrl.clear();
+      notifier.load();
     });
   }
 

@@ -71,25 +71,58 @@ class _StoreReportsScreenState extends ConsumerState<StoreReportsScreen> {
   ///    user without flooding the screen before they make it.
   List<String>? _statIds = ReportStatFields.defaultIds;
 
+  /// إعادة الأساسيات المحلية — ترتيب الأعمدة وحقول الإحصاءات
+  /// Restore the local view choices to the template's basics.
+  ///
+  /// الشاشة تُدفع فتُبنى حالة جديدة في كل فتح، وهذه الحقول تعود أساسياتها عند
+  /// الإنشاء أصلاً؛ التصفير الصريح هنا يخدم مساراً آخر: لو بقيت الشاشة مراكمةً
+  /// فوق قسم أُعيد تصفير مزوده، فلا يبقى عرضٌ اختاره المستخدم من جلسة سبقة.
+  /// The screen is pushed, so a fresh state already carries the defaults; wiping them
+  /// explicitly here covers the other path — a report left open above a section whose
+  /// provider was just reset must not keep a previous visit's column choices.
+  void _resetLocalViewChoices() {
+    _movementOrder = null;
+    _summaryOrder = null;
+    _statIds = ReportStatFields.defaultIds;
+  }
+
   @override
   void initState() {
     super.initState();
 
-    // ── معطيات جاهزة: يُنفَّذ التقرير مباشرة بلا نافذة انتظار — جاء المستخدم من
-    //    «كشف حركة صنف» وقد حدد سؤاله بالفعل، وإعادة سؤاله إهانة للسياق.
-    //    بلا معطيات: الفتح التلقائي للنافذة كما كان، والزر يفتحها دائماً بعدها.
-    // ── With preset parameters the report runs at once: the user arrived from an item's
-    //    "movement statement" having already asked the question — asking it again insults the
-    //    context. Without them, the auto-open sheet behaves exactly as before.
-    if (widget.initialFilter != null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) ref.read(storeReportProvider.notifier).run(widget.initialFilter!);
-      });
+    // ── تفريغ حالة المزود قبل أي شيء: هذه الشاشة تُدفع في المراكر من لوحة
+    //    المخازن ومن شاشات الأصناف، لكنها تشارك نفس `storeReportProvider`
+    //    غير المُصفَّى. بلا هذا التفريغ، يظهر آخر تقرير شغّله المستخدم في أول
+    //    إطار من الدخول — وهو جذر شكوى المعطيات العالقة في كل واجهة التقارير.
+    // ── Wipe the provider before anything else. This screen is pushed on top of
+    //    both the stores dashboard and the item screens, yet shares one
+    //    non-autoDispose `storeReportProvider`; without this, the last report the
+    //    user ran flashes up on the very first frame of every new visit.
+    //
+    // التصفير مؤجَّل إلى ما بعد الإطار: تعديل مزود أثناء بناء الشجرة يُطلق
+    // شرط Riverpod «modify a provider while the widget tree is building».
+    // The wipe waits for the frame: mutating a provider mid-build trips Riverpod's
+    // debug assertion, which fired on every single open in debug mode.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final notifier = ref.read(storeReportProvider.notifier);
+      _resetLocalViewChoices();
+      notifier.resetTransient();
 
-      return;
-    }
+      // ── معطيات جاهزة: يُنفَّذ التقرير مباشرة بلا نافذة انتظار — جاء المستخدم من
+      //    «كشف حركة صنف» وقد حدد سؤاله بالفعل، وإعادة سؤاله إهانة للسياق.
+      //    بلا معطيات: الفتح التلقائي للنافذة كما كان، والزر يفتحها دائماً بعدها.
+      // ── With preset parameters the report runs at once: the user arrived from an item's
+      //    "movement statement" having already asked the question — asking it again insults
+      //    the context. Without them, the auto-open sheet behaves exactly as before.
+      if (widget.initialFilter != null) {
+        notifier.run(widget.initialFilter!);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openFilter());
+        return;
+      }
+
+      _openFilter();
+    });
   }
 
   @override

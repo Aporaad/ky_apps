@@ -41,6 +41,26 @@ class _WorkersListScreenState extends ConsumerState<WorkersListScreen> {
   bool _showDisabled = false;
 
   @override
+  void initState() {
+    super.initState();
+
+    // المزود عائلي (`family`) على `WorkerType` وغير `autoDispose`، فآخ
+    // `searchQuery` للقصاص يبقى حياً بعد إغلاق القائمة، ولرأى المستخدم
+    // نتائجها عند فتحها من جديد مع حقل بحث فارغ. التصفير يعيد كل نوع إلى
+    // أول زيارة فعلية.
+    // The provider is a non-autoDispose family over `WorkerType`, so one
+    // kind's last `searchQuery` survived every screen close and reappeared
+    // as filtered rows under a freshly empty field. Wiping here makes each
+    // entry a real first visit.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref
+          .read(workersListProvider(widget.workerType).notifier)
+          .resetTransient(reload: true);
+    });
+  }
+
+  @override
   void dispose() {
     _debounceTimer?.cancel();
     _searchController.dispose();

@@ -182,6 +182,21 @@ class ActiveSessionsNotifier extends Notifier<ActiveSessionsState> {
 
     return result;
   }
+
+  /// تفريغ البحث والحالة والتضييق على مستخدم بعينه عند مغادرة الشاشة.
+  /// Clears the search, the status filter and the per-user narrowing on exit.
+  ///
+  /// `reload` — نفس سبب بقية مزودات الإدارة: البقاء mounted داخل
+  ///    `IndexedStack` بلا `initState` جديد عند تبديل التبويب.
+  /// `reload` — the same reason as every other admin notifier: the portal
+  ///    keeps the screen mounted inside the `IndexedStack`, so `initState`
+  ///    never reruns on a tab switch.
+  void resetTransient({bool reload = false}) {
+    _requestVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = const ActiveSessionsState();
+    if (reload) Future.microtask(load);
+  }
 }
 
 final activeSessionsProvider =

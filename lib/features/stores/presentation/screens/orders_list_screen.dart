@@ -32,9 +32,17 @@ class _OrdersListScreenState extends ConsumerState<OrdersListScreen> {
   void initState() {
     super.initState();
 
-    Future.microtask(
-      () => ref.read(ordersListProvider.notifier).bind(widget.kind),
-    );
+    // `bind` لا يمسّ الحالة إذا كان النوع مطابقاً لقائمةٍ سابقة،
+    // فالتصفير يسبقه كي لا يظهر آخر بحث وتصفية على هذا النوع عند
+    // العودة من لوحة المخازن بعد زيارة بطاقة مماثلة.
+    // `bind` short-circuits when the kind matches an already-loaded list,
+    // so the wipe has to run before it. Otherwise the last search and filter
+    // for this document kind would surface again after returning to the
+    // stores dashboard and tapping the same card.
+    Future.microtask(() {
+      ref.read(ordersListProvider.notifier).resetTransient();
+      ref.read(ordersListProvider.notifier).bind(widget.kind);
+    });
   }
 
   @override

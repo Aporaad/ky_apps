@@ -169,6 +169,21 @@ class SupportInquiriesNotifier extends Notifier<SupportInquiriesState> {
 
     return result;
   }
+
+  /// تفريغ البحث والحالة والترقيم عند مغادرة صندوق الدعم.
+  /// Clears the search, status tab and pagination when the inbox exits.
+  ///
+  /// `reload` — صندوق الدعم يظهر من قسم الإدارة في `IndexedStack`،
+  ///    فلا `initState` جديد عند الرجوع إليه؛ الجلب يعيد الكل بحالة `all`.
+  /// `reload` — the support inbox lives under the management tab inside the
+  ///    `IndexedStack`, so `initState` never reruns on return; a refetch here
+  ///    brings back the full list under the `all` status.
+  void resetTransient({bool reload = false}) {
+    _requestVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = const SupportInquiriesState();
+    if (reload) Future.microtask(load);
+  }
 }
 
 final supportInquiriesProvider =

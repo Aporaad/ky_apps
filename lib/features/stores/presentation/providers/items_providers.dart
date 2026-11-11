@@ -182,6 +182,27 @@ class ItemsListNotifier extends Notifier<ItemsListState> {
     return load();
   }
 
+  /// تفريغ البحث والتصفية عند مغادرة القسم أو نهاية الجلسة.
+  /// Clears the search and every filter when the section closes or the session ends.
+  ///
+  /// تُعاد عداد `_defaultsApplied` إلى false حتى تُفرَض التصفية الافتراضية
+  /// من جديد عند العودة إلى القسم (نفس السلوك الذي رآه المستخدم أول مرة).
+  /// `_defaultsApplied` is reset so the default filter re-imposes on the next
+  /// entry, matching what the user saw on their very first visit.
+  ///
+  /// `reload` — الشاشة تبقى mounted داخل `IndexedStack` فلا يُعاد `initState`؛
+  ///    الجلب ضروري لعرض القائمة كاملة بدل نتائج البحث القديمة.
+  /// `reload` — the screen stays mounted inside the `IndexedStack` and
+  ///    `initState` never reruns; refetching is what shows the unfiltered list
+  ///    in place of the last search's rows.
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    _cancelToken?.cancel('screen-exited');
+    _defaultsApplied = false;
+    state = const ItemsListState(isLoading: true);
+    if (reload) Future.microtask(load);
+  }
+
   Future<void> applyFilters({
     int? groupNo,
     int? typeNo,
@@ -502,6 +523,21 @@ class SubItemsListNotifier extends Notifier<SubItemsListState> {
     state = state.copyWith(search: value.trim());
 
     return load();
+  }
+
+  /// تفريغ البحث والتصفية عند مغادرة القسم أو نهاية الجلسة.
+  /// Clears the search and every filter when the section closes or the session ends.
+  ///
+  /// نفسها قواعد `ItemsListNotifier.resetTransient` — إعادة ضبط العداد الافتراضي
+  /// ثم تصفير الحالة، والجلب عند التبديل لا عند نهاية الجلسة.
+  /// Mirrors `ItemsListNotifier.resetTransient` exactly — the defaults flag goes
+  /// back to false, the state resets, and a refetch fires on a tab switch only.
+  void resetTransient({bool reload = false}) {
+    _searchVersion++;
+    _cancelToken?.cancel('screen-exited');
+    _defaultsApplied = false;
+    state = const SubItemsListState(isLoading: true);
+    if (reload) Future.microtask(load);
   }
 
   Future<void> applyFilters({

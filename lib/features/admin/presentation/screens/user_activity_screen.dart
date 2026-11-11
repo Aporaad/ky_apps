@@ -30,9 +30,15 @@ class _UserActivityScreenState extends ConsumerState<UserActivityScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => ref.read(userActivityProvider.notifier).loadFor(widget.userId),
-    );
+    // النافذة الزمنية المختارة (اليوم / الأسبوع) كانت تبقى من زيارة سابقة
+    // لمستخدمٍ آخر. التصفير ثم الجلب يجعل كل فتح يبدأ على «كل النشاط».
+    // The chosen window (today / week) used to survive from a previous user's
+    // visit. Reset, then load, so every open starts on "all activity".
+    Future.microtask(() {
+      final notifier = ref.read(userActivityProvider.notifier);
+      notifier.resetTransient();
+      notifier.loadFor(widget.userId);
+    });
   }
 
   @override

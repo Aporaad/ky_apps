@@ -257,6 +257,21 @@ class AdminUsersNotifier extends Notifier<AdminUsersState> {
 
     return result;
   }
+
+  /// تفريغ البحث والفلاتر والترقيم عند مغادرة قسم الإدارة أو نهاية الجلسة.
+  /// Clears the search, filters and pagination when the admin section exits.
+  ///
+  /// `reload` — التبديل داخل `IndexedStack` يبقي الشاشة mounted، والجلب
+  ///    يضمن أن المستخدم يرى القائمة الكاملة لا آخر مجموعة فلاتر.
+  /// `reload` — a tab switch keeps the screen mounted inside the
+  ///    `IndexedStack`; refetching makes sure the user comes back to the full
+  ///    list rather than their last filter set.
+  void resetTransient({bool reload = false}) {
+    _requestVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = const AdminUsersState(isLoading: true);
+    if (reload) Future.microtask(() => load(refresh: true));
+  }
 }
 
 final adminUsersProvider = NotifierProvider<AdminUsersNotifier, AdminUsersState>(

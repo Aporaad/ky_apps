@@ -24,6 +24,19 @@ class _ProvidersListScreenState extends ConsumerState<ProvidersListScreen> {
   final TextEditingController _searchCtrl = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    // المزود غير `autoDispose`: آخر بحث بقي في `state.search` وظهرت صفوفه
+    // مصفّاة خلف حقل بحث فارغ في كل فتح. `reload: true` يعيد الجلب كاملاً.
+    // The provider is not autoDispose: the last search stayed in `state.search`
+    // and its filtered rows showed behind an empty field on each open.
+    // `reload: true` refetches the full first page.
+    Future.microtask(
+      () => ref.read(providersListProvider.notifier).resetTransient(reload: true),
+    );
+  }
+
+  @override
   void dispose() {
     _searchCtrl.dispose();
     super.dispose();

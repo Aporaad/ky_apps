@@ -223,6 +223,19 @@ class UserActivityNotifier extends Notifier<UserActivityState> {
   /// Changing the window sends no request — the server takes no date parameter.
   void setWindow(ActivityWindow window) =>
       state = state.copyWith(window: window);
+
+  /// إعادة النافذة الزمنية إلى «الكل» عند مغادرة شاشة سجل المستخدم.
+  /// Reset the time window back to "all" when the activity screen exits.
+  ///
+  /// السجل نفسه يُعاد جلبه في المرة القادمة من `loadFor` الذي تستدعيه
+  /// الشاشة عند بنائها؛ هنا نمسح الاختيار المحلي وحده.
+  /// The rows themselves are re-fetched by `loadFor`, which the screen calls
+  /// on build; only the user's local choice is wiped here.
+  void resetTransient() {
+    _requestVersion++;
+    _cancelToken?.cancel('screen-exited');
+    state = state.copyWith(window: ActivityWindow.all);
+  }
 }
 
 final userActivityProvider =
